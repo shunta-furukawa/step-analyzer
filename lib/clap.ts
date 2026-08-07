@@ -25,6 +25,16 @@ export function ensureClapAudio(ref: { current: ClapAudio | null }): ClapAudio |
     (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
   if (!Ctx) return null;
 
+  // iOS 16.4+ Audio Session API: ページの音声を「メディア再生」として
+  // 扱わせる。これがないと画面収録開始時にセッションが中断されて
+  // クラップ音が録画に乗らない (マナーモードでも消音される)
+  try {
+    const nav = navigator as unknown as { audioSession?: { type: string } };
+    if (nav.audioSession) nav.audioSession.type = "playback";
+  } catch {
+    // 未対応ブラウザは無視
+  }
+
   // iOSは画面収録・経路変更でオーディオセッションが変わり、既存の
   // AudioContextが中断されたりレートが変わったりする。再生開始 (ユーザー
   // 操作) のたびに現在のハードウェア状態と一致しているか確認し、

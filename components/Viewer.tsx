@@ -211,6 +211,18 @@ export default function Viewer({
     };
   }, [fs]);
 
+  // 再生中にオーディオが中断されたら、次のタップ (ジェスチャ文脈) で復帰させる。
+  // iOSでは画面収録などで中断されたAudioContextをrAFからresumeできないため
+  useEffect(() => {
+    if (!playing) return;
+    const onTap = () => {
+      const a = audioRef.current;
+      if (a && !mutedRef.current && a.ctx.state !== "running") void a.ctx.resume();
+    };
+    window.addEventListener("pointerdown", onTap, true);
+    return () => window.removeEventListener("pointerdown", onTap, true);
+  }, [playing]);
+
   // キーボード操作 (←/→ or J/K、スペースで再生/停止)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
