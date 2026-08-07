@@ -45,7 +45,7 @@ export interface ParsedChart {
   totalBeats: number;
 }
 
-export const MAX_MEASURES = 64;
+export const MAX_MEASURES = 256;
 
 const QUANTS = [4, 8, 12, 16, 24, 32, 48, 64];
 

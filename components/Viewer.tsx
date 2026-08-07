@@ -71,6 +71,8 @@ export default function Viewer({
   const scrollRef = useRef<HTMLDivElement>(null);
   const beatRef = useRef(0);
   const timeRef = useRef(0);
+  // 仮想化: 描画するビート範囲 (画面内 + バッファ)
+  const [viewBeats, setViewBeats] = useState({ a: 0, b: 120 });
   const audioRef = useRef<ClapAudio | null>(null);
   const mutedRef = useRef(muted);
   const scheduledRef = useRef<Set<number>>(new Set());
@@ -244,6 +246,30 @@ export default function Viewer({
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, [playing, chart, timeline, speed, pxPerBeat]);
+
+  // 仮想化: スクロール位置から描画対象のビート範囲を更新
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el || !chart) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const a = el.scrollTop / pxPerBeat - 8;
+      const b2 = (el.scrollTop + el.clientHeight) / pxPerBeat + 8;
+      setViewBeats((v) =>
+        Math.abs(v.a - a) > 2 || Math.abs(v.b - b2) > 2 ? { a, b: b2 } : v
+      );
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [pxPerBeat, chart]);
 
   // 手動操作時に現在のイベントが見えるようにスクロール
   useEffect(() => {
@@ -487,7 +513,9 @@ export default function Viewer({
         <div className="chart-pane">
           <div className="chart-scroll" ref={scrollRef}>
             <div className="chart-inner" style={{ width: laneW * 4, height: totalH }}>
-              {Array.from({ length: chart.measures.length + 1 }, (_, m) => (
+              {Array.from({ length: chart.measures.length + 1 }, (_, m) => {
+                if ((m + 1) * 4 < viewBeats.a || m * 4 > viewBeats.b) return null;
+                return (
                 <div key={`m${m}`}>
                   <div
                     className="measure-line"
@@ -510,11 +538,13 @@ export default function Viewer({
                       />
                     ))}
                 </div>
-              ))}
+                );
+              })}
 
               {editMode &&
-                chart.measures.map((_, mi) =>
-                  Array.from({ length: editRes }, (_, r) => {
+                chart.measures.map((_, mi) => {
+                  if ((mi + 1) * 4 < viewBeats.a || mi * 4 > viewBeats.b) return null;
+                  return Array.from({ length: editRes }, (_, r) => {
                     const beat = mi * 4 + (r / editRes) * 4;
                     const cellH = Math.min(noteSize, (4 * pxPerBeat) / editRes - 1);
                     return [0, 1, 2, 3].map((p) => (
@@ -530,8 +560,8 @@ export default function Viewer({
                         onClick={() => applyEdit(toggleNote(compact, mi, r, editRes, p))}
                       />
                     ));
-                  })
-                )}
+                  });
+                })}
 
               {/* ソフラン・停止マーカー */}
               {bpms.slice(1).map((e, i) =>
@@ -558,6 +588,7 @@ export default function Viewer({
               )}
 
               {chart.holds.map((h, i) => (
+                h.endBeat < viewBeats.a || h.startBeat > viewBeats.b ? null :
                 <div
                   key={`h${i}`}
                   className="hold-body"
@@ -572,6 +603,7 @@ export default function Viewer({
               ))}
 
               {chart.mines.map((m, i) => (
+                m.beat < viewBeats.a || m.beat > viewBeats.b ? null :
                 <div
                   key={`mine${i}`}
                   className="mine"
@@ -589,6 +621,7 @@ export default function Viewer({
               ))}
 
               {chart.events.map((ev, i) => {
+                if (ev.row.beat < viewBeats.a || ev.row.beat > viewBeats.b) return null;
                 const step = footsteps[i];
                 return ev.panels.map((p) => {
                   const foot = step.feet[p];
