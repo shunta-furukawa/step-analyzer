@@ -521,10 +521,12 @@ export default function Viewer({
         <div className="chart-pane">
           <div className="chart-scroll" ref={scrollRef}>
             <div className="chart-inner" style={{ width: laneW * 4, height: totalH }}>
-              {/* 体の向きの背景バンド (ノーツiを踏んだ後の向きを次のノーツまで塗る) */}
+              {/* 体の向きの背景バンド: ノーツi-1→ノーツi の領域を
+                  「ノーツiを踏んだときの向き」の色で塗る (これから来る捻りの予告)。
+                  1ノーツ目は譜面先頭 (初期位置=正面) から塗る */}
               {chart.events.map((ev, i) => {
-                const nextBeat = chart.events[i + 1]?.row.beat ?? chart.totalBeats;
-                if (nextBeat < viewBeats.a || ev.row.beat > viewBeats.b) return null;
+                const startBeat = i > 0 ? chart.events[i - 1].row.beat : 0;
+                if (ev.row.beat < viewBeats.a || startBeat > viewBeats.b) return null;
                 const color = facingColor(footsteps[i].facing);
                 if (!color) return null;
                 return (
@@ -532,8 +534,8 @@ export default function Viewer({
                     key={`fb${i}`}
                     className="facing-band"
                     style={{
-                      top: ev.row.beat * pxPerBeat + noteSize / 2,
-                      height: Math.max(0, (nextBeat - ev.row.beat) * pxPerBeat),
+                      top: startBeat * pxPerBeat + noteSize / 2,
+                      height: Math.max(0, (ev.row.beat - startBeat) * pxPerBeat),
                       background: color,
                     }}
                   />

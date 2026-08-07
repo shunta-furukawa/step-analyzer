@@ -153,14 +153,14 @@ function ChartLanes({
     }
   });
 
-  // 体の向きの背景バンド (ビート範囲 + 色)
+  // 体の向きの背景バンド: ノーツi-1→ノーツi をノーツiの向きの色で塗る
   const bands: { start: number; end: number; color: string }[] = [];
   chart.events.forEach((ev, i) => {
     const color = facingColor(footsteps[i].facing);
     if (!color) return;
     bands.push({
-      start: ev.row.beat,
-      end: chart.events[i + 1]?.row.beat ?? chart.totalBeats,
+      start: i > 0 ? chart.events[i - 1].row.beat : 0,
+      end: ev.row.beat,
       color,
     });
   });
