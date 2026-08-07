@@ -584,11 +584,11 @@ export default function Viewer({
 
       {showTiming && (
         <div className="card text-import">
-          <p className="hint" style={{ marginBottom: 8 }}>
-            ソフラン (途中変速) と停止を設定できます。拍はSMの #BPMS / #STOPS
-            と同じ0起点のビート単位 (1小節=4拍) です。
+          <PanelHead title="変速・停止">
+            ソフラン (途中変速) と停止を設定できます。拍はSMの <code>#BPMS</code> /{" "}
+            <code>#STOPS</code> と同じ0起点のビート単位 (1小節=4拍) です。
             SMファイルごと「テキスト入力」に貼り付けると自動で取り込まれます。
-          </p>
+          </PanelHead>
           <div className="form-row">
             <label className="timing-label">
               BPM変化 (初期BPM,拍:BPM,…)
@@ -1063,7 +1063,7 @@ export default function Viewer({
             )}
           </div>
           <div className="card hint-card">
-            <p className="hint">
+            <PanelHead title="使い方">
               {showAbout ? (
                 <>
                   DDRの譜面の足割りを可視化して共有できる読譜トレーナーです。
@@ -1079,10 +1079,30 @@ export default function Viewer({
                   URLをコピーすれば編集・足指定込みで共有できます。
                 </>
               )}
-            </p>
+            </PanelHead>
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ===== パネル見出し (?アイコンで説明をトグル表示) =====
+
+function PanelHead({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="panel-head">
+      <h2>{title}</h2>
+      <button
+        className={`help-btn${open ? " open" : ""}`}
+        onClick={() => setOpen(!open)}
+        aria-label="ヘルプ"
+        type="button"
+      >
+        ?
+      </button>
+      {open && <p className="hint panel-help-text">{children}</p>}
     </div>
   );
 }
@@ -1120,11 +1140,11 @@ function TextImport({
 
   return (
     <div className="card text-import">
-      <p className="hint" style={{ marginBottom: 8 }}>
+      <PanelHead title="テキスト入力">
         SM/SSCファイルの <code>#NOTES</code> 以下のノートデータ (小節を <code>,</code> 区切り、
         1行4文字) を貼り付けて読み込めます。ファイル全体を貼ると{" "}
         <code>#BPMS</code> / <code>#STOPS</code> (ソフラン・停止) も自動で取り込みます。
-      </p>
+      </PanelHead>
       <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <div className="form-row">
         <button onClick={apply}>この内容を読み込む</button>
