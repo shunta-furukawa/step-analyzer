@@ -5,22 +5,58 @@ export interface ClapAudio {
   buf: AudioBuffer;
 }
 
+function buildClap(ctx: AudioContext): ClapAudio {
+  const len = Math.floor(ctx.sampleRate * 0.09);
+  const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) {
+    const t = i / len;
+    // 減衰するノイズ + 立ち上がりの複数バーストで拍手っぽく
+    const burst = t < 0.02 || (t > 0.03 && t < 0.045) ? 1.6 : 1;
+    d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.2) * burst * 0.9;
+  }
+  return { ctx, buf };
+}
+
 export function ensureClapAudio(ref: { current: ClapAudio | null }): ClapAudio | null {
   if (typeof window === "undefined") return null;
-  if (!ref.current) {
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return null;
-    const ctx = new Ctx();
-    const len = Math.floor(ctx.sampleRate * 0.09);
-    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) {
-      const t = i / len;
-      // 減衰するノイズ + 立ち上がりの複数バーストで拍手っぽく
-      const burst = t < 0.02 || (t > 0.03 && t < 0.045) ? 1.6 : 1;
-      d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.2) * burst * 0.9;
+  const Ctx =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+  if (!Ctx) return null;
+
+  // iOSは画面収録・経路変更でオーディオセッションが変わり、既存の
+  // AudioContextが中断されたりレートが変わったりする。再生開始 (ユーザー
+  // 操作) のたびに現在のハードウェア状態と一致しているか確認し、
+  // ずれていたら作り直す。
+  if (ref.current) {
+    const cur = ref.current.ctx;
+    let stale = cur.state === "closed";
+    if (!stale) {
+      try {
+        const probe = new Ctx();
+        stale = probe.sampleRate !== cur.sampleRate;
+        void probe.close();
+      } catch {
+        stale = false;
+      }
     }
-    ref.current = { ctx, buf };
+    if (stale) {
+      try {
+        void cur.close();
+      } catch {
+        // closed済みなら無視
+      }
+      ref.current = null;
+    }
+  }
+
+  if (!ref.current) {
+    try {
+      ref.current = buildClap(new Ctx());
+    } catch {
+      return null;
+    }
   }
   void ref.current.ctx.resume();
   return ref.current;

@@ -79,6 +79,7 @@ export default function Viewer({
   const audioRef = useRef<ClapAudio | null>(null);
   const mutedRef = useRef(muted);
   const scheduledRef = useRef<Set<number>>(new Set());
+  const lastCtxTimeRef = useRef(-1);
   mutedRef.current = muted;
 
   // 画面幅に応じて譜面の描画サイズを切り替える (スマホ縦持ち最優先)
@@ -266,18 +267,28 @@ export default function Viewer({
       // クラップ音のスケジューリング (150ms先読みでサンプル精度で予約)
       const audio = audioRef.current;
       if (!mutedRef.current && audio) {
-        const lookahead = 0.15;
-        for (let k = Math.max(0, idx); k < chart.events.length; k++) {
-          const dtSec = (eventTimes[k] - timeRef.current) / speed;
-          if (dtSec < -0.02) continue;
-          if (dtSec > lookahead) break;
-          if (!scheduledRef.current.has(k)) {
-            scheduledRef.current.add(k);
-            scheduleClap(
-              audio,
-              audio.ctx.currentTime + Math.max(0, dtSec),
-              chart.events[k].panels.length >= 2
-            );
+        // iOSの画面収録などでAudioContextが中断されるとcurrentTimeが
+        // 止まる。その間にスケジュールを積むと復帰時に全部一斉発火して
+        // 録音が壊れるため、クロックが進んでいない間は予約せず復帰を試みる
+        const ctxNow = audio.ctx.currentTime;
+        const stalled = ctxNow === lastCtxTimeRef.current;
+        lastCtxTimeRef.current = ctxNow;
+        if (stalled || audio.ctx.state !== "running") {
+          void audio.ctx.resume();
+        } else {
+          const lookahead = 0.15;
+          for (let k = Math.max(0, idx); k < chart.events.length; k++) {
+            const dtSec = (eventTimes[k] - timeRef.current) / speed;
+            if (dtSec < -0.02) continue;
+            if (dtSec > lookahead) break;
+            if (!scheduledRef.current.has(k)) {
+              scheduledRef.current.add(k);
+              scheduleClap(
+                audio,
+                ctxNow + Math.max(0, dtSec),
+                chart.events[k].panels.length >= 2
+              );
+            }
           }
         }
       }
