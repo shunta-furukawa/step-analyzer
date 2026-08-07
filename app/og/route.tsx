@@ -216,7 +216,7 @@ export async function GET(request: Request) {
     chart = null;
   }
 
-  const footsteps = chart ? assignFeet(chart.events, overrides) : [];
+  const footsteps = chart ? assignFeet(chart.events, overrides, chart.holds) : [];
   const stats = statsOf(footsteps);
 
   const font = await loadJpFont(rawTitle);

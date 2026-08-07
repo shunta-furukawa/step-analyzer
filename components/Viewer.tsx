@@ -83,7 +83,7 @@ export default function Viewer({
 
   const chart = parsed.chart;
   const footsteps = useMemo(
-    () => (chart ? assignFeet(chart.events, overrides) : []),
+    () => (chart ? assignFeet(chart.events, overrides, chart.holds) : []),
     [chart, overrides]
   );
   const stats = useMemo(() => statsOf(footsteps), [footsteps]);
@@ -541,6 +541,7 @@ export default function Viewer({
               feet={curStep?.feet ?? [null, null, null, null]}
               facing={facing}
               stepKey={current}
+              heldFeet={curStep?.heldFeet ?? []}
             />
             <div className="controls">
               <button
@@ -668,6 +669,12 @@ export default function Viewer({
                   {curStep.crossover && (
                     <span className="tag crossover">交差 (体を捻る)</span>
                   )}
+                  {curStep.heldFeet.length > 0 && (
+                    <span className="tag hold">
+                      フリーズ中:{" "}
+                      {curStep.heldFeet.map((f) => (f === "L" ? "左" : "右")).join("・")}
+                    </span>
+                  )}
                 </div>
               </div>
             )}
@@ -774,6 +781,7 @@ function FootStage({
   feet,
   facing,
   stepKey,
+  heldFeet,
 }: {
   leftPos: number;
   rightPos: number;
@@ -781,6 +789,7 @@ function FootStage({
   feet: (Foot | null)[];
   facing: number;
   stepKey: number;
+  heldFeet: Foot[];
 }) {
   const same = leftPos === rightPos;
   const lc = STAGE_CENTERS[leftPos];
@@ -847,7 +856,7 @@ function FootStage({
             <div className="foot3d-shadow" />
             <div
               key={lStepping ? `s${stepKey}` : "idle"}
-              className={`foot3d-body${lStepping ? " hop" : ""}`}
+              className={`foot3d-body${lStepping ? " hop" : ""}${heldFeet.includes("L") ? " held" : ""}`}
               style={{ background: FOOT_COLORS.L }}
             >
               L
@@ -864,7 +873,7 @@ function FootStage({
             <div className="foot3d-shadow" />
             <div
               key={rStepping ? `s${stepKey}` : "idle"}
-              className={`foot3d-body${rStepping ? " hop" : ""}`}
+              className={`foot3d-body${rStepping ? " hop" : ""}${heldFeet.includes("R") ? " held" : ""}`}
               style={{ background: FOOT_COLORS.R }}
             >
               R

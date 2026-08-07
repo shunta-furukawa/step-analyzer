@@ -33,6 +33,7 @@ export interface FootStep {
   jack: boolean; // 縦連 (同じパネルを同じ足で連続)
   crossover: boolean; // 足が交差した状態
   doubleStep: boolean;
+  heldFeet: Foot[]; // このイベント時点でフリーズ保持中の足
 }
 
 export interface ParsedChart {
@@ -189,10 +190,14 @@ export function tickOf(beat: number): number {
  * - それ以外は直前と逆の足 (交差・振り向きもそのまま表示する)
  * - overrides でノーツ単位の手動指定 (tick → 足) を与えると、
  *   そのノーツは指定した足になり、以降はそこを起点に再計算される
+ * - holds を渡すと、フリーズ保持中の足はロックされ、その間のノーツは
+ *   もう片方の足に割り当てられる。フリーズ開始の足も保持中のノーツの
+ *   配置から踏みやすい側を選ぶ
  */
 export function assignFeet(
   events: StepEvent[],
-  overrides?: Map<number, Foot>
+  overrides?: Map<number, Foot>,
+  holds?: Hold[]
 ): FootStep[] {
   let leftPos = 0;
   let rightPos = 3;
@@ -200,7 +205,34 @@ export function assignFeet(
   let lastPanel: number | null = null;
   const out: FootStep[] = [];
 
+  // フリーズの開始位置 → Hold と、保持中に踏む他ノーツのx平均 (踏みやすい側の判定用)
+  const holdByStart = new Map<string, Hold>();
+  const duringX = new Map<string, number | null>();
+  for (const h of holds ?? []) {
+    const key = `${tickOf(h.startBeat)}:${h.panel}`;
+    holdByStart.set(key, h);
+    let sum = 0;
+    let cnt = 0;
+    for (const ev of events) {
+      if (ev.row.beat > h.startBeat + 1e-6 && ev.row.beat < h.endBeat - 1e-6) {
+        for (const p of ev.panels) {
+          sum += PANEL_COORDS[p].x;
+          cnt++;
+        }
+      }
+    }
+    duringX.set(key, cnt > 0 ? sum / cnt : null);
+  }
+
+  // 現在保持中のフリーズ
+  let active: { panel: number; endBeat: number; foot: Foot }[] = [];
+
   for (const ev of events) {
+    const beat = ev.row.beat;
+    active = active.filter((a) => a.endBeat - 1e-6 > beat);
+    const lockedL = active.some((a) => a.foot === "L");
+    const lockedR = active.some((a) => a.foot === "R");
+
     const feet: (Foot | null)[] = [null, null, null, null];
     let jump = false;
     let jack = false;
@@ -229,15 +261,25 @@ export function assignFeet(
       lastPanel = null;
     } else {
       const p = ps[0];
+      const key = `${tickOf(beat)}:${p}`;
       let foot: Foot;
-      const ov = overrides?.get(tickOf(ev.row.beat));
+      const ov = overrides?.get(tickOf(beat));
       if (ov) {
         foot = ov;
-        jack = lastPanel === p && lastFoot === ov;
-        doubleStep = lastFoot === ov && lastPanel !== null && lastPanel !== p;
+      } else if (lockedL !== lockedR) {
+        // 片足がフリーズ保持中 → 空いている足で踏むしかない
+        foot = lockedL ? "R" : "L";
       } else if (lastPanel === p && lastFoot !== null) {
         foot = lastFoot;
-        jack = true;
+      } else if (holdByStart.has(key) && duringX.get(key) !== null) {
+        // フリーズ開始で、保持中に他のノーツがある:
+        // 残りを空き足で自然に踏めるように保持する足を選ぶ
+        const sx = duringX.get(key)!;
+        if (p === 0) foot = "L";
+        else if (p === 3) foot = "R";
+        else if (sx < 1) foot = "R"; // 保持中のノーツが左寄り → 右足で保持
+        else if (sx > 1) foot = "L";
+        else foot = lastFoot === null ? (dist(leftPos, p) <= dist(rightPos, p) ? "L" : "R") : lastFoot === "L" ? "R" : "L";
       } else if (lastFoot === null) {
         // 開始直後 or ジャンプ直後: すでにそのパネルに乗っている足、なければ近い足
         if (leftPos === p) foot = "L";
@@ -247,13 +289,21 @@ export function assignFeet(
         else foot = dist(leftPos, p) <= dist(rightPos, p) ? "L" : "R";
       } else {
         foot = lastFoot === "L" ? "R" : "L";
-        doubleStep = false;
       }
+      jack = lastPanel === p && lastFoot === foot;
+      doubleStep = !jack && lastFoot === foot && lastPanel !== null && lastPanel !== p;
       feet[p] = foot;
       if (foot === "L") leftPos = p;
       else rightPos = p;
       lastFoot = foot;
       lastPanel = p;
+    }
+
+    // このイベントで始まるフリーズを登録
+    for (const p of ps) {
+      const h = holdByStart.get(`${tickOf(beat)}:${p}`);
+      const f = feet[p];
+      if (h && f) active.push({ panel: p, endBeat: h.endBeat, foot: f });
     }
 
     out.push({
@@ -264,6 +314,7 @@ export function assignFeet(
       jack,
       crossover: crossed(leftPos, rightPos),
       doubleStep,
+      heldFeet: Array.from(new Set(active.map((a) => a.foot))),
     });
   }
   return out;
