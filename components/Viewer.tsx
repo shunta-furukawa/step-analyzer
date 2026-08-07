@@ -59,7 +59,6 @@ export default function Viewer({
   overrides: initialOverrides,
   hispeed: initialHispeed,
   speed: initialSpeed,
-  showAbout = false,
 }: {
   compact: string;
   title?: string;
@@ -68,7 +67,6 @@ export default function Viewer({
   overrides?: string;
   hispeed?: string;
   speed?: string;
-  showAbout?: boolean;
 }) {
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
@@ -582,6 +580,12 @@ export default function Viewer({
         </button>
       </div>
 
+      {editMode && (
+        <p className="hint edit-hint">
+          グリッドをタップでノーツを追加、ノーツをタップで削除。結果は即URLに反映されます。
+        </p>
+      )}
+
       {showTiming && (
         <div className="card text-import">
           <PanelHead title="変速・停止">
@@ -1015,18 +1019,18 @@ export default function Viewer({
                 </div>
                 {curEvent.panels.length === 1 && (
                   <div className="override-row">
-                    <span className="override-label">この足で踏む:</span>
+                    <span className="override-label">踏む足:</span>
                     <button
-                      className={`ov-btn${curOverride === "L" ? " active-l" : ""}`}
+                      className={`ov-btn foot-l${curOverride === "L" ? " active-l" : ""}`}
                       onClick={() => setOverride(curOverride === "L" ? null : "L")}
                     >
-                      左
+                      L 左
                     </button>
                     <button
-                      className={`ov-btn${curOverride === "R" ? " active-r" : ""}`}
+                      className={`ov-btn foot-r${curOverride === "R" ? " active-r" : ""}`}
                       onClick={() => setOverride(curOverride === "R" ? null : "R")}
                     >
-                      右
+                      R 右
                     </button>
                     {curOverride && (
                       <button className="ov-btn" onClick={() => setOverride(null)}>
@@ -1061,25 +1065,6 @@ export default function Viewer({
                 </button>
               </div>
             )}
-          </div>
-          <div className="card hint-card">
-            <PanelHead title="使い方">
-              {showAbout ? (
-                <>
-                  DDRの譜面の足割りを可視化して共有できる読譜トレーナーです。
-                  交互踏みベースでL/Rを自動割り当てし、180度捻りもそのまま可視化。
-                  ノートを選んで「この足で踏む」を指定すれば別解も作れます。
-                  編集やテキスト入力で自分の譜面にして「URLをコピー」でXなどに共有すると、
-                  譜面のプレビュー画像 (OGP) 付きで展開されます。
-                </>
-              ) : (
-                <>
-                  ノートをタップで選択、「この足で踏む」で起点を固定して再計算。
-                  編集モード中はグリッドをタップしてノーツを追加/削除。
-                  URLをコピーすれば編集・足指定込みで共有できます。
-                </>
-              )}
-            </PanelHead>
           </div>
         </div>
       </div>

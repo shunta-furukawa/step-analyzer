@@ -104,7 +104,6 @@ export default async function Page({
         overrides={f}
         hispeed={hs}
         speed={spd}
-        showAbout={isDefault}
       />
     </main>
   );

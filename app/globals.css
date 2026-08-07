@@ -749,14 +749,26 @@ input[type="range"] {
   padding: 5px 10px;
 }
 
+.ov-btn.foot-l {
+  border-color: rgba(255, 92, 168, 0.6);
+  color: var(--foot-l);
+}
+
+.ov-btn.foot-r {
+  border-color: rgba(56, 189, 248, 0.6);
+  color: var(--foot-r);
+}
+
 .ov-btn.active-l {
   background: var(--foot-l);
   border-color: var(--foot-l);
+  color: #fff;
 }
 
 .ov-btn.active-r {
   background: var(--foot-r);
   border-color: var(--foot-r);
+  color: #fff;
 }
 
 .override-summary {
@@ -768,8 +780,8 @@ input[type="range"] {
   color: var(--muted);
 }
 
-.hint-card {
-  padding: 10px 14px;
+.edit-hint {
+  margin: -4px 0 10px;
 }
 
 .panel-head {
