@@ -21,6 +21,7 @@ import {
   bpmAtBeat,
   buildTimeline,
   extractTimingFromSM,
+  normalizeParam,
   parseBpmParam,
   parseStopsParam,
   timeAtBeat,
@@ -48,8 +49,8 @@ export default function Viewer({
 }) {
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
-  const [bpm, setBpm] = useState(initialBpm ?? "");
-  const [stops, setStops] = useState(initialStops ?? "");
+  const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
+  const [stops, setStops] = useState(() => normalizeParam(initialStops ?? ""));
   const [showTiming, setShowTiming] = useState(false);
   const [overrides, setOverrides] = useState<Map<number, Foot>>(() =>
     parseOverrides(initialOverrides)
@@ -111,17 +112,21 @@ export default function Viewer({
   );
   const hasSofran = bpms.length > 1 || stopList.length > 0;
 
-  // 譜面が長い場合はdeflate圧縮したdパラメータを使い、URLを短くする
+  // 譜面が長い場合はdeflate圧縮したdパラメータを使い、URLを短くする。
+  // "," と ":" はクエリ値として合法なのでエンコードせずそのまま残す
+  // (共有経路での二重エンコードによる変速情報の消失を防ぐ)
   const buildUrl = useCallback(async () => {
-    const qs = new URLSearchParams();
+    const enc = (v: string) =>
+      encodeURIComponent(v).replace(/%2C/gi, ",").replace(/%3A/gi, ":");
+    const parts: string[] = [];
     const encoded = await compressCompact(compact);
-    if (encoded && encoded.length < compact.length) qs.set("d", encoded);
-    else qs.set("n", compact);
-    if (title) qs.set("t", title);
-    if (bpm) qs.set("b", bpm);
-    if (stops) qs.set("s", stops);
-    if (overrides.size > 0) qs.set("f", serializeOverrides(overrides));
-    return `/?${qs.toString()}`;
+    if (encoded && encoded.length < compact.length) parts.push(`d=${encoded}`);
+    else parts.push(`n=${compact}`);
+    if (title) parts.push(`t=${encodeURIComponent(title)}`);
+    if (bpm) parts.push(`b=${enc(bpm)}`);
+    if (stops) parts.push(`s=${enc(stops)}`);
+    if (overrides.size > 0) parts.push(`f=${serializeOverrides(overrides)}`);
+    return `/?${parts.join("&")}`;
   }, [compact, title, bpm, stops, overrides]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)

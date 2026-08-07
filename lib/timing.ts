@@ -13,9 +13,15 @@ export interface Stop {
   sec: number;
 }
 
+// 共有経路で二重エンコードされた値 (%2C, %3A が残った状態) を復元する
+export function normalizeParam(v: string): string {
+  return v.replace(/%2C/gi, ",").replace(/%3A/gi, ":");
+}
+
 export function parseBpmParam(b: string | undefined): BpmChange[] {
   const def = [{ beat: 0, bpm: 120 }];
   if (!b) return def;
+  b = normalizeParam(b);
   const out: BpmChange[] = [];
   for (const part of b.split(",")) {
     const seg = part.trim();
@@ -45,6 +51,7 @@ export function parseBpmParam(b: string | undefined): BpmChange[] {
 
 export function parseStopsParam(s: string | undefined): Stop[] {
   if (!s) return [];
+  s = normalizeParam(s);
   const out: Stop[] = [];
   for (const part of s.split(",")) {
     const seg = part.trim();
