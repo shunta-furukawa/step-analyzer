@@ -1,15 +1,8 @@
 // 自動再生用のハンドクラップ音。
-// iOSの画面収録はWeb Audio APIの出力をキャプチャせず、MediaStream経由の
-// <audio>もスタッターするため、事前生成したWAV (データURI) を通常の
-// <audio>要素プールで鳴らす。純粋なメディア再生なので録画に確実に乗り、
-// AudioContextの中断やクロック停止の影響を受けない。
-
-export interface ClapAudio {
-  pool: HTMLAudioElement[];
-  accentPool: HTMLAudioElement[];
-  i: number;
-  ai: number;
-}
+// iOSは画面収録中にrAFをスロットリングするため「その場で単発再生」は
+// どうしても音が塊になる。譜面全体のクラップトラックを1本のWAVに
+// 事前レンダリングして<audio>で連続再生する方式なら、音楽再生と同じ
+// 扱いで録画に確実に乗り、再生クロックも乱れない。
 
 // 決定的な擬似乱数 (毎回同じクラップ波形を生成する)
 function makeRng(seed: number): () => number {
@@ -20,12 +13,11 @@ function makeRng(seed: number): () => number {
   };
 }
 
-function makeClapWav(gain: number): string {
-  const sr = 44100;
+// 拍手っぽい中域ノイズバースト (一次ローパス2本の差分で簡易バンドパス)
+function renderClapSamples(gain: number, sr: number): Float32Array {
   const len = Math.floor(sr * 0.09);
-  const pcm = new Int16Array(len);
+  const out = new Float32Array(len);
   const rand = makeRng(20240808);
-  // 一次ローパス2本の差分で簡易バンドパス (拍手っぽい中域ノイズ)
   let lp1 = 0;
   let lp2 = 0;
   for (let i = 0; i < len; i++) {
@@ -34,8 +26,33 @@ function makeClapWav(gain: number): string {
     const x = rand() * Math.pow(1 - t, 2.2) * burst;
     lp1 += 0.35 * (x - lp1);
     lp2 += 0.06 * (x - lp2);
-    const v = Math.max(-1, Math.min(1, (lp1 - lp2) * 2.2 * gain));
-    pcm[i] = (v * 32767) | 0;
+    out[i] = (lp1 - lp2) * 2.2 * gain;
+  }
+  return out;
+}
+
+/**
+ * 譜面全体のクラップトラックをWAVにレンダリングし、Blob URLを返す。
+ * eventTimes は各ノーツの発音時刻 (秒、ソフラン・停止込み)。
+ * 使い終わったURLは呼び出し側で URL.revokeObjectURL すること。
+ */
+export function buildClapTrackUrl(
+  eventTimes: number[],
+  accents: boolean[],
+  durationSec: number
+): string {
+  const sr = 44100;
+  const len = Math.max(sr, Math.ceil((durationSec + 0.6) * sr));
+  const mix = new Float32Array(len);
+  const normal = renderClapSamples(0.6, sr);
+  const accent = renderClapSamples(1.0, sr);
+
+  for (let i = 0; i < eventTimes.length; i++) {
+    const off = Math.round(eventTimes[i] * sr);
+    if (off < 0 || off >= len) continue;
+    const s = accents[i] ? accent : normal;
+    const end = Math.min(s.length, len - off);
+    for (let j = 0; j < end; j++) mix[off + j] += s[j];
   }
 
   const bytes = new Uint8Array(44 + len * 2);
@@ -56,86 +73,20 @@ function makeClapWav(gain: number): string {
   dv.setUint16(34, 16, true);
   writeStr(36, "data");
   dv.setUint32(40, len * 2, true);
-  bytes.set(new Uint8Array(pcm.buffer), 44);
-
-  let bin = "";
-  const chunk = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunk) {
-    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  for (let i = 0; i < len; i++) {
+    const v = Math.max(-1, Math.min(1, mix[i]));
+    dv.setInt16(44 + i * 2, (v * 32767) | 0, true);
   }
-  return `data:audio/wav;base64,${btoa(bin)}`;
+
+  return URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));
 }
 
-let normalUri: string | null = null;
-let accentUri: string | null = null;
-
-function makePool(uri: string, size: number): HTMLAudioElement[] {
-  const pool: HTMLAudioElement[] = [];
-  for (let i = 0; i < size; i++) {
-    const el = new Audio(uri);
-    el.preload = "auto";
-    el.setAttribute("playsinline", "");
-    pool.push(el);
-  }
-  return pool;
-}
-
-export function ensureClapAudio(ref: { current: ClapAudio | null }): ClapAudio | null {
-  if (typeof window === "undefined") return null;
-
-  // iOS 16.4+: ページ音声をメディア再生として扱わせる (マナーモードでも鳴る)
+// iOS 16.4+: ページ音声をメディア再生として扱わせる (マナーモードでも鳴る)
+export function setPlaybackAudioSession(): void {
   try {
     const nav = navigator as unknown as { audioSession?: { type: string } };
     if (nav.audioSession) nav.audioSession.type = "playback";
   } catch {
     // 未対応ブラウザは無視
   }
-
-  if (!ref.current) {
-    try {
-      normalUri ??= makeClapWav(0.6);
-      accentUri ??= makeClapWav(1.0);
-      ref.current = {
-        pool: makePool(normalUri, 4),
-        accentPool: makePool(accentUri, 2),
-        i: 0,
-        ai: 0,
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  // ユーザー操作の文脈で各要素の再生権を取得しておく (ミュート再生→即停止)
-  for (const el of [...ref.current.pool, ...ref.current.accentPool]) {
-    if (el.dataset.unlocked) continue;
-    el.dataset.unlocked = "1";
-    el.muted = true;
-    el
-      .play()
-      .then(() => {
-        el.pause();
-        el.currentTime = 0;
-        el.muted = false;
-      })
-      .catch(() => {
-        el.muted = false;
-        delete el.dataset.unlocked;
-      });
-  }
-  return ref.current;
-}
-
-export function scheduleClap(audio: ClapAudio, accent: boolean): void {
-  const pool = accent ? audio.accentPool : audio.pool;
-  const idx = accent
-    ? (audio.ai = (audio.ai + 1) % pool.length)
-    : (audio.i = (audio.i + 1) % pool.length);
-  const el = pool[idx];
-  try {
-    el.currentTime = 0;
-  } catch {
-    // まだメタデータ未ロードなら無視 (play側で先頭から鳴る)
-  }
-  void el.play().catch(() => {});
 }

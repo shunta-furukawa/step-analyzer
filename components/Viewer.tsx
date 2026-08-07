@@ -12,7 +12,7 @@ import {
   tickOf,
   type Foot,
 } from "@/lib/chart";
-import { ensureClapAudio, scheduleClap, type ClapAudio } from "@/lib/clap";
+import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import { compressCompact } from "@/lib/codec";
 import { parseOverrides, serializeOverrides, toggleNote } from "@/lib/edit";
 import {
@@ -76,7 +76,9 @@ export default function Viewer({
   const timeRef = useRef(0);
   // 仮想化: 描画するビート範囲 (画面内 + バッファ)
   const [viewBeats, setViewBeats] = useState({ a: 0, b: 120 });
-  const audioRef = useRef<ClapAudio | null>(null);
+  const clapTrackRef = useRef<{ key: string; el: HTMLAudioElement; url: string } | null>(
+    null
+  );
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
@@ -163,15 +165,46 @@ export default function Viewer({
     [clamp, chart]
   );
 
-  const togglePlay = useCallback(() => {
-    setPlaying((p) => {
-      if (!p) {
-        if (!mutedRef.current) ensureClapAudio(audioRef);
-        return true;
+  // クラップトラックの準備 (譜面・タイミングが変わったら作り直す)
+  const prepareClapTrack = useCallback(() => {
+    if (!chart || timeline.length === 0) return null;
+    setPlaybackAudioSession();
+    const key = `${compact}|${bpm}|${stops}`;
+    if (clapTrackRef.current?.key === key) return clapTrackRef.current.el;
+    if (clapTrackRef.current) {
+      clapTrackRef.current.el.pause();
+      URL.revokeObjectURL(clapTrackRef.current.url);
+    }
+    const times = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
+    const accents = chart.events.map((e) => e.panels.length >= 2);
+    const url = buildClapTrackUrl(times, accents, timeAtBeat(timeline, chart.totalBeats));
+    const el = new Audio(url);
+    el.preload = "auto";
+    el.setAttribute("playsinline", "");
+    clapTrackRef.current = { key, el, url };
+    return el;
+  }, [chart, timeline, compact, bpm, stops]);
+
+  // 再生開始 (ユーザー操作の文脈で呼ぶこと: audio.play()の許可が必要)
+  const startPlayback = useCallback(() => {
+    if (!mutedRef.current) {
+      const el = prepareClapTrack();
+      if (el) {
+        try {
+          el.currentTime = timeAtBeat(timeline, beatRef.current);
+        } catch {
+          // メタデータ未ロードでも再生側で追従する
+        }
+        void el.play().catch(() => {});
       }
-      return false;
-    });
-  }, []);
+    }
+    setPlaying(true);
+  }, [prepareClapTrack, timeline]);
+
+  const togglePlay = useCallback(() => {
+    if (playing) setPlaying(false);
+    else startPlayback();
+  }, [playing, startPlayback]);
 
   // フルスクリーン (Short撮影) モードの出入り
   const enterFs = useCallback(() => {
@@ -179,14 +212,13 @@ export default function Viewer({
     setShowText(false);
     setShowTiming(false);
     setFs(true);
-    if (!mutedRef.current) ensureClapAudio(audioRef);
-    setPlaying(true);
+    startPlayback();
     try {
       void document.documentElement.requestFullscreen?.();
     } catch {
       /* iOS Safariなどは非対応でOK (CSSオーバーレイで代替) */
     }
-  }, []);
+  }, [startPlayback]);
 
   const exitFs = useCallback(() => {
     setFs(false);
@@ -240,17 +272,30 @@ export default function Viewer({
     if (!playing || !chart || timeline.length === 0) return;
     // 現在の拍位置から時刻を復元して再開
     timeRef.current = timeAtBeat(timeline, beatRef.current);
-    const eventTimes = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
-    // クラップ発火ポインタ: 現在時刻より前のイベントはスキップ
-    let nextClap = 0;
-    while (nextClap < eventTimes.length && eventTimes[nextClap] < timeRef.current - 0.001)
-      nextClap++;
+    // クラップトラック: 再生中は音声側をマスタークロックにする
+    // (iOSの画面収録でrAFがスロットルされても音と同期が保たれる)
+    const track = !mutedRef.current ? clapTrackRef.current?.el ?? null : null;
+    if (track) {
+      track.playbackRate = speed;
+      if (Math.abs(track.currentTime - timeRef.current) > 0.05) {
+        try {
+          track.currentTime = timeRef.current;
+        } catch {
+          // メタデータ未ロード時は無視
+        }
+      }
+      if (track.paused) void track.play().catch(() => {});
+    }
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
-      timeRef.current += dt * speed;
+      if (track && !track.paused && track.readyState >= 2) {
+        timeRef.current = track.currentTime;
+      } else {
+        timeRef.current += dt * speed;
+      }
       beatRef.current = beatAtTime(timeline, timeRef.current);
       if (beatRef.current >= chart.totalBeats - 1e-9) {
         beatRef.current = chart.totalBeats;
@@ -263,20 +308,6 @@ export default function Viewer({
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
 
-      // クラップ音: タイミングが来たイベントを即時発火する。
-      // 先読みスケジューリングはiOSの収録・中断で壊れるため使わない
-      const audio = audioRef.current;
-      while (nextClap < eventTimes.length) {
-        const dtSec = (eventTimes[nextClap] - timeRef.current) / speed;
-        if (dtSec > 0.015) break;
-        const k = nextClap++;
-        // 大きなフレーム落ちで過ぎたものは鳴らさない
-        if (dtSec < -0.3) continue;
-        if (!mutedRef.current && audio) {
-          scheduleClap(audio, chart.events[k].panels.length >= 2);
-        }
-      }
-
       const el = scrollRef.current;
       if (el) {
         // fs時はステップゾーンに現在ビートが重なるよう合わせる
@@ -287,8 +318,11 @@ export default function Viewer({
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [playing, chart, timeline, speed, pxPerBeat, fs, noteSize]);
+    return () => {
+      cancelAnimationFrame(raf);
+      if (track) track.pause();
+    };
+  }, [playing, chart, timeline, speed, pxPerBeat, fs, noteSize, muted]);
 
   // 仮想化: スクロール位置から描画対象のビート範囲を更新
   useEffect(() => {
@@ -853,8 +887,21 @@ export default function Viewer({
               <button
                 className="secondary"
                 onClick={() => {
-                  if (muted) ensureClapAudio(audioRef);
-                  setMuted(!muted);
+                  const next = !muted;
+                  setMuted(next);
+                  if (!next && playing) {
+                    // 再生中のミュート解除: ジェスチャ文脈でトラックを開始
+                    const el = prepareClapTrack();
+                    if (el) {
+                      try {
+                        el.currentTime = timeRef.current;
+                      } catch {
+                        /* 未ロードなら再生側で追従 */
+                      }
+                      void el.play().catch(() => {});
+                    }
+                  }
+                  if (next) clapTrackRef.current?.el.pause();
                 }}
                 title="クラップ音"
               >
