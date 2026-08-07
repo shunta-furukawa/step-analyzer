@@ -31,6 +31,23 @@ import Arrow from "./Arrow";
 
 const EDIT_RESOLUTIONS = [4, 8, 12, 16, 24];
 const HISPEED_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
+const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1];
+
+// URLパラメータの値を選択肢のうち最も近いものに丸める
+function parseChoice(v: string | undefined, options: number[], def: number): number {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return def;
+  let best = def;
+  let dist = Infinity;
+  for (const o of options) {
+    const d = Math.abs(o - n);
+    if (d < dist) {
+      dist = d;
+      best = o;
+    }
+  }
+  return best;
+}
 // フルスクリーンモードのステップゾーン位置 (譜面エリア上端からの中心距離)
 const RECEPTOR_Y = 90;
 
@@ -40,6 +57,8 @@ export default function Viewer({
   bpm: initialBpm,
   stops: initialStops,
   overrides: initialOverrides,
+  hispeed: initialHispeed,
+  speed: initialSpeed,
   showAbout = false,
 }: {
   compact: string;
@@ -47,6 +66,8 @@ export default function Viewer({
   bpm?: string;
   stops?: string;
   overrides?: string;
+  hispeed?: string;
+  speed?: string;
   showAbout?: boolean;
 }) {
   const [compact, setCompact] = useState(initialCompact);
@@ -60,8 +81,10 @@ export default function Viewer({
   const [dirty, setDirty] = useState(false);
   const [current, setCurrent] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const [hispeed, setHispeed] = useState(1);
+  const [speed, setSpeed] = useState(() => parseChoice(initialSpeed, SPEED_OPTIONS, 1));
+  const [hispeed, setHispeed] = useState(() =>
+    parseChoice(initialHispeed, HISPEED_OPTIONS, 1)
+  );
   const [muted, setMuted] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editRes, setEditRes] = useState(16);
@@ -136,8 +159,10 @@ export default function Viewer({
     if (bpm) parts.push(`b=${enc(bpm)}`);
     if (stops) parts.push(`s=${enc(stops)}`);
     if (overrides.size > 0) parts.push(`f=${serializeOverrides(overrides)}`);
+    if (hispeed !== 1) parts.push(`hs=${hispeed}`);
+    if (speed !== 1) parts.push(`sp=${speed}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, bpm, stops, overrides]);
+  }, [compact, title, bpm, stops, overrides, hispeed, speed]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)
   useEffect(() => {
@@ -539,7 +564,10 @@ export default function Viewer({
         </button>
         <select
           value={hispeed}
-          onChange={(e) => setHispeed(Number(e.target.value))}
+          onChange={(e) => {
+            setHispeed(Number(e.target.value));
+            setDirty(true);
+          }}
           title="ハイスピ (縦縮尺)"
         >
           {HISPEED_OPTIONS.map((h) => (
@@ -885,11 +913,18 @@ export default function Viewer({
               >
                 {playing ? "⏸" : "▶"}
               </button>
-              <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
-                <option value={0.25}>0.25×</option>
-                <option value={0.5}>0.5×</option>
-                <option value={0.75}>0.75×</option>
-                <option value={1}>1×</option>
+              <select
+                value={speed}
+                onChange={(e) => {
+                  setSpeed(Number(e.target.value));
+                  setDirty(true);
+                }}
+              >
+                {SPEED_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}×
+                  </option>
+                ))}
               </select>
               <button
                 className="secondary"
