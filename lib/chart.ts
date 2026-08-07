@@ -164,13 +164,24 @@ export function parseCompact(n: string): ParsedChart {
   return { measures, rows, events, holds, mines, totalBeats };
 }
 
+// ビート位置を整数チケット (1ビート=48tick) に変換する。
+// 足の手動指定をノーツ位置に安定して紐付けるためのキー。
+export function tickOf(beat: number): number {
+  return Math.round(beat * 48);
+}
+
 /**
  * 交互踏みを基本とするグリーディな足割り。
  * - 縦連 (直前と同じパネル) は同じ足
  * - ジャンプは移動距離と交差ペナルティが最小になる割り当て
  * - それ以外は直前と逆の足 (交差・振り向きもそのまま表示する)
+ * - overrides でノーツ単位の手動指定 (tick → 足) を与えると、
+ *   そのノーツは指定した足になり、以降はそこを起点に再計算される
  */
-export function assignFeet(events: StepEvent[]): FootStep[] {
+export function assignFeet(
+  events: StepEvent[],
+  overrides?: Map<number, Foot>
+): FootStep[] {
   let leftPos = 0;
   let rightPos = 3;
   let lastFoot: Foot | null = null;
@@ -207,7 +218,12 @@ export function assignFeet(events: StepEvent[]): FootStep[] {
     } else {
       const p = ps[0];
       let foot: Foot;
-      if (lastPanel === p && lastFoot !== null) {
+      const ov = overrides?.get(tickOf(ev.row.beat));
+      if (ov) {
+        foot = ov;
+        jack = lastPanel === p && lastFoot === ov;
+        doubleStep = lastFoot === ov && lastPanel !== null && lastPanel !== p;
+      } else if (lastPanel === p && lastFoot !== null) {
         foot = lastFoot;
         jack = true;
       } else if (lastFoot === null) {

@@ -7,6 +7,7 @@ import {
   ARROW_VIEWBOX,
   lighten,
 } from "@/lib/arrowShape";
+import { parseOverrides } from "@/lib/edit";
 import {
   ARROW_ROTATIONS,
   FOOT_COLORS,
@@ -197,6 +198,7 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const n = searchParams.get("n") ?? "";
   const rawTitle = searchParams.get("t") ?? "";
+  const overrides = parseOverrides(searchParams.get("f") ?? undefined);
 
   let chart: ParsedChart | null = null;
   try {
@@ -205,7 +207,7 @@ export async function GET(request: Request) {
     chart = null;
   }
 
-  const footsteps = chart ? assignFeet(chart.events) : [];
+  const footsteps = chart ? assignFeet(chart.events, overrides) : [];
   const stats = statsOf(footsteps);
 
   const font = await loadJpFont(rawTitle);

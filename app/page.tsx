@@ -17,6 +17,7 @@ export async function generateMetadata({
   const n = pick(sp.n);
   const t = pick(sp.t);
   const b = pick(sp.b);
+  const f = pick(sp.f);
 
   if (!n) {
     return {
@@ -32,6 +33,7 @@ export async function generateMetadata({
   const qs = new URLSearchParams();
   qs.set("n", n);
   if (t) qs.set("t", t);
+  if (f) qs.set("f", f);
   const ogUrl = `/og?${qs.toString()}`;
 
   return {
@@ -60,6 +62,7 @@ export default async function Page({
   const n = pick(sp.n);
   const t = pick(sp.t);
   const b = pick(sp.b);
+  const f = pick(sp.f);
 
   return (
     <main className="container">
@@ -71,7 +74,7 @@ export default async function Page({
       </header>
 
       {n ? (
-        <Viewer compact={n} title={t} bpm={b} />
+        <Viewer compact={n} title={t} bpm={b} overrides={f} />
       ) : (
         <>
           <Editor />
