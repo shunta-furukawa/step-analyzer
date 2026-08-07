@@ -389,6 +389,11 @@ export function facingColor(facing: number): string | null {
   if (a < 22) return null;
   if (a >= 315) return "rgba(4, 4, 12, 0.88)";
   if (a > 200) return "rgba(168, 85, 247, 0.45)";
+  if (a > 157) {
+    // 180度 (完全後ろ向き): 135度までの単純な濃淡とは意味を変えるため、
+    // 左右の色相を保ちつつ紫側に寄せた別トーンにする
+    return facing < 0 ? "rgba(216, 88, 203, 0.52)" : "rgba(106, 142, 247, 0.52)";
+  }
   const t = Math.min(a, 180) / 180;
   const alpha = 0.08 + t * 0.42;
   return facing < 0
