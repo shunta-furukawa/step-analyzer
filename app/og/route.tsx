@@ -7,6 +7,7 @@ import {
   ARROW_VIEWBOX,
   lighten,
 } from "@/lib/arrowShape";
+import { decompressCompact } from "@/lib/codec-server";
 import { parseOverrides } from "@/lib/edit";
 import {
   ARROW_ROTATIONS,
@@ -196,7 +197,15 @@ function ChartLanes({ chart, footsteps }: { chart: ParsedChart; footsteps: FootS
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const n = searchParams.get("n") ?? "";
+  let n = searchParams.get("n") ?? "";
+  const d = searchParams.get("d");
+  if (!n && d) {
+    try {
+      n = decompressCompact(d);
+    } catch {
+      n = "";
+    }
+  }
   const rawTitle = searchParams.get("t") ?? "";
   const overrides = parseOverrides(searchParams.get("f") ?? undefined);
 

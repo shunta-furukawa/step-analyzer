@@ -14,6 +14,7 @@ import {
   type Foot,
 } from "@/lib/chart";
 import { ensureClapAudio, scheduleClap, type ClapAudio } from "@/lib/clap";
+import { compressCompact } from "@/lib/codec";
 import { parseOverrides, serializeOverrides, toggleNote } from "@/lib/edit";
 import { normalizeNotesInput } from "@/lib/url";
 import Arrow from "./Arrow";
@@ -87,9 +88,12 @@ export default function Viewer({
   );
   const stats = useMemo(() => statsOf(footsteps), [footsteps]);
 
-  const buildUrl = useCallback(() => {
+  // 譜面が長い場合はdeflate圧縮したdパラメータを使い、URLを短くする
+  const buildUrl = useCallback(async () => {
     const qs = new URLSearchParams();
-    qs.set("n", compact);
+    const encoded = await compressCompact(compact);
+    if (encoded && encoded.length < compact.length) qs.set("d", encoded);
+    else qs.set("n", compact);
     if (title) qs.set("t", title);
     if (bpm) qs.set("b", bpm);
     if (overrides.size > 0) qs.set("f", serializeOverrides(overrides));
@@ -99,7 +103,13 @@ export default function Viewer({
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)
   useEffect(() => {
     if (!dirty) return;
-    window.history.replaceState(null, "", buildUrl());
+    let alive = true;
+    void buildUrl().then((url) => {
+      if (alive) window.history.replaceState(null, "", url);
+    });
+    return () => {
+      alive = false;
+    };
   }, [dirty, buildUrl]);
 
   const clamp = useCallback(
@@ -217,7 +227,8 @@ export default function Viewer({
   }, [current, chart, playing, pxPerBeat, noteSize]);
 
   const copyUrl = async () => {
-    await navigator.clipboard.writeText(window.location.origin + buildUrl());
+    const url = await buildUrl();
+    await navigator.clipboard.writeText(window.location.origin + url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };

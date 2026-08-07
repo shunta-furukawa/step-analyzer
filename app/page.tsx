@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Viewer from "@/components/Viewer";
+import { decompressCompact } from "@/lib/codec-server";
 import { SAMPLE_BPM, SAMPLE_COMPACT, SAMPLE_TITLE } from "@/lib/sample";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -8,18 +9,36 @@ function pick(v: string | string[] | undefined): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined;
 }
 
+// n (生データ) / d (deflate圧縮) のどちらかから譜面を取り出す
+function resolveChart(sp: { [key: string]: string | string[] | undefined }): {
+  n: string | undefined;
+  ogParam: { key: "n" | "d"; value: string } | null;
+} {
+  const rawN = pick(sp.n);
+  const d = pick(sp.d);
+  if (rawN) return { n: rawN, ogParam: { key: "n", value: rawN } };
+  if (d) {
+    try {
+      return { n: decompressCompact(d), ogParam: { key: "d", value: d } };
+    } catch {
+      return { n: undefined, ogParam: null };
+    }
+  }
+  return { n: undefined, ogParam: null };
+}
+
 export async function generateMetadata({
   searchParams,
 }: {
   searchParams: SearchParams;
 }): Promise<Metadata> {
   const sp = await searchParams;
-  const n = pick(sp.n);
+  const { n, ogParam } = resolveChart(sp);
   const t = pick(sp.t);
   const b = pick(sp.b);
   const f = pick(sp.f);
 
-  if (!n) {
+  if (!n || !ogParam) {
     return {
       title: "Step Analyzer — DDR読譜トレーナー",
       description:
@@ -31,7 +50,7 @@ export async function generateMetadata({
   const description = `この譜面部分をどの足で踏むべきかを可視化${b ? ` (BPM ${b})` : ""}。矢印をタップして足運びを確認できます。`;
 
   const qs = new URLSearchParams();
-  qs.set("n", n);
+  qs.set(ogParam.key, ogParam.value);
   if (t) qs.set("t", t);
   if (f) qs.set("f", f);
   const ogUrl = `/og?${qs.toString()}`;
@@ -59,7 +78,7 @@ export default async function Page({
   searchParams: SearchParams;
 }) {
   const sp = await searchParams;
-  const n = pick(sp.n);
+  const { n } = resolveChart(sp);
   const t = pick(sp.t);
   const b = pick(sp.b);
   const f = pick(sp.f);
