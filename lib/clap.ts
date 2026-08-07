@@ -3,6 +3,10 @@
 export interface ClapAudio {
   ctx: AudioContext;
   buf: AudioBuffer;
+  // 出力先。iOSの画面収録はWebAudio直出しをキャプチャしないため、
+  // MediaStreamDestination → <audio>要素経由で鳴らす (メディア再生として録画に乗る)
+  out: AudioNode;
+  el: HTMLAudioElement | null;
 }
 
 function buildClap(ctx: AudioContext): ClapAudio {
@@ -15,7 +19,20 @@ function buildClap(ctx: AudioContext): ClapAudio {
     const burst = t < 0.02 || (t > 0.03 && t < 0.045) ? 1.6 : 1;
     d[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, 2.2) * burst * 0.9;
   }
-  return { ctx, buf };
+
+  let out: AudioNode = ctx.destination;
+  let el: HTMLAudioElement | null = null;
+  try {
+    const dest = ctx.createMediaStreamDestination();
+    el = new Audio();
+    el.srcObject = dest.stream;
+    el.setAttribute("playsinline", "");
+    out = dest;
+  } catch {
+    el = null;
+    out = ctx.destination;
+  }
+  return { ctx, buf, out, el };
 }
 
 export function ensureClapAudio(ref: { current: ClapAudio | null }): ClapAudio | null {
@@ -53,6 +70,10 @@ export function ensureClapAudio(ref: { current: ClapAudio | null }): ClapAudio |
     }
     if (stale) {
       try {
+        if (ref.current.el) {
+          ref.current.el.pause();
+          ref.current.el.srcObject = null;
+        }
         void cur.close();
       } catch {
         // closed済みなら無視
@@ -69,6 +90,7 @@ export function ensureClapAudio(ref: { current: ClapAudio | null }): ClapAudio |
     }
   }
   void ref.current.ctx.resume();
+  if (ref.current.el) void ref.current.el.play().catch(() => {});
   return ref.current;
 }
 
@@ -83,6 +105,6 @@ export function scheduleClap(audio: ClapAudio, time: number, accent: boolean): v
   gain.gain.value = accent ? 1.0 : 0.6;
   src.connect(bp);
   bp.connect(gain);
-  gain.connect(audio.ctx.destination);
+  gain.connect(audio.out);
   src.start(Math.max(time, audio.ctx.currentTime));
 }

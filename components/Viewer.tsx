@@ -217,7 +217,9 @@ export default function Viewer({
     if (!playing) return;
     const onTap = () => {
       const a = audioRef.current;
-      if (a && !mutedRef.current && a.ctx.state !== "running") void a.ctx.resume();
+      if (!a || mutedRef.current) return;
+      if (a.ctx.state !== "running") void a.ctx.resume();
+      if (a.el && a.el.paused) void a.el.play().catch(() => {});
     };
     window.addEventListener("pointerdown", onTap, true);
     return () => window.removeEventListener("pointerdown", onTap, true);
