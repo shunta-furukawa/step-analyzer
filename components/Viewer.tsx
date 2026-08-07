@@ -26,10 +26,13 @@ import {
   timeAtBeat,
 } from "@/lib/timing";
 import { normalizeNotesInput } from "@/lib/url";
+import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
 
 const EDIT_RESOLUTIONS = [4, 8, 12, 16, 24];
 const HISPEED_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
+// フルスクリーンモードのステップゾーン位置 (譜面エリア上端からの中心距離)
+const RECEPTOR_Y = 90;
 
 export default function Viewer({
   compact: initialCompact,
@@ -63,6 +66,7 @@ export default function Viewer({
   const [editMode, setEditMode] = useState(false);
   const [editRes, setEditRes] = useState(16);
   const [showText, setShowText] = useState(false);
+  const [fs, setFs] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -85,9 +89,13 @@ export default function Viewer({
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  const pxPerBeat = (narrow ? 52 : 72) * hispeed;
-  const noteSize = narrow ? 28 : 40;
-  const laneW = narrow ? 36 : 52;
+  const fsLane =
+    typeof window !== "undefined"
+      ? Math.min(96, Math.floor((window.innerWidth - 16) / 4))
+      : 80;
+  const pxPerBeat = (fs ? fsLane * 1.4 : narrow ? 52 : 72) * hispeed;
+  const noteSize = fs ? fsLane - 10 : narrow ? 28 : 40;
+  const laneW = fs ? fsLane : narrow ? 36 : 52;
 
   const parsed = useMemo(() => {
     try {
@@ -168,6 +176,40 @@ export default function Viewer({
     });
   }, []);
 
+  // フルスクリーン (Short撮影) モードの出入り
+  const enterFs = useCallback(() => {
+    setEditMode(false);
+    setShowText(false);
+    setShowTiming(false);
+    setFs(true);
+    if (!mutedRef.current) ensureClapAudio(audioRef);
+    scheduledRef.current.clear();
+    setPlaying(true);
+    try {
+      void document.documentElement.requestFullscreen?.();
+    } catch {
+      /* iOS Safariなどは非対応でOK (CSSオーバーレイで代替) */
+    }
+  }, []);
+
+  const exitFs = useCallback(() => {
+    setFs(false);
+    setPlaying(false);
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen();
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  // fs中は背面のスクロールを止める
+  useEffect(() => {
+    document.body.style.overflow = fs ? "hidden" : "";
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [fs]);
+
   // キーボード操作 (←/→ or J/K、スペースで再生/停止)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -188,11 +230,13 @@ export default function Viewer({
       } else if (e.key === " ") {
         e.preventDefault();
         togglePlay();
+      } else if (e.key === "Escape") {
+        exitFs();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, current, togglePlay]);
+  }, [go, current, togglePlay, exitFs]);
 
   // 自動再生: タイムライン (ソフラン・停止込み) に沿って時間基準で進行。
   // 譜面スクロール・足の動き・クラップ音をすべて時刻→拍の変換で同期する。
@@ -239,12 +283,17 @@ export default function Viewer({
       }
 
       const el = scrollRef.current;
-      if (el) el.scrollTop = beatRef.current * pxPerBeat - el.clientHeight * 0.4;
+      if (el) {
+        // fs時はステップゾーンに現在ビートが重なるよう合わせる
+        el.scrollTop = fs
+          ? beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y
+          : beatRef.current * pxPerBeat - el.clientHeight * 0.4;
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, chart, timeline, speed, pxPerBeat]);
+  }, [playing, chart, timeline, speed, pxPerBeat, fs, noteSize]);
 
   // 仮想化: スクロール位置から描画対象のビート範囲を更新
   useEffect(() => {
@@ -277,10 +326,12 @@ export default function Viewer({
     if (!ev) return;
     const el = scrollRef.current;
     el.scrollTo({
-      top: ev.row.beat * pxPerBeat - el.clientHeight / 2 + noteSize,
+      top: fs
+        ? ev.row.beat * pxPerBeat + noteSize / 2 - RECEPTOR_Y
+        : ev.row.beat * pxPerBeat - el.clientHeight / 2 + noteSize,
       behavior: "smooth",
     });
-  }, [current, chart, playing, pxPerBeat, noteSize]);
+  }, [current, chart, playing, pxPerBeat, noteSize, fs]);
 
   const copyUrl = async () => {
     const url = await buildUrl();
@@ -324,7 +375,7 @@ export default function Viewer({
   };
 
   return (
-    <div>
+    <div className={fs ? "viewer-fs" : undefined}>
       <div className="card head-card">
         <div className="head-row">
           <div style={{ minWidth: 0 }}>
@@ -518,7 +569,64 @@ export default function Viewer({
       )}
 
       <div className="viewer-layout">
-        <div className="chart-pane">
+        <div className="chart-pane" onClick={fs ? togglePlay : undefined}>
+          {fs && (
+            <>
+              <div
+                className="fs-progress"
+                style={{
+                  width: `${chart.totalBeats > 0 ? Math.min(100, (100 * (chart.events[current]?.row.beat ?? 0)) / chart.totalBeats) : 0}%`,
+                }}
+              />
+              <div className="fs-cover" style={{ height: RECEPTOR_Y + noteSize / 2 }}>
+                <div className="fs-title">
+                  {title || "Step Analyzer"}
+                  {bpm && <span> · BPM {bpm}</span>}
+                </div>
+              </div>
+              <div
+                className="fs-receptors"
+                style={{ top: RECEPTOR_Y - noteSize / 2, width: laneW * 4 }}
+              >
+                {[0, 1, 2, 3].map((p) => {
+                  const hit = curEvent?.panels.includes(p) ?? false;
+                  const foot = hit ? curStep?.feet[p] : null;
+                  return (
+                    <div
+                      key={`${p}-${hit ? current : "idle"}`}
+                      className={`receptor${hit ? " hit" : ""}`}
+                      style={{ width: laneW, height: noteSize }}
+                    >
+                      <svg
+                        width={noteSize}
+                        height={noteSize}
+                        viewBox={ARROW_VIEWBOX}
+                        style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
+                      >
+                        <path
+                          d={ARROW_PATH}
+                          fill={foot ? FOOT_COLORS[foot] : "rgba(255,255,255,0.05)"}
+                          stroke={hit ? "#ffffff" : "#5a6390"}
+                          strokeWidth={4}
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                  );
+                })}
+              </div>
+              {!playing && <div className="fs-paused">▶</div>}
+              <button
+                className="fs-exit"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  exitFs();
+                }}
+              >
+                ✕
+              </button>
+            </>
+          )}
           <div className="chart-scroll" ref={scrollRef}>
             <div className="chart-inner" style={{ width: laneW * 4, height: totalH }}>
               {/* 体の向きの背景バンド: ノーツi-1→ノーツi の領域を
@@ -756,6 +864,13 @@ export default function Viewer({
                 title="クラップ音"
               >
                 {muted ? "🔇" : "👏"}
+              </button>
+              <button
+                className="secondary"
+                onClick={enterFs}
+                title="フルスクリーン再生 (撮影モード)"
+              >
+                ⛶
               </button>
             </div>
             <div className="controls">
