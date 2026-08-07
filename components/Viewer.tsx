@@ -554,7 +554,7 @@ export default function Viewer({
           </select>
         )}
         <button className="secondary" onClick={() => setShowText(!showText)}>
-          テキスト入力
+          {narrow ? "テキスト" : "テキスト入力"}
         </button>
         <button
           className={hasSofran && !showTiming ? "" : "secondary"}
@@ -578,7 +578,7 @@ export default function Viewer({
         </select>
         <span className="toolbar-spacer" />
         <button className="secondary" onClick={copyUrl}>
-          {copied ? "コピーしました" : "URLをコピー"}
+          {copied ? "✓ コピー済" : narrow ? "コピー" : "URLをコピー"}
         </button>
       </div>
 

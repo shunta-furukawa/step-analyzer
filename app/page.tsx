@@ -94,7 +94,6 @@ export default async function Page({
         <h1>
           <a href="/">Step Analyzer</a>
         </h1>
-        <span className="tagline">DDR読譜トレーナー — 譜面の足割りを可視化して共有</span>
       </header>
       <Viewer
         key={n ?? "default"}
