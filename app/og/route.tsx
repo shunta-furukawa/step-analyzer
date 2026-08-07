@@ -24,7 +24,24 @@ export const runtime = "nodejs";
 
 const W = 1200;
 const H = 630;
-const MAX_LANES = 5;
+const MAX_LANES = 4;
+
+// ノーツが最も密な連続laneCount小節の開始位置を選ぶ (空イントロ対策)
+function bestWindow(chart: ParsedChart, laneCount: number): number {
+  const counts = new Array(chart.measures.length).fill(0);
+  for (const ev of chart.events) counts[ev.row.measure] += ev.panels.length;
+  let best = 0;
+  let bestScore = -1;
+  for (let s = 0; s + laneCount <= counts.length; s++) {
+    let score = 0;
+    for (let i = 0; i < laneCount; i++) score += counts[s + i];
+    if (score > bestScore) {
+      bestScore = score;
+      best = s;
+    }
+  }
+  return best;
+}
 
 // タイトルに日本語が含まれる場合のみ、Google Fontsから必要なグリフだけのサブセットを取得する。
 // 失敗した場合はASCIIのみで描画する (デフォルトフォントで足りる)。
@@ -106,9 +123,18 @@ function OgArrow({
   );
 }
 
-function ChartLanes({ chart, footsteps }: { chart: ParsedChart; footsteps: FootStep[] }) {
-  const laneCount = Math.min(chart.measures.length, MAX_LANES);
-  const S = 34;
+function ChartLanes({
+  chart,
+  footsteps,
+  startMeasure,
+  laneCount,
+}: {
+  chart: ParsedChart;
+  footsteps: FootStep[];
+  startMeasure: number;
+  laneCount: number;
+}) {
+  const S = 31;
   const cell = S + 8;
   const laneInnerW = cell * 4;
   const laneH = H - 100;
@@ -127,8 +153,9 @@ function ChartLanes({ chart, footsteps }: { chart: ParsedChart; footsteps: FootS
   });
 
   return (
-    <div style={{ display: "flex", gap: 18 }}>
-      {Array.from({ length: laneCount }, (_, mi) => {
+    <div style={{ display: "flex", gap: 18, flexShrink: 0 }}>
+      {Array.from({ length: laneCount }, (_, li) => {
+        const mi = startMeasure + li;
         const rows = chart.measures[mi];
         return (
           <div
@@ -218,6 +245,8 @@ export async function GET(request: Request) {
 
   const footsteps = chart ? assignFeet(chart.events, overrides, chart.holds) : [];
   const stats = statsOf(footsteps);
+  const laneCount = chart ? Math.min(chart.measures.length, MAX_LANES) : 0;
+  const startMeasure = chart ? bestWindow(chart, laneCount) : 0;
 
   const font = await loadJpFont(rawTitle);
   // フォントが取得できなければ非ASCII文字は描画できないので落とす
@@ -239,7 +268,8 @@ export async function GET(request: Request) {
         style={{
           display: "flex",
           flexDirection: "column",
-          width: 330,
+          width: 320,
+          flexShrink: 0,
           justifyContent: "space-between",
         }}
       >
@@ -259,11 +289,11 @@ export async function GET(request: Request) {
             style={{
               display: "flex",
               color: "#e6e9f5",
-              fontSize: 42,
+              fontSize: (title || "").length > 24 ? 28 : (title || "").length > 12 ? 34 : 42,
               fontWeight: 700,
-              lineHeight: 1.25,
+              lineHeight: 1.3,
               marginTop: 14,
-              wordBreak: "break-all",
+              wordBreak: "break-word",
             }}
           >
             {title || "DDR Chart"}
@@ -319,13 +349,23 @@ export async function GET(request: Request) {
                 </div>
               </div>
             ))}
+            {chart && chart.measures.length > laneCount && (
+              <div style={{ display: "flex", color: "#8b93b5", fontSize: 16 }}>
+                {`M${startMeasure + 1}-${startMeasure + laneCount} / ${chart.measures.length}`}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       <div style={{ display: "flex", flex: 1, justifyContent: "flex-end" }}>
         {chart ? (
-          <ChartLanes chart={chart} footsteps={footsteps} />
+          <ChartLanes
+            chart={chart}
+            footsteps={footsteps}
+            startMeasure={startMeasure}
+            laneCount={laneCount}
+          />
         ) : (
           <div
             style={{
