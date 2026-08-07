@@ -165,25 +165,32 @@ export default function Viewer({
     [clamp, chart]
   );
 
-  // クラップトラックの準備 (譜面・タイミングが変わったら作り直す)
+  // クラップトラックの準備 (譜面・タイミング・再生速度が変わったら作り直す)。
+  // playbackRateで減速するとクラップ1発ごとの音まで間延びするため、
+  // 速度ごとに「間隔だけ引き伸ばし、波形はそのまま」のトラックを生成し
+  // 常に等速で再生する。トラック上の時刻 = 曲内時刻 / speed。
   const prepareClapTrack = useCallback(() => {
     if (!chart || timeline.length === 0) return null;
     setPlaybackAudioSession();
-    const key = `${compact}|${bpm}|${stops}`;
+    const key = `${compact}|${bpm}|${stops}|${speed}`;
     if (clapTrackRef.current?.key === key) return clapTrackRef.current.el;
     if (clapTrackRef.current) {
       clapTrackRef.current.el.pause();
       URL.revokeObjectURL(clapTrackRef.current.url);
     }
-    const times = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
+    const times = chart.events.map((e) => timeAtBeat(timeline, e.row.beat) / speed);
     const accents = chart.events.map((e) => e.panels.length >= 2);
-    const url = buildClapTrackUrl(times, accents, timeAtBeat(timeline, chart.totalBeats));
+    const url = buildClapTrackUrl(
+      times,
+      accents,
+      timeAtBeat(timeline, chart.totalBeats) / speed
+    );
     const el = new Audio(url);
     el.preload = "auto";
     el.setAttribute("playsinline", "");
     clapTrackRef.current = { key, el, url };
     return el;
-  }, [chart, timeline, compact, bpm, stops]);
+  }, [chart, timeline, compact, bpm, stops, speed]);
 
   // 再生開始 (ユーザー操作の文脈で呼ぶこと: audio.play()の許可が必要)
   const startPlayback = useCallback(() => {
@@ -191,7 +198,7 @@ export default function Viewer({
       const el = prepareClapTrack();
       if (el) {
         try {
-          el.currentTime = timeAtBeat(timeline, beatRef.current);
+          el.currentTime = timeAtBeat(timeline, beatRef.current) / speed;
         } catch {
           // メタデータ未ロードでも再生側で追従する
         }
@@ -199,7 +206,7 @@ export default function Viewer({
       }
     }
     setPlaying(true);
-  }, [prepareClapTrack, timeline]);
+  }, [prepareClapTrack, timeline, speed]);
 
   const togglePlay = useCallback(() => {
     if (playing) setPlaying(false);
@@ -273,13 +280,13 @@ export default function Viewer({
     // 現在の拍位置から時刻を復元して再開
     timeRef.current = timeAtBeat(timeline, beatRef.current);
     // クラップトラック: 再生中は音声側をマスタークロックにする
-    // (iOSの画面収録でrAFがスロットルされても音と同期が保たれる)
-    const track = !mutedRef.current ? clapTrackRef.current?.el ?? null : null;
+    // (iOSの画面収録でrAFがスロットルされても音と同期が保たれる)。
+    // トラックは速度込みでレンダリング済みなので常に等速再生
+    const track = !mutedRef.current ? prepareClapTrack() : null;
     if (track) {
-      track.playbackRate = speed;
-      if (Math.abs(track.currentTime - timeRef.current) > 0.05) {
+      if (Math.abs(track.currentTime * speed - timeRef.current) > 0.05) {
         try {
-          track.currentTime = timeRef.current;
+          track.currentTime = timeRef.current / speed;
         } catch {
           // メタデータ未ロード時は無視
         }
@@ -292,7 +299,7 @@ export default function Viewer({
       const dt = (now - last) / 1000;
       last = now;
       if (track && !track.paused && track.readyState >= 2) {
-        timeRef.current = track.currentTime;
+        timeRef.current = track.currentTime * speed;
       } else {
         timeRef.current += dt * speed;
       }
@@ -322,7 +329,7 @@ export default function Viewer({
       cancelAnimationFrame(raf);
       if (track) track.pause();
     };
-  }, [playing, chart, timeline, speed, pxPerBeat, fs, noteSize, muted]);
+  }, [playing, chart, timeline, speed, pxPerBeat, fs, noteSize, muted, prepareClapTrack]);
 
   // 仮想化: スクロール位置から描画対象のビート範囲を更新
   useEffect(() => {
@@ -894,7 +901,7 @@ export default function Viewer({
                     const el = prepareClapTrack();
                     if (el) {
                       try {
-                        el.currentTime = timeRef.current;
+                        el.currentTime = timeRef.current / speed;
                       } catch {
                         /* 未ロードなら再生側で追従 */
                       }
