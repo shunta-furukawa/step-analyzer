@@ -426,6 +426,25 @@ select {
   font-weight: 700;
 }
 
+.facing-band {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+}
+
+.facing-legend {
+  display: inline-flex;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.facing-legend span {
+  width: 8px;
+  height: 10px;
+  display: inline-block;
+}
+
 .edit-cell {
   position: absolute;
   border: 1px dashed rgba(139, 147, 181, 0.35);

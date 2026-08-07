@@ -34,6 +34,7 @@ export interface FootStep {
   crossover: boolean; // 足が交差した状態
   doubleStep: boolean;
   heldFeet: Foot[]; // このイベント時点でフリーズ保持中の足
+  facing: number; // 譜面開始からの連続回転角 (負=左向き, 正=右向き)
 }
 
 export interface ParsedChart {
@@ -348,6 +349,7 @@ export function assignFeet(
       crossover: crossed(leftPos, rightPos),
       doubleStep,
       heldFeet: Array.from(new Set(active.map((a) => a.foot))),
+      facing: contFacing,
     });
   }
   return out;
@@ -375,6 +377,24 @@ export const FOOT_COLORS: Record<Foot, string> = {
   L: "#ff5ca8",
   R: "#38bdf8",
 };
+
+/**
+ * 体の向きに対応する背景色。
+ * 左向き=ピンク・右向き=水色で、角度が大きいほど濃い。
+ * 225〜270度 (イレギュラー) は紫の警告色、315度以上 (一回転級) は真っ暗。
+ * 正面 (±22度未満) は無色 (null)。
+ */
+export function facingColor(facing: number): string | null {
+  const a = Math.abs(facing);
+  if (a < 22) return null;
+  if (a >= 315) return "rgba(4, 4, 12, 0.88)";
+  if (a > 200) return "rgba(168, 85, 247, 0.45)";
+  const t = Math.min(a, 180) / 180;
+  const alpha = 0.08 + t * 0.42;
+  return facing < 0
+    ? `rgba(255, 92, 168, ${alpha.toFixed(3)})`
+    : `rgba(56, 189, 248, ${alpha.toFixed(3)})`;
+}
 
 // 各カラムの矢印の回転角 (上向き矢印を基準)
 export const ARROW_ROTATIONS = [-90, 180, 0, 90]; // ←, ↓, ↑, →

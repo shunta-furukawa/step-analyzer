@@ -14,6 +14,7 @@ import {
   FOOT_COLORS,
   QUANT_COLORS,
   assignFeet,
+  facingColor,
   parseCompact,
   statsOf,
   type ParsedChart,
@@ -152,6 +153,18 @@ function ChartLanes({
     }
   });
 
+  // 体の向きの背景バンド (ビート範囲 + 色)
+  const bands: { start: number; end: number; color: string }[] = [];
+  chart.events.forEach((ev, i) => {
+    const color = facingColor(footsteps[i].facing);
+    if (!color) return;
+    bands.push({
+      start: ev.row.beat,
+      end: chart.events[i + 1]?.row.beat ?? chart.totalBeats,
+      color,
+    });
+  });
+
   return (
     <div style={{ display: "flex", gap: 18, flexShrink: 0 }}>
       {Array.from({ length: laneCount }, (_, li) => {
@@ -185,8 +198,31 @@ function ChartLanes({
                 background: "#131830",
                 border: "2px solid #2a3160",
                 borderRadius: 14,
+                overflow: "hidden",
               }}
             >
+              {bands.map((bd, bi) => {
+                const m0 = mi * 4;
+                const s = Math.max(bd.start, m0);
+                const e = Math.min(bd.end, m0 + 4);
+                if (e <= s) return null;
+                const yOf = (beat: number) =>
+                  8 + ((beat - m0) / 4) * (laneH - cell - 16) + S / 2;
+                return (
+                  <div
+                    key={`b${bi}`}
+                    style={{
+                      display: "flex",
+                      position: "absolute",
+                      left: 0,
+                      right: 0,
+                      top: yOf(s),
+                      height: yOf(e) - yOf(s),
+                      background: bd.color,
+                    }}
+                  />
+                );
+              })}
               {rows.map((_, ri) => {
                 const y = 8 + (ri / rows.length) * (laneH - cell - 16);
                 const notes = [];

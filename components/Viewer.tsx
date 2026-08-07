@@ -4,10 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ARROW_ROTATIONS,
   FOOT_COLORS,
-  PANEL_COORDS,
   QUANT_COLORS,
   assignFeet,
-  facingDeg,
+  facingColor,
   parseCompact,
   statsOf,
   tickOf,
@@ -307,7 +306,7 @@ export default function Viewer({
   const curEvent = chart.events[current];
   const curTick = curEvent ? tickOf(curEvent.row.beat) : null;
   const curOverride = curTick !== null ? overrides.get(curTick) : undefined;
-  const facing = curStep ? facingDeg(curStep.leftPos, curStep.rightPos) : 0;
+  const facing = curStep?.facing ?? 0;
 
   const setOverride = (foot: Foot | null) => {
     if (curTick === null) return;
@@ -386,6 +385,15 @@ export default function Viewer({
               </span>
               <span className="chip">
                 <span className="dot" style={{ background: QUANT_COLORS[16] }} /> 16分
+              </span>
+              <span className="chip">
+                <span className="facing-legend">
+                  <span style={{ background: "rgba(255,92,168,0.5)" }} />
+                  <span style={{ background: "rgba(255,92,168,0.2)" }} />
+                  <span style={{ background: "rgba(56,189,248,0.2)" }} />
+                  <span style={{ background: "rgba(56,189,248,0.5)" }} />
+                </span>
+                背景=体の向き (左←→右)
               </span>
             </div>
           </div>
@@ -513,6 +521,25 @@ export default function Viewer({
         <div className="chart-pane">
           <div className="chart-scroll" ref={scrollRef}>
             <div className="chart-inner" style={{ width: laneW * 4, height: totalH }}>
+              {/* 体の向きの背景バンド (ノーツiを踏んだ後の向きを次のノーツまで塗る) */}
+              {chart.events.map((ev, i) => {
+                const nextBeat = chart.events[i + 1]?.row.beat ?? chart.totalBeats;
+                if (nextBeat < viewBeats.a || ev.row.beat > viewBeats.b) return null;
+                const color = facingColor(footsteps[i].facing);
+                if (!color) return null;
+                return (
+                  <div
+                    key={`fb${i}`}
+                    className="facing-band"
+                    style={{
+                      top: ev.row.beat * pxPerBeat + noteSize / 2,
+                      height: Math.max(0, (nextBeat - ev.row.beat) * pxPerBeat),
+                      background: color,
+                    }}
+                  />
+                );
+              })}
+
               {Array.from({ length: chart.measures.length + 1 }, (_, m) => {
                 if ((m + 1) * 4 < viewBeats.a || m * 4 > viewBeats.b) return null;
                 return (
@@ -950,12 +977,8 @@ function FootStage({
   const lStepping = stepping.includes(leftPos) && feet[leftPos] === "L";
   const rStepping = stepping.includes(rightPos) && feet[rightPos] === "R";
 
-  // 回転の連続化: ±180°の境界で一回転しないよう、直前の角度に近い等価角を選ぶ
-  const contRef = useRef(facing);
-  let rot = facing;
-  while (rot - contRef.current > 180) rot -= 360;
-  while (contRef.current - rot > 180) rot += 360;
-  contRef.current = rot;
+  // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
+  const rot = facing;
 
   return (
     <div className="stage3d">
