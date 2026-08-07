@@ -466,7 +466,7 @@ export default function Viewer({
                   type="text"
                   inputMode="decimal"
                   className="bpm-input"
-                  style={hasSofran ? { width: 90 } : undefined}
+                  style={hasSofran ? { width: 116 } : undefined}
                   value={bpm}
                   placeholder="120"
                   onChange={(e) => {

@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
       "DDRの譜面の一部をURLで共有し、左右どちらの足でどのパネルを踏むべきかを可視化するツール",
     start_url: "/",
     display: "standalone",
-    background_color: "#0b0e1a",
-    theme_color: "#0b0e1a",
+    background_color: "#29d6a2",
+    theme_color: "#29d6a2",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },
