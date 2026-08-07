@@ -381,6 +381,7 @@ function Pad({
                 size={40}
                 rotation={ARROW_ROTATIONS[panel]}
                 color="#5a6390"
+                detail={false}
               />
             </span>
             {hasL && (

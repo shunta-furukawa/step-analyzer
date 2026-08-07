@@ -1,5 +1,12 @@
 import { ImageResponse } from "next/og";
-import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
+import {
+  ARROW_CRYSTAL_LOWER,
+  ARROW_CRYSTAL_UPPER,
+  ARROW_HEAD_STRIPE,
+  ARROW_PATH,
+  ARROW_VIEWBOX,
+  lighten,
+} from "@/lib/arrowShape";
 import {
   ARROW_ROTATIONS,
   FOOT_COLORS,
@@ -70,12 +77,23 @@ function OgArrow({
             d={ARROW_PATH}
             fill="none"
             stroke="#f2f5ff"
-            strokeWidth="9"
+            strokeWidth="8"
             strokeLinejoin="round"
           />
+          <path d={ARROW_PATH} fill={color} />
+          <path
+            d={ARROW_HEAD_STRIPE}
+            fill="none"
+            stroke={lighten(color, 0.7)}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path d={ARROW_CRYSTAL_UPPER} fill={lighten(color, 0.65)} />
+          <path d={ARROW_CRYSTAL_LOWER} fill={lighten(color, 0.65)} />
           <path
             d={ARROW_PATH}
-            fill={color}
+            fill="none"
             stroke="#10142a"
             strokeWidth="4.5"
             strokeLinejoin="round"
