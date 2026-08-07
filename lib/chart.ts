@@ -55,13 +55,14 @@ export function quantOf(idx: number, total: number): number {
   return 64;
 }
 
+// DDRの慣習に合わせた色分け: 4分=赤ピンク, 8分=青, 12分=緑, 16分=黄
 export const QUANT_COLORS: Record<number, string> = {
-  4: "#ff4b5c",
-  8: "#4b7bff",
-  12: "#b44bff",
+  4: "#ff5262",
+  8: "#4f7dff",
+  12: "#3ddc84",
   16: "#ffd23f",
-  24: "#ff8fd0",
-  32: "#4bffa5",
+  24: "#b44bff",
+  32: "#ff8fd0",
   48: "#9aa3b5",
   64: "#9aa3b5",
 };

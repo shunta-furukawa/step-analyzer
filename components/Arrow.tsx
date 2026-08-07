@@ -1,27 +1,46 @@
-// DDR風のブロック矢印。上向きを基準に回転させて4方向を表現する。
+import { useId } from "react";
+import { ARROW_PATH, ARROW_VIEWBOX, darken, lighten } from "@/lib/arrowShape";
+
+// DDR風の矢印: 斜めグラデーションの塗り + 黒縁 + 外側の白リム。
+// 上向きを基準に回転させて4方向を表現する。
 export default function Arrow({
   size,
   rotation,
   color,
-  outline = "#0b0e1a",
+  outline = "#10142a",
 }: {
   size: number;
   rotation: number;
   color: string;
   outline?: string;
 }) {
+  const gradId = useId();
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 24 24"
+      viewBox={ARROW_VIEWBOX}
       style={{ transform: `rotate(${rotation}deg)`, display: "block" }}
     >
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor={lighten(color, 0.55)} />
+          <stop offset="45%" stopColor={color} />
+          <stop offset="100%" stopColor={darken(color, 0.3)} />
+        </linearGradient>
+      </defs>
       <path
-        d="M12 1.5 L22.5 12 L16 12 L16 22.5 L8 22.5 L8 12 L1.5 12 Z"
-        fill={color}
+        d={ARROW_PATH}
+        fill="none"
+        stroke="#f2f5ff"
+        strokeWidth={9}
+        strokeLinejoin="round"
+      />
+      <path
+        d={ARROW_PATH}
+        fill={`url(#${gradId})`}
         stroke={outline}
-        strokeWidth="1.5"
+        strokeWidth={4.5}
         strokeLinejoin="round"
       />
     </svg>

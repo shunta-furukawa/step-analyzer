@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import {
   ARROW_ROTATIONS,
   FOOT_COLORS,
@@ -64,12 +65,19 @@ function OgArrow({
       }}
     >
       <div style={{ display: "flex", transform: `rotate(${rotation}deg)` }}>
-        <svg width={size - 6} height={size - 6} viewBox="0 0 24 24">
+        <svg width={size - 6} height={size - 6} viewBox={ARROW_VIEWBOX}>
           <path
-            d="M12 1.5 L22.5 12 L16 12 L16 22.5 L8 22.5 L8 12 L1.5 12 Z"
+            d={ARROW_PATH}
+            fill="none"
+            stroke="#f2f5ff"
+            strokeWidth="9"
+            strokeLinejoin="round"
+          />
+          <path
+            d={ARROW_PATH}
             fill={color}
-            stroke="#0b0e1a"
-            strokeWidth="1.5"
+            stroke="#10142a"
+            strokeWidth="4.5"
             strokeLinejoin="round"
           />
         </svg>
