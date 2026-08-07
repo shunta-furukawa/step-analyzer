@@ -78,8 +78,6 @@ export default function Viewer({
   const [viewBeats, setViewBeats] = useState({ a: 0, b: 120 });
   const audioRef = useRef<ClapAudio | null>(null);
   const mutedRef = useRef(muted);
-  const scheduledRef = useRef<Set<number>>(new Set());
-  const lastCtxTimeRef = useRef(-1);
   mutedRef.current = muted;
 
   // 画面幅に応じて譜面の描画サイズを切り替える (スマホ縦持ち最優先)
@@ -160,7 +158,6 @@ export default function Viewer({
     (i: number) => {
       const idx = clamp(i);
       setCurrent(idx);
-      scheduledRef.current.clear();
       if (chart && chart.events[idx]) beatRef.current = chart.events[idx].row.beat;
     },
     [clamp, chart]
@@ -170,7 +167,6 @@ export default function Viewer({
     setPlaying((p) => {
       if (!p) {
         if (!mutedRef.current) ensureClapAudio(audioRef);
-        scheduledRef.current.clear();
         return true;
       }
       return false;
@@ -184,7 +180,6 @@ export default function Viewer({
     setShowTiming(false);
     setFs(true);
     if (!mutedRef.current) ensureClapAudio(audioRef);
-    scheduledRef.current.clear();
     setPlaying(true);
     try {
       void document.documentElement.requestFullscreen?.();
@@ -210,20 +205,6 @@ export default function Viewer({
       document.body.style.overflow = "";
     };
   }, [fs]);
-
-  // 再生中にオーディオが中断されたら、次のタップ (ジェスチャ文脈) で復帰させる。
-  // iOSでは画面収録などで中断されたAudioContextをrAFからresumeできないため
-  useEffect(() => {
-    if (!playing) return;
-    const onTap = () => {
-      const a = audioRef.current;
-      if (!a || mutedRef.current) return;
-      if (a.ctx.state !== "running") void a.ctx.resume();
-      if (a.el && a.el.paused) void a.el.play().catch(() => {});
-    };
-    window.addEventListener("pointerdown", onTap, true);
-    return () => window.removeEventListener("pointerdown", onTap, true);
-  }, [playing]);
 
   // キーボード操作 (←/→ or J/K、スペースで再生/停止)
   useEffect(() => {
@@ -260,6 +241,10 @@ export default function Viewer({
     // 現在の拍位置から時刻を復元して再開
     timeRef.current = timeAtBeat(timeline, beatRef.current);
     const eventTimes = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
+    // クラップ発火ポインタ: 現在時刻より前のイベントはスキップ
+    let nextClap = 0;
+    while (nextClap < eventTimes.length && eventTimes[nextClap] < timeRef.current - 0.001)
+      nextClap++;
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
@@ -278,32 +263,17 @@ export default function Viewer({
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
 
-      // クラップ音のスケジューリング (150ms先読みでサンプル精度で予約)
+      // クラップ音: タイミングが来たイベントを即時発火する。
+      // 先読みスケジューリングはiOSの収録・中断で壊れるため使わない
       const audio = audioRef.current;
-      if (!mutedRef.current && audio) {
-        // iOSの画面収録などでAudioContextが中断されるとcurrentTimeが
-        // 止まる。その間にスケジュールを積むと復帰時に全部一斉発火して
-        // 録音が壊れるため、クロックが進んでいない間は予約せず復帰を試みる
-        const ctxNow = audio.ctx.currentTime;
-        const stalled = ctxNow === lastCtxTimeRef.current;
-        lastCtxTimeRef.current = ctxNow;
-        if (stalled || audio.ctx.state !== "running") {
-          void audio.ctx.resume();
-        } else {
-          const lookahead = 0.15;
-          for (let k = Math.max(0, idx); k < chart.events.length; k++) {
-            const dtSec = (eventTimes[k] - timeRef.current) / speed;
-            if (dtSec < -0.02) continue;
-            if (dtSec > lookahead) break;
-            if (!scheduledRef.current.has(k)) {
-              scheduledRef.current.add(k);
-              scheduleClap(
-                audio,
-                ctxNow + Math.max(0, dtSec),
-                chart.events[k].panels.length >= 2
-              );
-            }
-          }
+      while (nextClap < eventTimes.length) {
+        const dtSec = (eventTimes[nextClap] - timeRef.current) / speed;
+        if (dtSec > 0.015) break;
+        const k = nextClap++;
+        // 大きなフレーム落ちで過ぎたものは鳴らさない
+        if (dtSec < -0.3) continue;
+        if (!mutedRef.current && audio) {
+          scheduleClap(audio, chart.events[k].panels.length >= 2);
         }
       }
 
