@@ -67,8 +67,8 @@ export const QUANT_COLORS: Record<number, string> = {
   64: "#9aa3b5",
 };
 
-// パネルの物理座標 (足の移動距離の計算用)。0=←, 1=↓, 2=↑, 3=→
-const COORDS = [
+// パネルの物理座標 (足の移動距離・体の向きの計算用)。0=←, 1=↓, 2=↑, 3=→
+export const PANEL_COORDS = [
   { x: 0, y: 1 },
   { x: 1, y: 2 },
   { x: 1, y: 0 },
@@ -76,11 +76,23 @@ const COORDS = [
 ];
 
 function dist(a: number, b: number): number {
-  return Math.hypot(COORDS[a].x - COORDS[b].x, COORDS[a].y - COORDS[b].y);
+  return Math.hypot(
+    PANEL_COORDS[a].x - PANEL_COORDS[b].x,
+    PANEL_COORDS[a].y - PANEL_COORDS[b].y
+  );
 }
 
 function crossed(leftPos: number, rightPos: number): boolean {
-  return COORDS[leftPos].x > COORDS[rightPos].x;
+  return PANEL_COORDS[leftPos].x > PANEL_COORDS[rightPos].x;
+}
+
+// 体の向き (度)。0=正面(奥向き)、右回りが正。左右の足の位置から求める。
+// 180度捻り状態では ±180 付近になる。
+export function facingDeg(leftPos: number, rightPos: number): number {
+  const dx = PANEL_COORDS[rightPos].x - PANEL_COORDS[leftPos].x;
+  const dy = PANEL_COORDS[rightPos].y - PANEL_COORDS[leftPos].y;
+  if (dx === 0 && dy === 0) return 0;
+  return Math.round((Math.atan2(dy, dx) * 180) / Math.PI);
 }
 
 /**
@@ -201,7 +213,7 @@ export function assignFeet(
       const cost = (lp: number, rp: number) =>
         dist(leftPos, lp) +
         dist(rightPos, rp) +
-        (COORDS[lp].x > COORDS[rp].x ? 2.5 : 0) +
+        (PANEL_COORDS[lp].x > PANEL_COORDS[rp].x ? 2.5 : 0) +
         (lp === 3 ? 1 : 0) +
         (rp === 0 ? 1 : 0);
       if (cost(a, b) <= cost(b, a)) {

@@ -4,50 +4,61 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ARROW_ROTATIONS,
   FOOT_COLORS,
+  PANEL_COORDS,
   QUANT_COLORS,
   assignFeet,
+  facingDeg,
   parseCompact,
   statsOf,
   tickOf,
   type Foot,
 } from "@/lib/chart";
+import { ensureClapAudio, scheduleClap, type ClapAudio } from "@/lib/clap";
 import { parseOverrides, serializeOverrides, toggleNote } from "@/lib/edit";
+import { normalizeNotesInput } from "@/lib/url";
 import Arrow from "./Arrow";
 
-// パッド上のパネル配置: [row][col] → パネル番号 or null
-const PAD_LAYOUT: (number | null)[][] = [
-  [null, 2, null],
-  [0, null, 3],
-  [null, 1, null],
-];
-
 const EDIT_RESOLUTIONS = [4, 8, 12, 16, 24];
+const HISPEED_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
 
 export default function Viewer({
   compact: initialCompact,
-  title,
-  bpm,
+  title: initialTitle,
+  bpm: initialBpm,
   overrides: initialOverrides,
+  showAbout = false,
 }: {
   compact: string;
   title?: string;
   bpm?: string;
   overrides?: string;
+  showAbout?: boolean;
 }) {
   const [compact, setCompact] = useState(initialCompact);
+  const [title, setTitle] = useState(initialTitle ?? "");
+  const [bpm, setBpm] = useState(initialBpm ?? "");
   const [overrides, setOverrides] = useState<Map<number, Foot>>(() =>
     parseOverrides(initialOverrides)
   );
+  const [dirty, setDirty] = useState(false);
   const [current, setCurrent] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [hispeed, setHispeed] = useState(1);
+  const [muted, setMuted] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editRes, setEditRes] = useState(16);
+  const [showText, setShowText] = useState(false);
+  const [editingTitle, setEditingTitle] = useState(false);
   const [narrow, setNarrow] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const beatRef = useRef(0);
+  const audioRef = useRef<ClapAudio | null>(null);
+  const mutedRef = useRef(muted);
+  const scheduledRef = useRef<Set<number>>(new Set());
+  mutedRef.current = muted;
 
   // 画面幅に応じて譜面の描画サイズを切り替える (スマホ縦持ち最優先)
   useEffect(() => {
@@ -57,7 +68,7 @@ export default function Viewer({
     return () => window.removeEventListener("resize", update);
   }, []);
 
-  const pxPerBeat = narrow ? 52 : 72;
+  const pxPerBeat = (narrow ? 52 : 72) * hispeed;
   const noteSize = narrow ? 28 : 40;
   const laneW = narrow ? 36 : 52;
 
@@ -76,15 +87,20 @@ export default function Viewer({
   );
   const stats = useMemo(() => statsOf(footsteps), [footsteps]);
 
-  // 編集や足指定をURLへ反映 (このままコピーで共有できる)
-  useEffect(() => {
+  const buildUrl = useCallback(() => {
     const qs = new URLSearchParams();
     qs.set("n", compact);
     if (title) qs.set("t", title);
     if (bpm) qs.set("b", bpm);
     if (overrides.size > 0) qs.set("f", serializeOverrides(overrides));
-    window.history.replaceState(null, "", `/?${qs.toString()}`);
-  }, [compact, overrides, title, bpm]);
+    return `/?${qs.toString()}`;
+  }, [compact, title, bpm, overrides]);
+
+  // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)
+  useEffect(() => {
+    if (!dirty) return;
+    window.history.replaceState(null, "", buildUrl());
+  }, [dirty, buildUrl]);
 
   const clamp = useCallback(
     (i: number) => Math.max(0, Math.min(footsteps.length - 1, i)),
@@ -95,15 +111,31 @@ export default function Viewer({
     (i: number) => {
       const idx = clamp(i);
       setCurrent(idx);
+      scheduledRef.current.clear();
       if (chart && chart.events[idx]) beatRef.current = chart.events[idx].row.beat;
     },
     [clamp, chart]
   );
 
+  const togglePlay = useCallback(() => {
+    setPlaying((p) => {
+      if (!p) {
+        if (!mutedRef.current) ensureClapAudio(audioRef);
+        scheduledRef.current.clear();
+        return true;
+      }
+      return false;
+    });
+  }, []);
+
   // キーボード操作 (←/→ or J/K、スペースで再生/停止)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        e.target instanceof HTMLSelectElement
+      )
         return;
       if (e.key === "ArrowRight" || e.key === "j") {
         e.preventDefault();
@@ -115,23 +147,24 @@ export default function Viewer({
         go(current - 1);
       } else if (e.key === " ") {
         e.preventDefault();
-        setPlaying((p) => !p);
+        togglePlay();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, current]);
+  }, [go, current, togglePlay]);
 
-  // 自動再生: BPMに合わせて譜面をスクロールし、足を進める
+  // 自動再生: BPMに合わせて譜面をスクロールし、足を進め、クラップ音を鳴らす
   useEffect(() => {
     if (!playing || !chart) return;
     const bpmN = Number(bpm) > 0 ? Number(bpm) : 120;
+    const bps = (bpmN / 60) * speed;
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
-      beatRef.current += (bpmN / 60) * dt * speed;
+      beatRef.current += bps * dt;
       if (beatRef.current >= chart.totalBeats) {
         beatRef.current = chart.totalBeats;
         setPlaying(false);
@@ -142,6 +175,27 @@ export default function Viewer({
         else break;
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
+
+      // クラップ音のスケジューリング (120ms先読みでサンプル精度で予約)
+      const audio = audioRef.current;
+      if (!mutedRef.current && audio) {
+        const lookahead = 0.15;
+        for (let k = Math.max(0, idx); k < chart.events.length; k++) {
+          const evBeat = chart.events[k].row.beat;
+          const dtSec = (evBeat - beatRef.current) / bps;
+          if (dtSec < -0.02) continue;
+          if (dtSec > lookahead) break;
+          if (!scheduledRef.current.has(k)) {
+            scheduledRef.current.add(k);
+            scheduleClap(
+              audio,
+              audio.ctx.currentTime + Math.max(0, dtSec),
+              chart.events[k].panels.length >= 2
+            );
+          }
+        }
+      }
+
       const el = scrollRef.current;
       if (el) el.scrollTop = beatRef.current * pxPerBeat - el.clientHeight * 0.4;
       raf = requestAnimationFrame(tick);
@@ -163,7 +217,7 @@ export default function Viewer({
   }, [current, chart, playing, pxPerBeat, noteSize]);
 
   const copyUrl = async () => {
-    await navigator.clipboard.writeText(window.location.href);
+    await navigator.clipboard.writeText(window.location.origin + buildUrl());
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
@@ -174,7 +228,7 @@ export default function Viewer({
         <h2>譜面を読み込めませんでした</h2>
         <p className="error">{parsed.error}</p>
         <p style={{ marginTop: 12 }}>
-          <a href="/">トップに戻って譜面を入力する</a>
+          <a href="/">トップに戻る</a>
         </p>
       </div>
     );
@@ -185,6 +239,7 @@ export default function Viewer({
   const curEvent = chart.events[current];
   const curTick = curEvent ? tickOf(curEvent.row.beat) : null;
   const curOverride = curTick !== null ? overrides.get(curTick) : undefined;
+  const facing = curStep ? facingDeg(curStep.leftPos, curStep.rightPos) : 0;
 
   const setOverride = (foot: Foot | null) => {
     if (curTick === null) return;
@@ -192,26 +247,56 @@ export default function Viewer({
     if (foot === null) next.delete(curTick);
     else next.set(curTick, foot);
     setOverrides(next);
+    setDirty(true);
   };
 
-  const onNoteClick = (evIdx: number, ev: (typeof chart.events)[number], panel: number) => {
-    if (editMode) {
-      setPlaying(false);
-      setCompact(toggleNote(compact, ev.row.measure, ev.row.idx, ev.row.total, panel));
-    } else {
-      setPlaying(false);
-      go(evIdx);
-    }
+  const applyEdit = (next: string) => {
+    setPlaying(false);
+    setCompact(next);
+    setDirty(true);
   };
 
   return (
     <div>
       <div className="card head-card">
         <div className="head-row">
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div className="chart-title">
-              {title || "無題の譜面"}
-              {bpm && <span className="bpm">BPM {bpm}</span>}
+              {editingTitle ? (
+                <input
+                  type="text"
+                  className="title-input"
+                  value={title}
+                  autoFocus
+                  placeholder="タイトルを入力"
+                  onChange={(e) => {
+                    setTitle(e.target.value);
+                    setDirty(true);
+                  }}
+                  onBlur={() => setEditingTitle(false)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") setEditingTitle(false);
+                  }}
+                />
+              ) : (
+                <button className="title-btn" onClick={() => setEditingTitle(true)}>
+                  {title || "無題の譜面"} <span className="edit-pen">✎</span>
+                </button>
+              )}
+              <span className="bpm">
+                BPM{" "}
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="bpm-input"
+                  value={bpm}
+                  placeholder="120"
+                  onChange={(e) => {
+                    setBpm(e.target.value.replace(/[^0-9.]/g, ""));
+                    setDirty(true);
+                  }}
+                />
+              </span>
             </div>
             <div className="legend">
               <span className="chip">
@@ -263,7 +348,7 @@ export default function Viewer({
             setEditMode(!editMode);
           }}
         >
-          {editMode ? "✎ 編集中" : "✎ 編集"}
+          ✎ {editMode ? "編集中" : "編集"}
         </button>
         {editMode && (
           <select value={editRes} onChange={(e) => setEditRes(Number(e.target.value))}>
@@ -274,17 +359,42 @@ export default function Viewer({
             ))}
           </select>
         )}
+        <button className="secondary" onClick={() => setShowText(!showText)}>
+          テキスト入力
+        </button>
+        <select
+          value={hispeed}
+          onChange={(e) => setHispeed(Number(e.target.value))}
+          title="ハイスピ (縦縮尺)"
+        >
+          {HISPEED_OPTIONS.map((h) => (
+            <option key={h} value={h}>
+              HS {h}×
+            </option>
+          ))}
+        </select>
         <span className="toolbar-spacer" />
         <button className="secondary" onClick={copyUrl}>
           {copied ? "コピーしました" : "URLをコピー"}
         </button>
       </div>
 
+      {showText && (
+        <TextImport
+          compact={compact}
+          onApply={(next) => {
+            applyEdit(next);
+            setOverrides(new Map());
+            go(0);
+            setShowText(false);
+          }}
+        />
+      )}
+
       <div className="viewer-layout">
         <div className="chart-pane">
           <div className="chart-scroll" ref={scrollRef}>
             <div className="chart-inner" style={{ width: laneW * 4, height: totalH }}>
-              {/* 小節線・拍線・小節番号 */}
               {Array.from({ length: chart.measures.length + 1 }, (_, m) => (
                 <div key={`m${m}`}>
                   <div
@@ -310,7 +420,6 @@ export default function Viewer({
                 </div>
               ))}
 
-              {/* 編集モードの配置グリッド */}
               {editMode &&
                 chart.measures.map((_, mi) =>
                   Array.from({ length: editRes }, (_, r) => {
@@ -326,16 +435,12 @@ export default function Viewer({
                           width: noteSize,
                           height: cellH,
                         }}
-                        onClick={() => {
-                          setPlaying(false);
-                          setCompact(toggleNote(compact, mi, r, editRes, p));
-                        }}
+                        onClick={() => applyEdit(toggleNote(compact, mi, r, editRes, p))}
                       />
                     ));
                   })
                 )}
 
-              {/* フリーズ/ロールのボディ */}
               {chart.holds.map((h, i) => (
                 <div
                   key={`h${i}`}
@@ -350,7 +455,6 @@ export default function Viewer({
                 />
               ))}
 
-              {/* 地雷 */}
               {chart.mines.map((m, i) => (
                 <div
                   key={`mine${i}`}
@@ -368,7 +472,6 @@ export default function Viewer({
                 </div>
               ))}
 
-              {/* ノート本体 */}
               {chart.events.map((ev, i) => {
                 const step = footsteps[i];
                 return ev.panels.map((p) => {
@@ -384,7 +487,14 @@ export default function Viewer({
                         width: noteSize,
                         height: noteSize,
                       }}
-                      onClick={() => onNoteClick(i, ev, p)}
+                      onClick={() => {
+                        setPlaying(false);
+                        if (editMode) {
+                          applyEdit(toggleNote(compact, ev.row.measure, ev.row.idx, ev.row.total, p));
+                        } else {
+                          go(i);
+                        }
+                      }}
                     >
                       <Arrow
                         size={noteSize}
@@ -402,9 +512,7 @@ export default function Viewer({
                       {step.crossover && step.feet[p] && !step.jump && (
                         <span className="note-flag flag-cross">交差</span>
                       )}
-                      {step.jack && (
-                        <span className="note-flag flag-jack">縦連</span>
-                      )}
+                      {step.jack && <span className="note-flag flag-jack">縦連</span>}
                     </div>
                   );
                 });
@@ -415,11 +523,13 @@ export default function Viewer({
 
         <div className="side-pane">
           <div className="card pad-card">
-            <Pad
+            <FootStage
               leftPos={curStep?.leftPos ?? 0}
               rightPos={curStep?.rightPos ?? 3}
               stepping={curEvent?.panels ?? []}
               feet={curStep?.feet ?? [null, null, null, null]}
+              facing={facing}
+              stepKey={current}
             />
             <div className="controls">
               <button
@@ -435,31 +545,57 @@ export default function Viewer({
               </button>
               <button
                 onClick={() => {
-                  if (!playing && curEvent) beatRef.current = curEvent.row.beat;
-                  if (!playing && current >= footsteps.length - 1) {
-                    go(0);
-                    beatRef.current = 0;
+                  if (!playing) {
+                    if (current >= footsteps.length - 1) {
+                      go(0);
+                      beatRef.current = 0;
+                    } else if (curEvent) {
+                      beatRef.current = curEvent.row.beat;
+                    }
                   }
-                  setPlaying(!playing);
+                  togglePlay();
                 }}
                 title="再生 / 停止 (スペースキー)"
               >
-                {playing ? "⏸ 停止" : "▶ 再生"}
+                {playing ? "⏸" : "▶"}
               </button>
               <select value={speed} onChange={(e) => setSpeed(Number(e.target.value))}>
+                <option value={0.25}>0.25×</option>
                 <option value={0.5}>0.5×</option>
                 <option value={0.75}>0.75×</option>
                 <option value={1}>1×</option>
               </select>
+              <button
+                className="secondary"
+                onClick={() => {
+                  if (muted) ensureClapAudio(audioRef);
+                  setMuted(!muted);
+                }}
+                title="クラップ音"
+              >
+                {muted ? "🔇" : "👏"}
+              </button>
             </div>
             <div className="controls">
-              <button className="secondary" onClick={() => { setPlaying(false); go(current - 1); }}>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setPlaying(false);
+                  go(current - 1);
+                }}
+              >
                 ◀ 前
               </button>
               <span className="pos">
                 {footsteps.length > 0 ? current + 1 : 0} / {footsteps.length}
               </span>
-              <button className="secondary" onClick={() => { setPlaying(false); go(current + 1); }}>
+              <button
+                className="secondary"
+                onClick={() => {
+                  setPlaying(false);
+                  go(current + 1);
+                }}
+              >
                 次 ▶
               </button>
             </div>
@@ -481,14 +617,17 @@ export default function Viewer({
                     .map(
                       (p) =>
                         `${["←", "↓", "↑", "→"][p]}${
-                          curStep.feet[p] === "L"
-                            ? "左"
-                            : curStep.feet[p] === "R"
-                            ? "右"
-                            : ""
+                          curStep.feet[p] === "L" ? "左" : curStep.feet[p] === "R" ? "右" : ""
                         }`
                     )
                     .join(" ")}
+                  {facing !== 0 && (
+                    <span className="facing-label">
+                      {" "}
+                      体の向き {facing > 0 ? "右" : "左"}
+                      {Math.abs(facing)}°
+                    </span>
+                  )}
                 </div>
                 {curEvent.panels.length === 1 && (
                   <div className="override-row">
@@ -518,16 +657,13 @@ export default function Viewer({
                   {curStep.crossover && (
                     <span className="tag crossover">交差 (体を捻る)</span>
                   )}
-                  {curStep.doubleStep && (
-                    <span className="tag jack">踏み替え</span>
-                  )}
                 </div>
               </div>
             )}
             {overrides.size > 0 && (
               <div className="override-summary">
                 手動指定 {overrides.size}件
-                <button className="ov-btn" onClick={() => setOverrides(new Map())}>
+                <button className="ov-btn" onClick={() => { setOverrides(new Map()); setDirty(true); }}>
                   全て解除
                 </button>
               </div>
@@ -535,12 +671,21 @@ export default function Viewer({
           </div>
           <div className="card hint-card">
             <p className="hint">
-              ノートのL/Rバッジ付近をタップで選択、「この足で踏む」で起点を固定して再計算。
-              編集モード中はグリッドをタップしてノーツを追加/削除できます。
-              このページのURLをコピーすれば、編集・足指定込みで共有できます。
-            </p>
-            <p style={{ marginTop: 8 }}>
-              <a href="/">別の譜面を入力する</a>
+              {showAbout ? (
+                <>
+                  DDRの譜面の足割りを可視化して共有できる読譜トレーナーです。
+                  交互踏みベースでL/Rを自動割り当てし、180度捻りもそのまま可視化。
+                  ノートを選んで「この足で踏む」を指定すれば別解も作れます。
+                  編集やテキスト入力で自分の譜面にして「URLをコピー」でXなどに共有すると、
+                  譜面のプレビュー画像 (OGP) 付きで展開されます。
+                </>
+              ) : (
+                <>
+                  ノートをタップで選択、「この足で踏む」で起点を固定して再計算。
+                  編集モード中はグリッドをタップしてノーツを追加/削除。
+                  URLをコピーすれば編集・足指定込みで共有できます。
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -549,60 +694,173 @@ export default function Viewer({
   );
 }
 
-function Pad({
+// ===== テキスト入力パネル =====
+
+function TextImport({
+  compact,
+  onApply,
+}: {
+  compact: string;
+  onApply: (next: string) => void;
+}) {
+  const [text, setText] = useState(() =>
+    compact
+      .split("-")
+      .map((m) => (m.match(/.{4}/g) ?? []).join("\n"))
+      .join("\n,\n")
+  );
+  const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+
+  const apply = () => {
+    setError(null);
+    setWarning(null);
+    try {
+      const result = normalizeNotesInput(text);
+      if (result.warning) setWarning(result.warning);
+      onApply(result.compact);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
+  return (
+    <div className="card text-import">
+      <p className="hint" style={{ marginBottom: 8 }}>
+        SM/SSCファイルの <code>#NOTES</code> 以下のノートデータ (小節を <code>,</code> 区切り、
+        1行4文字) を貼り付けて読み込めます。現在の譜面のテキストが入っています。
+      </p>
+      <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
+      <div className="form-row">
+        <button onClick={apply}>この内容を読み込む</button>
+      </div>
+      {error && <p className="error">{error}</p>}
+      {warning && <p className="warning">{warning}</p>}
+    </div>
+  );
+}
+
+// ===== 3Dフットステージ =====
+
+// 3x3グリッド上のパネル中心座標 (単位: セル)
+const STAGE_CENTERS = [
+  { x: 0.5, y: 1.5 },
+  { x: 1.5, y: 2.5 },
+  { x: 1.5, y: 0.5 },
+  { x: 2.5, y: 1.5 },
+];
+
+const STAGE_LAYOUT: (number | null)[][] = [
+  [null, 2, null],
+  [0, null, 3],
+  [null, 1, null],
+];
+
+function FootStage({
   leftPos,
   rightPos,
   stepping,
   feet,
+  facing,
+  stepKey,
 }: {
   leftPos: number;
   rightPos: number;
   stepping: number[];
   feet: (Foot | null)[];
+  facing: number;
+  stepKey: number;
 }) {
+  const same = leftPos === rightPos;
+  const lc = STAGE_CENTERS[leftPos];
+  const rc = STAGE_CENTERS[rightPos];
+  const lx = lc.x + (same ? -0.22 : 0);
+  const rx = rc.x + (same ? 0.22 : 0);
+  const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
+  const midY = (STAGE_CENTERS[leftPos].y + STAGE_CENTERS[rightPos].y) / 2;
+  const lStepping = stepping.includes(leftPos) && feet[leftPos] === "L";
+  const rStepping = stepping.includes(rightPos) && feet[rightPos] === "R";
+
+  // 回転の連続化: ±180°の境界で一回転しないよう、直前の角度に近い等価角を選ぶ
+  const contRef = useRef(facing);
+  let rot = facing;
+  while (rot - contRef.current > 180) rot -= 360;
+  while (contRef.current - rot > 180) rot += 360;
+  contRef.current = rot;
+
   return (
-    <div className="pad">
-      {PAD_LAYOUT.flat().map((panel, i) => {
-        if (panel === null) return <div key={i} className="pad-cell" />;
-        const hasL = leftPos === panel;
-        const hasR = rightPos === panel;
-        const isStepping = stepping.includes(panel);
-        const activeClass = isStepping
-          ? feet[panel] === "L"
-            ? " active-L"
-            : feet[panel] === "R"
-            ? " active-R"
-            : " active-LR"
-          : "";
-        return (
-          <div key={i} className={`pad-cell pad-panel${activeClass}`}>
-            <span className="pad-arrow">
-              <Arrow
-                size={36}
-                rotation={ARROW_ROTATIONS[panel]}
-                color="#5a6390"
-                detail={false}
-              />
-            </span>
-            {hasL && (
-              <span
-                className={`foot-marker${isStepping && feet[panel] === "L" ? " stepping" : ""}`}
-                style={{ background: FOOT_COLORS.L, left: hasR ? 2 : undefined }}
-              >
-                L
-              </span>
-            )}
-            {hasR && (
-              <span
-                className={`foot-marker${isStepping && feet[panel] === "R" ? " stepping" : ""}`}
-                style={{ background: FOOT_COLORS.R, right: hasL ? 2 : undefined }}
-              >
-                R
-              </span>
-            )}
+    <div className="stage3d">
+      <div className="scene">
+        <div className="floor">
+          {STAGE_LAYOUT.flat().map((panel, i) => {
+            if (panel === null) return <div key={i} className="floor-cell" />;
+            const isStepping = stepping.includes(panel);
+            const f = feet[panel];
+            const cls = isStepping
+              ? f === "L"
+                ? " active-L"
+                : f === "R"
+                ? " active-R"
+                : " active-LR"
+              : "";
+            return (
+              <div key={i} className={`floor-cell floor-panel${cls}`}>
+                <span className="pad-arrow">
+                  <Arrow size={30} rotation={ARROW_ROTATIONS[panel]} color="#5a6390" detail={false} />
+                </span>
+              </div>
+            );
+          })}
+
+          {/* 体の向きインジケータ (両足の中間に表示) */}
+          <div
+            className="facing-marker"
+            style={{
+              left: `${(midX / 3) * 100}%`,
+              top: `${(midY / 3) * 100}%`,
+              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+            }}
+          >
+            ▲
           </div>
-        );
-      })}
+
+          {/* 足 */}
+          <div
+            className="foot3d"
+            style={{
+              left: `${(lx / 3) * 100}%`,
+              top: `${(lc.y / 3) * 100}%`,
+              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+            }}
+          >
+            <div className="foot3d-shadow" />
+            <div
+              key={lStepping ? `s${stepKey}` : "idle"}
+              className={`foot3d-body${lStepping ? " hop" : ""}`}
+              style={{ background: FOOT_COLORS.L }}
+            >
+              L
+            </div>
+          </div>
+          <div
+            className="foot3d"
+            style={{
+              left: `${(rx / 3) * 100}%`,
+              top: `${(rc.y / 3) * 100}%`,
+              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+            }}
+          >
+            <div className="foot3d-shadow" />
+            <div
+              key={rStepping ? `s${stepKey}` : "idle"}
+              className={`foot3d-body${rStepping ? " hop" : ""}`}
+              style={{ background: FOOT_COLORS.R }}
+            >
+              R
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

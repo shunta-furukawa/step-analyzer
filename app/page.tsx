@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Editor from "@/components/Editor";
 import Viewer from "@/components/Viewer";
+import { SAMPLE_BPM, SAMPLE_COMPACT, SAMPLE_TITLE } from "@/lib/sample";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -63,6 +63,7 @@ export default async function Page({
   const t = pick(sp.t);
   const b = pick(sp.b);
   const f = pick(sp.f);
+  const isDefault = !n;
 
   return (
     <main className="container">
@@ -72,28 +73,14 @@ export default async function Page({
         </h1>
         <span className="tagline">DDR読譜トレーナー — 譜面の足割りを可視化して共有</span>
       </header>
-
-      {n ? (
-        <Viewer compact={n} title={t} bpm={b} overrides={f} />
-      ) : (
-        <>
-          <Editor />
-          <div className="card">
-            <h2>このツールについて</h2>
-            <p className="hint">
-              譜面の一部をURLパラメータに載せて共有できる読譜練習ツールです。
-              交互踏みを基本に、各ノートを左右どちらの足で踏むべきかを自動で割り当てて表示します
-              (縦連は同じ足、ジャンプは両足、交差が必要な箇所にはマークが付きます)。
-              <br />
-              生成されたURLをXなどのSNSに貼ると、譜面のプレビュー画像 (OGP)
-              が自動で展開されるので、「ここどう踏む?」という議論がしやすくなります。
-              <br />
-              URL形式: <code>/?n=小節1-小節2-…</code> (各小節は1行4文字のノートを連結した{" "}
-              <code>0134M</code> の列)、<code>t=</code> タイトル、<code>b=</code> BPM。
-            </p>
-          </div>
-        </>
-      )}
+      <Viewer
+        key={n ?? "default"}
+        compact={n ?? SAMPLE_COMPACT}
+        title={isDefault ? SAMPLE_TITLE : t}
+        bpm={isDefault ? SAMPLE_BPM : b}
+        overrides={f}
+        showAbout={isDefault}
+      />
     </main>
   );
 }
