@@ -96,6 +96,18 @@ export function facingDeg(leftPos: number, rightPos: number): number {
   return Math.round((Math.atan2(dy, dx) * 180) / Math.PI);
 }
 
+// 直前の連続角度に最も近い等価角を選ぶ (±180境界の巻き戻り防止)
+function unwrapDeg(target: number, prev: number): number {
+  let f = target;
+  while (f - prev > 180) f -= 360;
+  while (prev - f > 180) f += 360;
+  return f;
+}
+
+// 累積回転の上限。±180 (完全に後ろ向き) までは正解、それを超える回転は
+// 物理的に無理な足順とみなして踏み替えで解消する
+const MAX_ROTATION = 180.5;
+
 /**
  * コンパクト形式の譜面文字列をパースする。
  * 形式: 小節を "-" 区切りで連結。各小節は4文字/行を改行なしで連結した [01234M] の列。
@@ -224,12 +236,15 @@ export function assignFeet(
     duringX.set(key, cnt > 0 ? sum / cnt : null);
   }
 
-  // 現在保持中のフリーズ
+  // 現在保持中のフリーズ。テール拍のノーツも保持足では踏めないため、
+  // ロックは endBeat を含む (beat <= endBeat の間有効)
   let active: { panel: number; endBeat: number; foot: Foot }[] = [];
+  // 譜面開始からの連続回転角 (±180を超える回転は禁止)
+  let contFacing = 0;
 
   for (const ev of events) {
     const beat = ev.row.beat;
-    active = active.filter((a) => a.endBeat - 1e-6 > beat);
+    active = active.filter((a) => beat <= a.endBeat + 1e-6);
     const lockedL = active.some((a) => a.foot === "L");
     const lockedR = active.some((a) => a.foot === "R");
 
@@ -247,7 +262,9 @@ export function assignFeet(
         dist(rightPos, rp) +
         (PANEL_COORDS[lp].x > PANEL_COORDS[rp].x ? 2.5 : 0) +
         (lp === 3 ? 1 : 0) +
-        (rp === 0 ? 1 : 0);
+        (rp === 0 ? 1 : 0) +
+        // 累積回転が±180を超える割り当ては強く忌避
+        (Math.abs(unwrapDeg(facingDeg(lp, rp), contFacing)) > MAX_ROTATION ? 100 : 0);
       if (cost(a, b) <= cost(b, a)) {
         leftPos = a;
         rightPos = b;
@@ -263,6 +280,7 @@ export function assignFeet(
       const p = ps[0];
       const key = `${tickOf(beat)}:${p}`;
       let foot: Foot;
+      let flexible = false; // 回転制限で足を差し替えてよいか
       const ov = overrides?.get(tickOf(beat));
       if (ov) {
         foot = ov;
@@ -282,14 +300,28 @@ export function assignFeet(
         else foot = lastFoot === null ? (dist(leftPos, p) <= dist(rightPos, p) ? "L" : "R") : lastFoot === "L" ? "R" : "L";
       } else if (lastFoot === null) {
         // 開始直後 or ジャンプ直後: すでにそのパネルに乗っている足、なければ近い足
+        flexible = true;
         if (leftPos === p) foot = "L";
         else if (rightPos === p) foot = "R";
         else if (p === 0) foot = "L";
         else if (p === 3) foot = "R";
         else foot = dist(leftPos, p) <= dist(rightPos, p) ? "L" : "R";
       } else {
+        flexible = true;
         foot = lastFoot === "L" ? "R" : "L";
       }
+
+      // 累積回転が±180を超えるなら、踏み替え (スライド) で解消する
+      if (flexible) {
+        const simFacing = (f: Foot) =>
+          unwrapDeg(facingDeg(f === "L" ? p : leftPos, f === "R" ? p : rightPos), contFacing);
+        const f1 = simFacing(foot);
+        if (Math.abs(f1) > MAX_ROTATION) {
+          const other: Foot = foot === "L" ? "R" : "L";
+          if (Math.abs(simFacing(other)) < Math.abs(f1)) foot = other;
+        }
+      }
+
       jack = lastPanel === p && lastFoot === foot;
       doubleStep = !jack && lastFoot === foot && lastPanel !== null && lastPanel !== p;
       feet[p] = foot;
@@ -298,6 +330,7 @@ export function assignFeet(
       lastFoot = foot;
       lastPanel = p;
     }
+    contFacing = unwrapDeg(facingDeg(leftPos, rightPos), contFacing);
 
     // このイベントで始まるフリーズを登録
     for (const p of ps) {
@@ -325,6 +358,7 @@ export interface ChartStats {
   jumps: number;
   jacks: number;
   crossovers: number;
+  doubleSteps: number;
 }
 
 export function statsOf(footsteps: FootStep[]): ChartStats {
@@ -333,6 +367,7 @@ export function statsOf(footsteps: FootStep[]): ChartStats {
     jumps: footsteps.filter((f) => f.jump).length,
     jacks: footsteps.filter((f) => f.jack).length,
     crossovers: footsteps.filter((f) => f.crossover).length,
+    doubleSteps: footsteps.filter((f) => f.doubleStep).length,
   };
 }
 

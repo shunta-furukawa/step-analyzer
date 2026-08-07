@@ -16,6 +16,15 @@ import {
 import { ensureClapAudio, scheduleClap, type ClapAudio } from "@/lib/clap";
 import { compressCompact } from "@/lib/codec";
 import { parseOverrides, serializeOverrides, toggleNote } from "@/lib/edit";
+import {
+  beatAtTime,
+  bpmAtBeat,
+  buildTimeline,
+  extractTimingFromSM,
+  parseBpmParam,
+  parseStopsParam,
+  timeAtBeat,
+} from "@/lib/timing";
 import { normalizeNotesInput } from "@/lib/url";
 import Arrow from "./Arrow";
 
@@ -26,18 +35,22 @@ export default function Viewer({
   compact: initialCompact,
   title: initialTitle,
   bpm: initialBpm,
+  stops: initialStops,
   overrides: initialOverrides,
   showAbout = false,
 }: {
   compact: string;
   title?: string;
   bpm?: string;
+  stops?: string;
   overrides?: string;
   showAbout?: boolean;
 }) {
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
   const [bpm, setBpm] = useState(initialBpm ?? "");
+  const [stops, setStops] = useState(initialStops ?? "");
+  const [showTiming, setShowTiming] = useState(false);
   const [overrides, setOverrides] = useState<Map<number, Foot>>(() =>
     parseOverrides(initialOverrides)
   );
@@ -56,6 +69,7 @@ export default function Viewer({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const beatRef = useRef(0);
+  const timeRef = useRef(0);
   const audioRef = useRef<ClapAudio | null>(null);
   const mutedRef = useRef(muted);
   const scheduledRef = useRef<Set<number>>(new Set());
@@ -88,6 +102,15 @@ export default function Viewer({
   );
   const stats = useMemo(() => statsOf(footsteps), [footsteps]);
 
+  // ソフラン・停止のタイミングデータ
+  const bpms = useMemo(() => parseBpmParam(bpm), [bpm]);
+  const stopList = useMemo(() => parseStopsParam(stops), [stops]);
+  const timeline = useMemo(
+    () => (chart ? buildTimeline(bpms, stopList, chart.totalBeats) : []),
+    [chart, bpms, stopList]
+  );
+  const hasSofran = bpms.length > 1 || stopList.length > 0;
+
   // 譜面が長い場合はdeflate圧縮したdパラメータを使い、URLを短くする
   const buildUrl = useCallback(async () => {
     const qs = new URLSearchParams();
@@ -96,9 +119,10 @@ export default function Viewer({
     else qs.set("n", compact);
     if (title) qs.set("t", title);
     if (bpm) qs.set("b", bpm);
+    if (stops) qs.set("s", stops);
     if (overrides.size > 0) qs.set("f", serializeOverrides(overrides));
     return `/?${qs.toString()}`;
-  }, [compact, title, bpm, overrides]);
+  }, [compact, title, bpm, stops, overrides]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)
   useEffect(() => {
@@ -164,18 +188,21 @@ export default function Viewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [go, current, togglePlay]);
 
-  // 自動再生: BPMに合わせて譜面をスクロールし、足を進め、クラップ音を鳴らす
+  // 自動再生: タイムライン (ソフラン・停止込み) に沿って時間基準で進行。
+  // 譜面スクロール・足の動き・クラップ音をすべて時刻→拍の変換で同期する。
   useEffect(() => {
-    if (!playing || !chart) return;
-    const bpmN = Number(bpm) > 0 ? Number(bpm) : 120;
-    const bps = (bpmN / 60) * speed;
+    if (!playing || !chart || timeline.length === 0) return;
+    // 現在の拍位置から時刻を復元して再開
+    timeRef.current = timeAtBeat(timeline, beatRef.current);
+    const eventTimes = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
-      beatRef.current += bps * dt;
-      if (beatRef.current >= chart.totalBeats) {
+      timeRef.current += dt * speed;
+      beatRef.current = beatAtTime(timeline, timeRef.current);
+      if (beatRef.current >= chart.totalBeats - 1e-9) {
         beatRef.current = chart.totalBeats;
         setPlaying(false);
       }
@@ -186,13 +213,12 @@ export default function Viewer({
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
 
-      // クラップ音のスケジューリング (120ms先読みでサンプル精度で予約)
+      // クラップ音のスケジューリング (150ms先読みでサンプル精度で予約)
       const audio = audioRef.current;
       if (!mutedRef.current && audio) {
         const lookahead = 0.15;
         for (let k = Math.max(0, idx); k < chart.events.length; k++) {
-          const evBeat = chart.events[k].row.beat;
-          const dtSec = (evBeat - beatRef.current) / bps;
+          const dtSec = (eventTimes[k] - timeRef.current) / speed;
           if (dtSec < -0.02) continue;
           if (dtSec > lookahead) break;
           if (!scheduledRef.current.has(k)) {
@@ -212,7 +238,7 @@ export default function Viewer({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [playing, chart, bpm, speed, pxPerBeat]);
+  }, [playing, chart, timeline, speed, pxPerBeat]);
 
   // 手動操作時に現在のイベントが見えるようにスクロール
   useEffect(() => {
@@ -300,13 +326,15 @@ export default function Viewer({
                   type="text"
                   inputMode="decimal"
                   className="bpm-input"
+                  style={hasSofran ? { width: 90 } : undefined}
                   value={bpm}
                   placeholder="120"
                   onChange={(e) => {
-                    setBpm(e.target.value.replace(/[^0-9.]/g, ""));
+                    setBpm(e.target.value.replace(/[^0-9.,:]/g, ""));
                     setDirty(true);
                   }}
                 />
+                {hasSofran && <span className="sofran-chip">変速</span>}
               </span>
             </div>
             <div className="legend">
@@ -347,6 +375,10 @@ export default function Viewer({
               <div className="num">{stats.crossovers}</div>
               <div className="label">交差</div>
             </div>
+            <div className="stat">
+              <div className="num">{stats.doubleSteps}</div>
+              <div className="label">踏み替え</div>
+            </div>
           </div>
         </div>
       </div>
@@ -373,6 +405,12 @@ export default function Viewer({
         <button className="secondary" onClick={() => setShowText(!showText)}>
           テキスト入力
         </button>
+        <button
+          className={hasSofran && !showTiming ? "" : "secondary"}
+          onClick={() => setShowTiming(!showTiming)}
+        >
+          変速
+        </button>
         <select
           value={hispeed}
           onChange={(e) => setHispeed(Number(e.target.value))}
@@ -390,12 +428,50 @@ export default function Viewer({
         </button>
       </div>
 
+      {showTiming && (
+        <div className="card text-import">
+          <p className="hint" style={{ marginBottom: 8 }}>
+            ソフラン (途中変速) と停止を設定できます。拍はSMの #BPMS / #STOPS
+            と同じ0起点のビート単位 (1小節=4拍) です。
+            SMファイルごと「テキスト入力」に貼り付けると自動で取り込まれます。
+          </p>
+          <div className="form-row">
+            <label className="timing-label">
+              BPM変化 (初期BPM,拍:BPM,…)
+              <input
+                type="text"
+                value={bpm}
+                placeholder="130,32:650,64:130"
+                onChange={(e) => {
+                  setBpm(e.target.value.replace(/[^0-9.,:]/g, ""));
+                  setDirty(true);
+                }}
+              />
+            </label>
+            <label className="timing-label">
+              停止 (拍:秒,…)
+              <input
+                type="text"
+                value={stops}
+                placeholder="48:0.5,52:0.25"
+                onChange={(e) => {
+                  setStops(e.target.value.replace(/[^0-9.,:]/g, ""));
+                  setDirty(true);
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       {showText && (
         <TextImport
           compact={compact}
-          onApply={(next) => {
+          onApply={(next, timing) => {
             applyEdit(next);
             setOverrides(new Map());
+            if (timing?.b) setBpm(timing.b);
+            if (timing?.s !== undefined) setStops(timing.s);
             go(0);
             setShowText(false);
           }}
@@ -451,6 +527,30 @@ export default function Viewer({
                     ));
                   })
                 )}
+
+              {/* ソフラン・停止マーカー */}
+              {bpms.slice(1).map((e, i) =>
+                e.beat < chart.totalBeats ? (
+                  <div
+                    key={`bc${i}`}
+                    className="timing-marker bpm-marker"
+                    style={{ top: e.beat * pxPerBeat + noteSize / 2 }}
+                  >
+                    BPM {+e.bpm.toFixed(1)}
+                  </div>
+                ) : null
+              )}
+              {stopList.map((e, i) =>
+                e.beat < chart.totalBeats ? (
+                  <div
+                    key={`st${i}`}
+                    className="timing-marker stop-marker"
+                    style={{ top: e.beat * pxPerBeat + noteSize / 2 }}
+                  >
+                    STOP {+e.sec.toFixed(2)}s
+                  </div>
+                ) : null
+              )}
 
               {chart.holds.map((h, i) => (
                 <div
@@ -524,6 +624,9 @@ export default function Viewer({
                         <span className="note-flag flag-cross">交差</span>
                       )}
                       {step.jack && <span className="note-flag flag-jack">縦連</span>}
+                      {step.doubleStep && (
+                        <span className="note-flag flag-ds">踏替</span>
+                      )}
                     </div>
                   );
                 });
@@ -640,6 +743,9 @@ export default function Viewer({
                       {Math.abs(facing)}°
                     </span>
                   )}
+                  {hasSofran && (
+                    <span className="cur-bpm"> ♩={+bpmAtBeat(bpms, curEvent.row.beat).toFixed(1)}</span>
+                  )}
                 </div>
                 {curEvent.panels.length === 1 && (
                   <div className="override-row">
@@ -668,6 +774,9 @@ export default function Viewer({
                   {curStep.jack && <span className="tag jack">縦連 (同じ足)</span>}
                   {curStep.crossover && (
                     <span className="tag crossover">交差 (体を捻る)</span>
+                  )}
+                  {curStep.doubleStep && (
+                    <span className="tag ds">踏み替え (スライド)</span>
                   )}
                   {curStep.heldFeet.length > 0 && (
                     <span className="tag hold">
@@ -719,7 +828,7 @@ function TextImport({
   onApply,
 }: {
   compact: string;
-  onApply: (next: string) => void;
+  onApply: (next: string, timing?: { b?: string; s?: string }) => void;
 }) {
   const [text, setText] = useState(() =>
     compact
@@ -736,7 +845,8 @@ function TextImport({
     try {
       const result = normalizeNotesInput(text);
       if (result.warning) setWarning(result.warning);
-      onApply(result.compact);
+      const timing = extractTimingFromSM(text);
+      onApply(result.compact, timing);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -746,7 +856,8 @@ function TextImport({
     <div className="card text-import">
       <p className="hint" style={{ marginBottom: 8 }}>
         SM/SSCファイルの <code>#NOTES</code> 以下のノートデータ (小節を <code>,</code> 区切り、
-        1行4文字) を貼り付けて読み込めます。現在の譜面のテキストが入っています。
+        1行4文字) を貼り付けて読み込めます。ファイル全体を貼ると{" "}
+        <code>#BPMS</code> / <code>#STOPS</code> (ソフラン・停止) も自動で取り込みます。
       </p>
       <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <div className="form-row">

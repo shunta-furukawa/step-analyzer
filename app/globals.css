@@ -633,6 +633,19 @@ input[type="range"] {
   color: #a3ffd0;
 }
 
+.tag.ds,
+.flag-ds {
+  background: #2a4a70;
+  color: #a3d5ff;
+}
+
+.flag-ds {
+  font-size: 9px;
+  font-weight: 700;
+  border-radius: 4px;
+  padding: 0 3px;
+}
+
 .foot3d-body.held {
   border-color: #2ecc71;
   box-shadow: 0 0 12px rgba(46, 204, 113, 0.9);
@@ -641,6 +654,55 @@ input[type="range"] {
 .facing-label {
   color: #ffe9a3;
   font-weight: 700;
+}
+
+.cur-bpm {
+  color: #a3d5ff;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+}
+
+.sofran-chip {
+  background: #1d3c5c;
+  color: #a3d5ff;
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.timing-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+  flex: 1;
+  min-width: 200px;
+}
+
+.timing-marker {
+  position: absolute;
+  left: -4px;
+  right: -4px;
+  font-size: 10px;
+  font-weight: 700;
+  font-family: ui-monospace, monospace;
+  text-align: right;
+  padding-right: 2px;
+  pointer-events: none;
+  z-index: 4;
+  transform: translateY(-100%);
+}
+
+.bpm-marker {
+  color: #7db9ff;
+  border-bottom: 1px dashed rgba(125, 185, 255, 0.6);
+}
+
+.stop-marker {
+  color: #ff8f8f;
+  border-bottom: 1px dashed rgba(255, 143, 143, 0.7);
 }
 
 .text-import textarea {

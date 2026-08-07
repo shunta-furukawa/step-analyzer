@@ -47,7 +47,8 @@ export async function generateMetadata({
   }
 
   const title = t ? `${t} | Step Analyzer` : "DDR譜面の足割り解析 | Step Analyzer";
-  const description = `この譜面部分をどの足で踏むべきかを可視化${b ? ` (BPM ${b})` : ""}。矢印をタップして足運びを確認できます。`;
+  const bpmLabel = b ? (/[,:]/.test(b) ? `BPM ${b.split(",")[0]}〜 変速` : `BPM ${b}`) : "";
+  const description = `この譜面部分をどの足で踏むべきかを可視化${bpmLabel ? ` (${bpmLabel})` : ""}。矢印をタップして足運びを確認できます。`;
 
   const qs = new URLSearchParams();
   qs.set(ogParam.key, ogParam.value);
@@ -81,6 +82,7 @@ export default async function Page({
   const { n } = resolveChart(sp);
   const t = pick(sp.t);
   const b = pick(sp.b);
+  const s = pick(sp.s);
   const f = pick(sp.f);
   const isDefault = !n;
 
@@ -97,6 +99,7 @@ export default async function Page({
         compact={n ?? SAMPLE_COMPACT}
         title={isDefault ? SAMPLE_TITLE : t}
         bpm={isDefault ? SAMPLE_BPM : b}
+        stops={isDefault ? undefined : s}
         overrides={f}
         showAbout={isDefault}
       />
