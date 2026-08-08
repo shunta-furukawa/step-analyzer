@@ -86,10 +86,14 @@ export default async function Page({
   const f = pick(sp.f);
   const hs = pick(sp.hs);
   const spd = pick(sp.sp);
+  const c = pick(sp.c);
+  const bg = c && /^[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : undefined;
   const isDefault = !n;
 
   return (
     <main className="container">
+      {/* SSR時から背景色を適用してチラつきを防ぐ */}
+      {bg && <style>{`:root{--page-bg:#${bg};}`}</style>}
       <header className="site-header">
         <h1>
           <a href="/">Step Analyzer</a>
@@ -104,6 +108,7 @@ export default async function Page({
         overrides={f}
         hispeed={hs}
         speed={spd}
+        bg={bg}
       />
     </main>
   );

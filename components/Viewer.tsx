@@ -52,6 +52,9 @@ function parseChoice(v: string | undefined, options: number[], def: number): num
 // フルスクリーンモードのステップゾーン位置 (譜面エリア上端からの中心距離)
 const RECEPTOR_Y = 90;
 
+// 背景色のデフォルト (DDR WORLDミントグリーン)
+const DEFAULT_BG = "29d6a2";
+
 export default function Viewer({
   compact: initialCompact,
   title: initialTitle,
@@ -60,6 +63,7 @@ export default function Viewer({
   overrides: initialOverrides,
   hispeed: initialHispeed,
   speed: initialSpeed,
+  bg: initialBg,
 }: {
   compact: string;
   title?: string;
@@ -68,6 +72,7 @@ export default function Viewer({
   overrides?: string;
   hispeed?: string;
   speed?: string;
+  bg?: string;
 }) {
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
@@ -85,6 +90,9 @@ export default function Viewer({
     parseChoice(initialHispeed, HISPEED_OPTIONS, 1)
   );
   const [muted, setMuted] = useState(false);
+  const [bgColor, setBgColor] = useState(() =>
+    initialBg && /^[0-9a-fA-F]{6}$/.test(initialBg) ? initialBg.toLowerCase() : DEFAULT_BG
+  );
   const [editMode, setEditMode] = useState(false);
   const [editRes, setEditRes] = useState(16);
   const [showText, setShowText] = useState(false);
@@ -103,6 +111,13 @@ export default function Viewer({
   );
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+
+  // 背景色をページ全体とブラウザUI (theme-color) に反映
+  useEffect(() => {
+    document.documentElement.style.setProperty("--page-bg", `#${bgColor}`);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", `#${bgColor}`);
+  }, [bgColor]);
 
   // 画面幅に応じて譜面の描画サイズを切り替える (スマホ縦持ち最優先)
   useEffect(() => {
@@ -160,8 +175,9 @@ export default function Viewer({
     if (overrides.size > 0) parts.push(`f=${serializeOverrides(overrides)}`);
     if (hispeed !== 1) parts.push(`hs=${hispeed}`);
     if (speed !== 1) parts.push(`sp=${speed}`);
+    if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, bpm, stops, overrides, hispeed, speed]);
+  }, [compact, title, bpm, stops, overrides, hispeed, speed, bgColor]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)
   useEffect(() => {
@@ -436,6 +452,16 @@ export default function Viewer({
 
   return (
     <div className={fs ? "viewer-fs" : undefined}>
+      <input
+        type="color"
+        className="bg-picker"
+        value={`#${bgColor}`}
+        onChange={(e) => {
+          setBgColor(e.target.value.slice(1).toLowerCase());
+          setDirty(true);
+        }}
+        title="背景色をカスタマイズ"
+      />
       <div className="card head-card">
         <div className="head-row">
           <div style={{ minWidth: 0 }}>

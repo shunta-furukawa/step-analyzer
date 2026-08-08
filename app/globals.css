@@ -31,7 +31,7 @@ html {
 }
 
 body {
-  background-color: #29d6a2;
+  background-color: var(--page-bg, #29d6a2);
   background-image: repeating-linear-gradient(
     115deg,
     rgba(255, 255, 255, 0.07) 0 18px,
@@ -59,6 +59,29 @@ select,
   max-width: 1100px;
   margin: 0 auto;
   padding: 10px 6px 48px;
+  position: relative;
+}
+
+/* 背景色カスタマイズ用ピッカー (ヘッダー右上) */
+.bg-picker {
+  position: absolute;
+  top: 10px;
+  right: 8px;
+  width: 36px;
+  height: 27px;
+  padding: 0;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+}
+
+.bg-picker::-webkit-color-swatch-wrapper {
+  padding: 3px;
+}
+
+.bg-picker::-webkit-color-swatch {
+  border: none;
 }
 
 /* ===== ロゴ (P1 Option風: 極太 + ベタ塗りオフセットシャドウ) ===== */
@@ -929,6 +952,7 @@ input[type="range"]:focus {
 
 /* ===== フルスクリーン (Short撮影) モード: テーマに依らずダーク固定 ===== */
 
+.viewer-fs .bg-picker,
 .viewer-fs .head-card,
 .viewer-fs .toolbar,
 .viewer-fs .edit-hint,
