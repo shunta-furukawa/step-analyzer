@@ -26,6 +26,9 @@ export const runtime = "nodejs";
 const W = 1200;
 const H = 630;
 const MAX_LANES = 4;
+const INK = "#17181c";
+const MINT = "#00e0a0";
+const DEFAULT_BG = "#29d6a2";
 
 // ノーツが最も密な連続laneCount小節の開始位置を選ぶ (空イントロ対策)
 function bestWindow(chart: ParsedChart, laneCount: number): number {
@@ -44,28 +47,43 @@ function bestWindow(chart: ParsedChart, laneCount: number): number {
   return best;
 }
 
-// タイトルに日本語が含まれる場合のみ、Google Fontsから必要なグリフだけのサブセットを取得する。
-// 失敗した場合はASCIIのみで描画する (デフォルトフォントで足りる)。
-async function loadJpFont(text: string): Promise<ArrayBuffer | null> {
-  if (!/[^\x00-\x7F]/.test(text)) return null;
-  try {
-    const cssUrl = `https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@700&text=${encodeURIComponent(
-      text
-    )}`;
-    const css = await (
-      await fetch(cssUrl, {
-        // woff2非対応の古いクライアントを名乗るとTTFのURLが返る (satoriはwoff2非対応)
-        headers: { "User-Agent": "curl/8.0" },
-      })
-    ).text();
-    const m = css.match(/url\((.+?)\)\s*format\('(opentype|truetype)'\)/);
-    if (!m) return null;
-    const res = await fetch(m[1]);
-    if (!res.ok) return null;
-    return await res.arrayBuffer();
-  } catch {
-    return null;
+// Google Fontsからフォントを取得 (woff2非対応クライアントを名乗りTTFを得る)。
+// モジュールスコープでキャッシュしてリクエスト毎の再取得を避ける。
+const fontCache = new Map<string, Promise<ArrayBuffer | null>>();
+
+function loadGoogleFont(family: string, text?: string): Promise<ArrayBuffer | null> {
+  const key = `${family}|${text ?? ""}`;
+  if (!fontCache.has(key)) {
+    fontCache.set(
+      key,
+      (async () => {
+        try {
+          const url =
+            `https://fonts.googleapis.com/css2?family=${encodeURIComponent(family)}` +
+            (text ? `&text=${encodeURIComponent(text)}` : "");
+          const css = await (
+            await fetch(url, { headers: { "User-Agent": "curl/8.0" } })
+          ).text();
+          const m = css.match(/url\((.+?)\)\s*format\('(opentype|truetype)'\)/);
+          if (!m) return null;
+          const res = await fetch(m[1]);
+          if (!res.ok) return null;
+          return await res.arrayBuffer();
+        } catch {
+          return null;
+        }
+      })()
+    );
   }
+  return fontCache.get(key)!;
+}
+
+// 背景色の明度から前景色 (黒/白) を選ぶ
+function fgFor(bgHex: string): string {
+  const r = parseInt(bgHex.slice(1, 3), 16);
+  const g = parseInt(bgHex.slice(3, 5), 16);
+  const b = parseInt(bgHex.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45 ? INK : "#ffffff";
 }
 
 function OgArrow({
@@ -129,18 +147,19 @@ function ChartLanes({
   footsteps,
   startMeasure,
   laneCount,
+  fg,
 }: {
   chart: ParsedChart;
   footsteps: FootStep[];
   startMeasure: number;
   laneCount: number;
+  fg: string;
 }) {
   const S = 31;
   const cell = S + 8;
   const laneInnerW = cell * 4;
   const laneH = H - 100;
 
-  // (measure, rowIdx) → 表示情報 のルックアップを作る
   const noteMap = new Map<string, { color: string; ring: string | null }>();
   chart.events.forEach((ev, i) => {
     const step = footsteps[i];
@@ -153,7 +172,7 @@ function ChartLanes({
     }
   });
 
-  // 体の向きの背景バンド: ノーツi-1→ノーツi をノーツiの向きの色で塗る
+  // 体の向きの背景バンド: ノーツi-1→i をノーツiの向きの色で塗る
   const bands: { start: number; end: number; color: string }[] = [];
   chart.events.forEach((ev, i) => {
     const color = facingColor(footsteps[i].facing);
@@ -182,8 +201,9 @@ function ChartLanes({
             <div
               style={{
                 display: "flex",
-                color: "#8b93b5",
+                color: fg,
                 fontSize: 18,
+                fontWeight: 700,
                 justifyContent: "center",
               }}
             >
@@ -195,9 +215,8 @@ function ChartLanes({
                 position: "relative",
                 width: laneInnerW + 16,
                 height: laneH,
-                background: "#131830",
-                border: "2px solid #2a3160",
-                borderRadius: 14,
+                background: INK,
+                boxShadow: "0 5px 0 rgba(0,0,0,0.28)",
                 overflow: "hidden",
               }}
             >
@@ -258,6 +277,41 @@ function ChartLanes({
   );
 }
 
+// STEP ANALYZERロゴ (Ultra + 黒アウトライン + 黄色押し出し) を
+// 重ね置きしたテキストコピーで再現する
+function Logo({ hasUltra }: { hasUltra: boolean }) {
+  const layers: { dx: number; dy: number; color: string }[] = [
+    { dx: 6, dy: 6, color: INK },
+    { dx: 4, dy: 4, color: "#ffd400" },
+    { dx: -2, dy: -2, color: INK },
+    { dx: 2, dy: -2, color: INK },
+    { dx: -2, dy: 2, color: INK },
+    { dx: 2, dy: 2, color: INK },
+    { dx: 0, dy: 0, color: "#ffffff" },
+  ];
+  return (
+    <div style={{ display: "flex", position: "relative", width: 320, height: 44 }}>
+      {layers.map((l, i) => (
+        <div
+          key={i}
+          style={{
+            display: "flex",
+            position: "absolute",
+            left: l.dx,
+            top: l.dy,
+            color: l.color,
+            fontSize: 30,
+            ...(hasUltra ? { fontFamily: "Ultra" } : {}),
+            whiteSpace: "nowrap",
+          }}
+        >
+          STEP ANALYZER
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   let n = searchParams.get("n") ?? "";
@@ -271,6 +325,9 @@ export async function GET(request: Request) {
   }
   const rawTitle = searchParams.get("t") ?? "";
   const overrides = parseOverrides(searchParams.get("f") ?? undefined);
+  const cRaw = searchParams.get("c");
+  const bg = cRaw && /^[0-9a-fA-F]{6}$/.test(cRaw) ? `#${cRaw.toLowerCase()}` : DEFAULT_BG;
+  const fg = fgFor(bg);
 
   let chart: ParsedChart | null = null;
   try {
@@ -284,19 +341,25 @@ export async function GET(request: Request) {
   const laneCount = chart ? Math.min(chart.measures.length, MAX_LANES) : 0;
   const startMeasure = chart ? bestWindow(chart, laneCount) : 0;
 
-  const font = await loadJpFont(rawTitle);
-  // フォントが取得できなければ非ASCII文字は描画できないので落とす
-  const title = font ? rawTitle : rawTitle.replace(/[^\x00-\x7F]/g, "").trim();
+  const hasJp = /[^\x00-\x7F]/.test(rawTitle);
+  const [jpFont, ultraFont, antonFont] = await Promise.all([
+    hasJp ? loadGoogleFont("Noto Sans JP:wght@700", rawTitle) : Promise.resolve(null),
+    loadGoogleFont("Ultra"),
+    loadGoogleFont("Anton"),
+  ]);
+  const title = hasJp && !jpFont ? rawTitle.replace(/[^\x00-\x7F]/g, "").trim() : rawTitle;
 
   const rootStyle: React.CSSProperties = {
     display: "flex",
     width: W,
     height: H,
-    background: "linear-gradient(135deg, #0b0e1a 0%, #141b3d 100%)",
-    padding: 40,
-    gap: 36,
+    backgroundColor: bg,
+    backgroundImage:
+      "repeating-linear-gradient(115deg, rgba(255,255,255,0.07) 0px, rgba(255,255,255,0.07) 22px, rgba(0,0,0,0.05) 22px, rgba(0,0,0,0.05) 44px)",
+    padding: 36,
+    gap: 32,
   };
-  if (font) rootStyle.fontFamily = "NotoJP";
+  if (jpFont) rootStyle.fontFamily = "NotoJP";
 
   const image = (
     <div style={rootStyle}>
@@ -310,25 +373,15 @@ export async function GET(request: Request) {
         }}
       >
         <div style={{ display: "flex", flexDirection: "column" }}>
+          <Logo hasUltra={!!ultraFont} />
           <div
             style={{
               display: "flex",
-              color: "#7c5cff",
-              fontSize: 26,
-              fontWeight: 700,
-              letterSpacing: 2,
-            }}
-          >
-            STEP ANALYZER
-          </div>
-          <div
-            style={{
-              display: "flex",
-              color: "#e6e9f5",
+              color: fg,
               fontSize: (title || "").length > 24 ? 28 : (title || "").length > 12 ? 34 : 42,
               fontWeight: 700,
               lineHeight: 1.3,
-              marginTop: 14,
+              marginTop: 18,
               wordBreak: "break-word",
             }}
           >
@@ -336,8 +389,8 @@ export async function GET(request: Request) {
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-          <div style={{ display: "flex", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div style={{ display: "flex", gap: 8 }}>
             {[
               { num: stats.steps, label: "STEPS" },
               { num: stats.jumps, label: "JUMPS" },
@@ -349,21 +402,31 @@ export async function GET(request: Request) {
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
-                  background: "#1a2040",
-                  borderRadius: 12,
+                  background: INK,
                   padding: "10px 18px",
+                  boxShadow: "0 4px 0 rgba(0,0,0,0.28)",
                 }}
               >
-                <div style={{ display: "flex", color: "#fff", fontSize: 32, fontWeight: 700 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    color: MINT,
+                    fontSize: 34,
+                    ...(antonFont ? { fontFamily: "Anton" } : {}),
+                    fontWeight: 700,
+                  }}
+                >
                   {String(s.num)}
                 </div>
-                <div style={{ display: "flex", color: "#8b93b5", fontSize: 15 }}>{s.label}</div>
+                <div style={{ display: "flex", color: "#9aa0a8", fontSize: 14 }}>
+                  {s.label}
+                </div>
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 20, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 18, alignItems: "center" }}>
             {(["L", "R"] as const).map((f) => (
-              <div key={f} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div key={f} style={{ display: "flex", alignItems: "center", gap: 7 }}>
                 <div
                   style={{
                     display: "flex",
@@ -380,13 +443,13 @@ export async function GET(request: Request) {
                 >
                   {f}
                 </div>
-                <div style={{ display: "flex", color: "#8b93b5", fontSize: 18 }}>
+                <div style={{ display: "flex", color: fg, fontSize: 17, fontWeight: 700 }}>
                   {f === "L" ? "LEFT" : "RIGHT"}
                 </div>
               </div>
             ))}
             {chart && chart.measures.length > laneCount && (
-              <div style={{ display: "flex", color: "#8b93b5", fontSize: 16 }}>
+              <div style={{ display: "flex", color: fg, fontSize: 16, fontWeight: 700 }}>
                 {`M${startMeasure + 1}-${startMeasure + laneCount} / ${chart.measures.length}`}
               </div>
             )}
@@ -401,13 +464,14 @@ export async function GET(request: Request) {
             footsteps={footsteps}
             startMeasure={startMeasure}
             laneCount={laneCount}
+            fg={fg}
           />
         ) : (
           <div
             style={{
               display: "flex",
               alignItems: "center",
-              color: "#8b93b5",
+              color: fg,
               fontSize: 28,
             }}
           >
@@ -418,6 +482,11 @@ export async function GET(request: Request) {
     </div>
   );
 
+  const fonts: { name: string; data: ArrayBuffer; weight: 400 | 700; style: "normal" }[] = [];
+  if (jpFont) fonts.push({ name: "NotoJP", data: jpFont, weight: 700, style: "normal" });
+  if (ultraFont) fonts.push({ name: "Ultra", data: ultraFont, weight: 400, style: "normal" });
+  if (antonFont) fonts.push({ name: "Anton", data: antonFont, weight: 400, style: "normal" });
+
   const options: ConstructorParameters<typeof ImageResponse>[1] = {
     width: W,
     height: H,
@@ -425,8 +494,6 @@ export async function GET(request: Request) {
       "Cache-Control": "public, max-age=86400, s-maxage=86400, stale-while-revalidate=604800",
     },
   };
-  if (font) {
-    options.fonts = [{ name: "NotoJP", data: font, weight: 700, style: "normal" }];
-  }
+  if (fonts.length > 0) options.fonts = fonts;
   return new ImageResponse(image, options);
 }

@@ -37,6 +37,7 @@ export async function generateMetadata({
   const t = pick(sp.t);
   const b = pick(sp.b);
   const f = pick(sp.f);
+  const c = pick(sp.c);
 
   if (!n || !ogParam) {
     return {
@@ -54,6 +55,7 @@ export async function generateMetadata({
   qs.set(ogParam.key, ogParam.value);
   if (t) qs.set("t", t);
   if (f) qs.set("f", f);
+  if (c && /^[0-9a-fA-F]{6}$/.test(c)) qs.set("c", c.toLowerCase());
   const ogUrl = `/og?${qs.toString()}`;
 
   return {
