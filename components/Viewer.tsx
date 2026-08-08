@@ -26,7 +26,7 @@ import {
   sanitizeTimingInput,
   timeAtBeat,
 } from "@/lib/timing";
-import { normalizeNotesInput } from "@/lib/url";
+import { listSmCharts, normalizeNotesInput, type SmChartInfo } from "@/lib/url";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
 
@@ -1110,18 +1110,43 @@ function TextImport({
   );
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
+  const [choices, setChoices] = useState<SmChartInfo[] | null>(null);
+  const [excluded, setExcluded] = useState(0);
 
-  const apply = () => {
-    setError(null);
-    setWarning(null);
+  // 選んだ譜面 (またはテキスト全体) を読み込む。タイミングは常にファイル全体から
+  const applyChart = (noteText: string) => {
     try {
-      const result = normalizeNotesInput(text);
+      const result = normalizeNotesInput(noteText);
       if (result.warning) setWarning(result.warning);
       const timing = extractTimingFromSM(text);
       onApply(result.compact, timing);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
+  };
+
+  const apply = () => {
+    setError(null);
+    setWarning(null);
+    setChoices(null);
+    setExcluded(0);
+    const charts = listSmCharts(text);
+    if (charts.length > 1) {
+      // 複数譜面入りのファイル: シングルだけ列挙して選ばせる
+      const singles = charts.filter((c) => !/double|couple|routine/i.test(c.type));
+      setExcluded(charts.length - singles.length);
+      if (singles.length === 0) {
+        setError("シングル (4パネル) の譜面が見つかりませんでした");
+        return;
+      }
+      if (singles.length === 1) {
+        applyChart(singles[0].notes);
+        return;
+      }
+      setChoices(singles);
+      return;
+    }
+    applyChart(text);
   };
 
   return (
@@ -1135,6 +1160,24 @@ function TextImport({
       <div className="form-row">
         <button onClick={apply}>この内容を読み込む</button>
       </div>
+      {choices && (
+        <div className="chart-choices">
+          <p className="hint" style={{ flexBasis: "100%" }}>
+            複数の譜面が見つかりました。読み込む譜面を選んでください
+            {excluded > 0 && ` (シングル以外の${excluded}譜面は除外)`}:
+          </p>
+          {choices.map((c, i) => (
+            <button
+              key={i}
+              className="secondary"
+              onClick={() => applyChart(c.notes)}
+            >
+              {c.difficulty || `譜面${i + 1}`}
+              {c.meter && ` (${c.meter})`}
+            </button>
+          ))}
+        </div>
+      )}
       {error && <p className="error">{error}</p>}
       {warning && <p className="warning">{warning}</p>}
     </div>

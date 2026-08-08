@@ -76,6 +76,58 @@ function validateCompact(compact: string): NormalizeResult {
   return { compact: parts.join("-"), measures: parts.length };
 }
 
+// ===== SMファイル内の譜面一覧 =====
+
+export interface SmChartInfo {
+  type: string; // dance-single / dance-double など
+  difficulty: string; // Beginner / Expert / Challenge など
+  meter: string; // 難易度値
+  notes: string; // ノートデータ本体
+}
+
+/**
+ * SM/SSCファイルテキストから全譜面を列挙する。
+ * SM形式 (#NOTES: type:desc:difficulty:meter:radar:notedata;) と
+ * SSC形式 (#STEPSTYPE/#DIFFICULTY/#METER + #NOTES:notedata;) の両対応。
+ */
+export function listSmCharts(text: string): SmChartInfo[] {
+  const src = text.replace(/\/\/[^\n]*/g, "");
+  const out: SmChartInfo[] = [];
+  const re = /#NOTES\s*:/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) {
+    const start = m.index + m[0].length;
+    const end = src.indexOf(";", start);
+    const block = src.slice(start, end < 0 ? src.length : end);
+    const parts = block.split(":");
+    if (parts.length >= 6) {
+      out.push({
+        type: parts[0].trim(),
+        difficulty: parts[2].trim(),
+        meter: parts[3].trim(),
+        notes: parts.slice(5).join(":"),
+      });
+    } else {
+      // SSC形式: このブロックより前の直近のタグから拾う
+      const before = src.slice(0, m.index);
+      const grabLast = (tag: string): string => {
+        const i = before.toUpperCase().lastIndexOf(`#${tag}`);
+        if (i < 0) return "";
+        const mm = before.slice(i).match(/:\s*([^;]*);/);
+        return mm ? mm[1].trim() : "";
+      };
+      out.push({
+        type: grabLast("STEPSTYPE"),
+        difficulty: grabLast("DIFFICULTY"),
+        meter: grabLast("METER"),
+        notes: block,
+      });
+    }
+    if (end >= 0) re.lastIndex = end;
+  }
+  return out;
+}
+
 export function buildShareUrl(
   base: string,
   compact: string,
