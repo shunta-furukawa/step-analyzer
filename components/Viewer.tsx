@@ -179,15 +179,25 @@ export default function Viewer({
     return `/?${parts.join("&")}`;
   }, [compact, title, bpm, stops, overrides, hispeed, speed, bgColor]);
 
-  // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)
+  // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
+  // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
+  // (iOS SafariはreplaceStateを10秒に100回超呼ぶとSecurityErrorで落ちる)
   useEffect(() => {
     if (!dirty) return;
     let alive = true;
-    void buildUrl().then((url) => {
-      if (alive) window.history.replaceState(null, "", url);
-    });
+    const timer = setTimeout(() => {
+      void buildUrl().then((url) => {
+        if (!alive) return;
+        try {
+          window.history.replaceState(null, "", url);
+        } catch {
+          // 回数制限に当たっても無視 (次のデバウンス書き込みで反映される)
+        }
+      });
+    }, 350);
     return () => {
       alive = false;
+      clearTimeout(timer);
     };
   }, [dirty, buildUrl]);
 
