@@ -69,18 +69,26 @@ select,
 }
 
 .site-header h1 {
-  font-size: 21px;
-  font-weight: 900;
-  letter-spacing: 0.02em;
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-size: 30px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  line-height: 1;
   display: inline-block;
 }
 
+/* SOLO MODEロゴ風: 白抜き + 黒アウトライン + 黄色のベタ押し出し + 黒縁 */
 .site-header h1 a {
   color: #fff;
   text-decoration: none;
   text-shadow:
-    2px 2px 0 var(--ink),
-    4px 4px 0 rgba(0, 0, 0, 0.25);
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    -2px 0 0 var(--ink), 2px 0 0 var(--ink),
+    0 -2px 0 var(--ink), 0 2px 0 var(--ink),
+    3px 3px 0 #ffd400, 4px 4px 0 #ffd400, 5px 5px 0 #ffd400,
+    7px 7px 0 var(--ink);
 }
 
 /* ===== カード (白 + ハードシャドウ、直角) ===== */
@@ -331,8 +339,10 @@ select {
 }
 
 .stat .num {
-  font-size: 15px;
-  font-weight: 900;
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-size: 17px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
   color: var(--mint);
 }
 
@@ -1005,6 +1015,12 @@ input[type="range"]:focus {
   color: #9aa0a8;
 }
 
+.fs-title .fs-title-name {
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+}
+
 .fs-progress {
   position: absolute;
   top: 0;
@@ -1085,7 +1101,7 @@ input[type="range"]:focus {
   }
 
   .site-header h1 {
-    font-size: 26px;
+    font-size: 40px;
   }
 
   .card {

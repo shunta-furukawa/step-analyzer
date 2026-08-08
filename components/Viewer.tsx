@@ -648,7 +648,7 @@ export default function Viewer({
               />
               <div className="fs-cover" style={{ height: RECEPTOR_Y + noteSize / 2 }}>
                 <div className="fs-title">
-                  {title || "Step Analyzer"}
+                  <span className="fs-title-name">{title || "Step Analyzer"}</span>
                   {bpm && <span> · BPM {bpm}</span>}
                 </div>
               </div>
