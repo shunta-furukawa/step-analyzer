@@ -1,9 +1,11 @@
 import type { Metadata, Viewport } from "next";
-import { Anton } from "next/font/google";
+import { Anton, Ultra } from "next/font/google";
 import "./globals.css";
 
-// DDR WORLDのモード選択ロゴ (SOLO MODE等) に近い極太コンデンスフォント
+// 統計数字・fsタイトル用の極太コンデンス
 const anton = Anton({ weight: "400", subsets: ["latin"], variable: "--font-logo" });
+// サイトロゴ用のファットフェイスセリフ
+const ultra = Ultra({ weight: "400", subsets: ["latin"], variable: "--font-title" });
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -29,7 +31,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja" className={anton.variable}>
+    <html lang="ja" className={`${anton.variable} ${ultra.variable}`}>
       <body>{children}</body>
     </html>
   );

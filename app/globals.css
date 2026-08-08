@@ -69,10 +69,10 @@ select,
 }
 
 .site-header h1 {
-  font-family: var(--font-logo), "Arial Black", sans-serif;
-  font-size: 30px;
+  font-family: var(--font-title), "Arial Black", sans-serif;
+  font-size: 22px;
   font-weight: 400;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   text-transform: uppercase;
   line-height: 1;
   display: inline-block;
@@ -1115,7 +1115,7 @@ input[type="range"]:focus {
   }
 
   .site-header h1 {
-    font-size: 40px;
+    font-size: 32px;
   }
 
   .card {
