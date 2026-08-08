@@ -86,12 +86,12 @@ select,
 /* ===== カード (白 + ハードシャドウ、直角) ===== */
 
 .card {
-  background: var(--paper);
+  background: var(--ink);
   border: none;
   border-radius: 0;
   padding: 14px;
   margin-bottom: 12px;
-  color: var(--ink);
+  color: #fff;
   box-shadow: 0 3px 0 rgba(0, 0, 0, 0.22);
 }
 
@@ -171,6 +171,7 @@ select {
   font-size: 13px;
   font-weight: 800;
   padding: 8px 10px;
+  border: 1px solid var(--ink-border);
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
 }
 
@@ -183,14 +184,14 @@ select {
 }
 
 .error {
-  color: #d64040;
+  color: #ff7b7b;
   font-size: 13px;
   margin-top: 8px;
   font-weight: 700;
 }
 
 .warning {
-  color: #a97a00;
+  color: #ffd23f;
   font-size: 13px;
   margin-top: 8px;
   font-weight: 700;
@@ -210,17 +211,17 @@ select {
 }
 
 .hint {
-  color: var(--muted);
+  color: var(--muted-dark);
   font-size: 12px;
   line-height: 1.7;
 }
 
 .hint code {
-  background: #eef0f3;
+  background: var(--ink-2);
   border-radius: 4px;
   padding: 1px 5px;
   font-size: 11px;
-  color: var(--ink);
+  color: #fff;
 }
 
 /* ===== ヘッダーカード ===== */
@@ -249,7 +250,7 @@ select {
   background: none;
   border: none;
   box-shadow: none;
-  color: var(--ink);
+  color: #fff;
   font-size: inherit;
   font-weight: 800;
   padding: 0;
@@ -272,7 +273,7 @@ select {
 }
 
 .chart-title .bpm {
-  color: var(--muted);
+  color: var(--muted-dark);
   font-size: 12px;
   font-weight: 700;
   display: inline-flex;
@@ -287,7 +288,7 @@ select {
   font-size: 12px;
   font-weight: 800;
   text-align: center;
-  background: var(--ink);
+  background: var(--ink-2);
   border: none;
   color: var(--mint);
 }
@@ -297,7 +298,7 @@ select {
   gap: 10px;
   flex-wrap: wrap;
   font-size: 11px;
-  color: var(--muted);
+  color: var(--muted-dark);
   align-items: center;
   margin-top: 6px;
 }
@@ -323,7 +324,7 @@ select {
 }
 
 .stat {
-  background: var(--ink);
+  background: var(--ink-2);
   border-radius: 0;
   padding: 5px 10px;
   text-align: center;
@@ -668,7 +669,7 @@ select {
   font-family: ui-monospace, monospace;
   font-size: 12px;
   font-weight: 700;
-  color: var(--muted);
+  color: var(--muted-dark);
   min-width: 62px;
   text-align: center;
 }
@@ -687,7 +688,7 @@ input[type="range"]:focus {
   margin-top: 10px;
   font-size: 12px;
   line-height: 1.7;
-  color: var(--muted);
+  color: #c2c6cc;
 }
 
 .event-info .tags {
@@ -735,12 +736,12 @@ input[type="range"]:focus {
 }
 
 .facing-label {
-  color: #c77800;
+  color: #ffd76e;
   font-weight: 800;
 }
 
 .cur-bpm {
-  color: #0a6fbd;
+  color: #7ec4ff;
   font-weight: 800;
   font-family: ui-monospace, monospace;
 }
@@ -760,7 +761,7 @@ input[type="range"]:focus {
   gap: 4px;
   font-size: 12px;
   font-weight: 700;
-  color: var(--muted);
+  color: var(--muted-dark);
   flex: 1;
   min-width: 200px;
 }
@@ -846,7 +847,7 @@ input[type="range"]:focus {
   align-items: center;
   margin-top: 10px;
   font-size: 12px;
-  color: var(--muted);
+  color: var(--muted-dark);
 }
 
 .edit-hint {
@@ -866,8 +867,8 @@ input[type="range"]:focus {
 }
 
 .panel-head h2 {
-  background: var(--ink);
-  color: #fff;
+  background: #fff;
+  color: var(--ink);
   font-size: 13px;
   font-weight: 800;
   margin: 0;
@@ -1158,4 +1159,9 @@ input[type="range"]:focus {
   .hint {
     font-size: 13px;
   }
+}
+
+/* 黒ペイン内の調整 */
+.card a {
+  color: var(--mint);
 }
