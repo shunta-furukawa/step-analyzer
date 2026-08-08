@@ -13,9 +13,23 @@ export interface Stop {
   sec: number;
 }
 
-// 共有経路で二重エンコードされた値 (%2C, %3A が残った状態) を復元する
+// 共有経路で二重エンコードされた値 (%2C, %3A) の復元と、
+// SM記法 (beat=value) の "=" を ":" に正規化する
 export function normalizeParam(v: string): string {
-  return v.replace(/%2C/gi, ",").replace(/%3A/gi, ":");
+  return v.replace(/%2C/gi, ",").replace(/%3A/gi, ":").replace(/=/g, ":");
+}
+
+/**
+ * 変速・停止の入力欄用の正規化。
+ * SMファイルの "#BPMS:0=90,5.5=180;" のような行をそのまま貼っても
+ * 動くように、タグ・セミコロン・空白を除去し "=" を ":" に変換する。
+ */
+export function sanitizeTimingInput(raw: string): string {
+  return raw
+    .replace(/#\w+\s*:/gi, "")
+    .replace(/[;\s]/g, "")
+    .replace(/=/g, ":")
+    .replace(/[^0-9.,:]/g, "");
 }
 
 export function parseBpmParam(b: string | undefined): BpmChange[] {

@@ -23,6 +23,7 @@ import {
   normalizeParam,
   parseBpmParam,
   parseStopsParam,
+  sanitizeTimingInput,
   timeAtBeat,
 } from "@/lib/timing";
 import { normalizeNotesInput } from "@/lib/url";
@@ -470,7 +471,7 @@ export default function Viewer({
                   value={bpm}
                   placeholder="120"
                   onChange={(e) => {
-                    setBpm(e.target.value.replace(/[^0-9.,:]/g, ""));
+                    setBpm(sanitizeTimingInput(e.target.value));
                     setDirty(true);
                   }}
                 />
@@ -601,7 +602,7 @@ export default function Viewer({
                 value={bpm}
                 placeholder="130,32:650,64:130"
                 onChange={(e) => {
-                  setBpm(e.target.value.replace(/[^0-9.,:]/g, ""));
+                  setBpm(sanitizeTimingInput(e.target.value));
                   setDirty(true);
                 }}
               />
@@ -613,7 +614,7 @@ export default function Viewer({
                 value={stops}
                 placeholder="48:0.5,52:0.25"
                 onChange={(e) => {
-                  setStops(e.target.value.replace(/[^0-9.,:]/g, ""));
+                  setStops(sanitizeTimingInput(e.target.value));
                   setDirty(true);
                 }}
               />
