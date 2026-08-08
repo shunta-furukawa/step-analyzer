@@ -1018,6 +1018,36 @@ export default function Viewer({
                     <span className="cur-bpm"> ♩={+bpmAtBeat(bpms, curEvent.row.beat).toFixed(1)}</span>
                   )}
                 </div>
+                {curEvent.panels.length === 2 && (
+                  <div className="override-row">
+                    <span className="override-label">踏む足:</span>
+                    {(["L", "R"] as const).map((opt) => {
+                      const [a, b] = curEvent.panels;
+                      const arrows = ["←", "↓", "↑", "→"];
+                      return (
+                        <button
+                          key={opt}
+                          className={`ov-btn${curOverride === opt ? " active" : ""}`}
+                          onClick={() => setOverride(curOverride === opt ? null : opt)}
+                        >
+                          {arrows[a]}
+                          <span style={{ color: opt === "L" ? "var(--foot-l)" : "var(--foot-r)" }}>
+                            {opt}
+                          </span>
+                          ・{arrows[b]}
+                          <span style={{ color: opt === "L" ? "var(--foot-r)" : "var(--foot-l)" }}>
+                            {opt === "L" ? "R" : "L"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {curOverride && (
+                      <button className="ov-btn" onClick={() => setOverride(null)}>
+                        自動に戻す
+                      </button>
+                    )}
+                  </div>
+                )}
                 {curEvent.panels.length === 1 && (
                   <div className="override-row">
                     <span className="override-label">踏む足:</span>

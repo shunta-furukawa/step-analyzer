@@ -847,6 +847,12 @@ input[type="range"]:focus {
   color: var(--foot-r);
 }
 
+.ov-btn.active {
+  background: var(--mint);
+  border-color: var(--mint);
+  color: var(--ink);
+}
+
 .ov-btn.active-l {
   background: var(--foot-l);
   border-color: var(--foot-l);

@@ -258,6 +258,8 @@ export function assignFeet(
     if (ps.length >= 2) {
       jump = true;
       const [a, b] = ps;
+      // 手動指定: 若い番号のパネル (a) に置く足を表す
+      const jumpOv = overrides?.get(tickOf(beat));
       const cost = (lp: number, rp: number) =>
         dist(leftPos, lp) +
         dist(rightPos, rp) +
@@ -266,7 +268,7 @@ export function assignFeet(
         (rp === 0 ? 1 : 0) +
         // 累積回転が±180を超える割り当ては強く忌避
         (Math.abs(unwrapDeg(facingDeg(lp, rp), contFacing)) > MAX_ROTATION ? 100 : 0);
-      if (cost(a, b) <= cost(b, a)) {
+      if (jumpOv ? jumpOv === "L" : cost(a, b) <= cost(b, a)) {
         leftPos = a;
         rightPos = b;
       } else {
