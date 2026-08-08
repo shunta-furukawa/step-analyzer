@@ -63,10 +63,27 @@ select,
 }
 
 /* 背景色カスタマイズ用ピッカー (ヘッダー右上) */
-.bg-picker {
+.bg-picker-wrap {
   position: absolute;
   top: 10px;
   right: 8px;
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.bg-reset {
+  width: 27px;
+  height: 27px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bg-picker {
   width: 36px;
   height: 27px;
   padding: 0;
@@ -952,7 +969,7 @@ input[type="range"]:focus {
 
 /* ===== フルスクリーン (Short撮影) モード: テーマに依らずダーク固定 ===== */
 
-.viewer-fs .bg-picker,
+.viewer-fs .bg-picker-wrap,
 .viewer-fs .head-card,
 .viewer-fs .toolbar,
 .viewer-fs .edit-hint,

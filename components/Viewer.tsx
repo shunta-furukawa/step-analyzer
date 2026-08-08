@@ -462,16 +462,30 @@ export default function Viewer({
 
   return (
     <div className={fs ? "viewer-fs" : undefined}>
-      <input
-        type="color"
-        className="bg-picker"
-        value={`#${bgColor}`}
-        onChange={(e) => {
-          setBgColor(e.target.value.slice(1).toLowerCase());
-          setDirty(true);
-        }}
-        title="背景色をカスタマイズ"
-      />
+      <div className="bg-picker-wrap">
+        {bgColor !== DEFAULT_BG && (
+          <button
+            className="secondary bg-reset"
+            onClick={() => {
+              setBgColor(DEFAULT_BG);
+              setDirty(true);
+            }}
+            title="デフォルト色に戻す"
+          >
+            ↺
+          </button>
+        )}
+        <input
+          type="color"
+          className="bg-picker"
+          value={`#${bgColor}`}
+          onChange={(e) => {
+            setBgColor(e.target.value.slice(1).toLowerCase());
+            setDirty(true);
+          }}
+          title="背景色をカスタマイズ"
+        />
+      </div>
       <div className="card head-card">
         <div className="head-row">
           <div style={{ minWidth: 0 }}>
