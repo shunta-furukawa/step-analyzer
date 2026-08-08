@@ -52,6 +52,9 @@ function parseChoice(v: string | undefined, options: number[], def: number): num
 // フルスクリーンモードのステップゾーン位置 (譜面エリア上端からの中心距離)
 const RECEPTOR_Y = 90;
 
+// 足の移動トランジションにかかる実時間 (.foot3d の transition と揃える)
+const FOOT_TRAVEL_SEC = 0.25;
+
 // 背景色のデフォルト (DDR WORLDミントグリーン)
 const DEFAULT_BG = "29d6a2";
 
@@ -84,6 +87,10 @@ export default function Viewer({
   );
   const [dirty, setDirty] = useState(false);
   const [current, setCurrent] = useState(0);
+  // 再生中に足の位置だけ先行させるためのインデックス。
+  // 移動トランジション (FOOT_TRAVEL_SEC) ぶん早く動き出すことで、
+  // 足がジャストのタイミングでパネルに「到着」して見えるようにする。
+  const [footIdx, setFootIdx] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(() => parseChoice(initialSpeed, SPEED_OPTIONS, 1));
   const [hispeed, setHispeed] = useState(() =>
@@ -214,6 +221,7 @@ export default function Viewer({
     (i: number) => {
       const idx = clamp(i);
       setCurrent(idx);
+      setFootIdx(idx);
       if (chart && chart.events[idx]) beatRef.current = chart.events[idx].row.beat;
     },
     [clamp, chart]
@@ -369,6 +377,16 @@ export default function Viewer({
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
 
+      // 足の位置は移動時間ぶん先読み: ジャストの瞬間に次のパネルへ到着させる。
+      // timeRefは譜面内時刻なので、実時間の先読みはspeed倍して換算する
+      const leadBeat = beatAtTime(timeline, timeRef.current + FOOT_TRAVEL_SEC * speed);
+      let fIdx = idx;
+      for (let k = Math.max(0, idx); k < chart.events.length; k++) {
+        if (chart.events[k].row.beat <= leadBeat + 1e-6) fIdx = k;
+        else break;
+      }
+      if (fIdx >= 0) setFootIdx((c) => (c !== fIdx ? fIdx : c));
+
       const el = scrollRef.current;
       if (el) {
         // fs時はステップゾーンに現在ビートが重なるよう合わせる
@@ -444,6 +462,8 @@ export default function Viewer({
 
   const totalH = chart.totalBeats * pxPerBeat + noteSize;
   const curStep = footsteps[current];
+  // 再生中の足の描画位置は先読みインデックスから取る (ジャスト到着)
+  const footStep = (playing ? footsteps[footIdx] : curStep) ?? curStep;
   const curEvent = chart.events[current];
   const curTick = curEvent ? tickOf(curEvent.row.beat) : null;
   const curOverride = curTick !== null ? overrides.get(curTick) : undefined;
@@ -993,13 +1013,13 @@ export default function Viewer({
         <div className="side-pane">
           <div className="card pad-card">
             <FootStage
-              leftPos={curStep?.leftPos ?? 0}
-              rightPos={curStep?.rightPos ?? 3}
+              leftPos={footStep?.leftPos ?? 0}
+              rightPos={footStep?.rightPos ?? 3}
               stepping={curEvent?.panels ?? []}
               feet={curStep?.feet ?? [null, null, null, null]}
-              facing={facing}
+              facing={footStep?.facing ?? facing}
               stepKey={current}
-              heldFeet={curStep?.heldFeet ?? []}
+              heldFeet={footStep?.heldFeet ?? []}
             />
             <div className="controls">
               <button
