@@ -697,11 +697,12 @@ export default function Viewer({
       {showText && (
         <TextImport
           compact={compact}
-          onApply={(next, timing) => {
+          onApply={(next, timing, smTitle) => {
             applyEdit(next);
             setOverrides(new Map());
             if (timing?.b) setBpm(timing.b);
             if (timing?.s !== undefined) setStops(timing.s);
+            if (smTitle) setTitle(smTitle);
             go(0);
             setShowText(false);
           }}
@@ -1240,7 +1241,7 @@ function TextImport({
   onApply,
 }: {
   compact: string;
-  onApply: (next: string, timing?: { b?: string; s?: string }) => void;
+  onApply: (next: string, timing?: { b?: string; s?: string }, smTitle?: string) => void;
 }) {
   const [text, setText] = useState(() =>
     compact
@@ -1248,29 +1249,34 @@ function TextImport({
       .map((m) => (m.match(/.{4}/g) ?? []).join("\n"))
       .join("\n,\n")
   );
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [choices, setChoices] = useState<SmChartInfo[] | null>(null);
   const [excluded, setExcluded] = useState(0);
 
-  // 選んだ譜面 (またはテキスト全体) を読み込む。タイミングは常にファイル全体から
-  const applyChart = (noteText: string) => {
+  // 選んだ譜面 (またはテキスト全体) を読み込む。タイミング・タイトルは常にファイル全体から
+  const applyChart = (noteText: string, full: string) => {
     try {
       const result = normalizeNotesInput(noteText);
       if (result.warning) setWarning(result.warning);
-      const timing = extractTimingFromSM(text);
-      onApply(result.compact, timing);
+      const timing = extractTimingFromSM(full);
+      const tm = full.match(/#TITLE\s*:\s*([^;]*);/i);
+      const smTitle = tm ? tm[1].trim() : undefined;
+      onApply(result.compact, timing, smTitle);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
   };
 
-  const apply = () => {
+  const apply = (src?: string) => {
+    const body = src ?? text;
     setError(null);
     setWarning(null);
     setChoices(null);
     setExcluded(0);
-    const charts = listSmCharts(text);
+    const charts = listSmCharts(body);
     if (charts.length > 1) {
       // 複数譜面入りのファイル: シングルだけ列挙して選ばせる
       const singles = charts.filter((c) => !/double|couple|routine/i.test(c.type));
@@ -1280,13 +1286,37 @@ function TextImport({
         return;
       }
       if (singles.length === 1) {
-        applyChart(singles[0].notes);
+        applyChart(singles[0].notes, body);
         return;
       }
       setChoices(singles);
       return;
     }
-    applyChart(text);
+    applyChart(body, body);
+  };
+
+  // WebにホストされたSM/SSCファイルをURLから取得してテキスト欄に流し込む
+  const fetchFromUrl = async () => {
+    const u = url.trim();
+    if (!u) return;
+    setLoading(true);
+    setError(null);
+    setWarning(null);
+    setChoices(null);
+    try {
+      const res = await fetch(`/api/sm?url=${encodeURIComponent(u)}`);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        setError(data.error ?? `取得に失敗しました (HTTP ${res.status})`);
+        return;
+      }
+      setText(data.text);
+      apply(data.text);
+    } catch {
+      setError("取得に失敗しました。URLを確認してください");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -1295,10 +1325,27 @@ function TextImport({
         SM/SSCファイルの <code>#NOTES</code> 以下のノートデータ (小節を <code>,</code> 区切り、
         1行4文字) を貼り付けて読み込めます。ファイル全体を貼ると{" "}
         <code>#BPMS</code> / <code>#STOPS</code> (ソフラン・停止) も自動で取り込みます。
+        Webにホストされた <code>.sm</code>/<code>.ssc</code> ファイルのURLを指定して直接読み込むこともできます。
       </PanelHead>
+      <div className="form-row url-import-row">
+        <input
+          type="url"
+          className="url-input"
+          value={url}
+          placeholder="https://…/譜面ファイル.sm のURLから読み込む (オプション)"
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") fetchFromUrl();
+          }}
+          spellCheck={false}
+        />
+        <button className="secondary" onClick={fetchFromUrl} disabled={loading || !url.trim()}>
+          {loading ? "取得中…" : "URLから読み込み"}
+        </button>
+      </div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <div className="form-row">
-        <button onClick={apply}>この内容を読み込む</button>
+        <button onClick={() => apply()}>この内容を読み込む</button>
       </div>
       {choices && (
         <div className="chart-choices">
@@ -1310,7 +1357,7 @@ function TextImport({
             <button
               key={i}
               className="secondary"
-              onClick={() => applyChart(c.notes)}
+              onClick={() => applyChart(c.notes, text)}
             >
               {c.difficulty || `譜面${i + 1}`}
               {c.meter && ` (${c.meter})`}

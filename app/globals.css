@@ -167,13 +167,37 @@ input[type="text"]:focus {
   outline-offset: -1px;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="url"] {
   background: var(--paper);
   border: 2px solid var(--line);
   border-radius: 0;
   color: var(--ink);
   font-size: 14px;
   padding: 7px 12px;
+}
+
+input[type="url"]:focus {
+  outline: 2px solid var(--mint);
+  outline-offset: -1px;
+}
+
+/* URLからの譜面読み込み行: 入力欄を伸ばしてボタンと並べる */
+.url-import-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.url-import-row .url-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.url-import-row button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 /* ===== ボタン (ミント=主 / 白+黒枠=副) ===== */
