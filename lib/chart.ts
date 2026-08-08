@@ -43,6 +43,7 @@ export interface ParsedChart {
   events: StepEvent[];
   holds: Hold[];
   mines: { panel: number; beat: number }[];
+  shocks: ChartRow[]; // ショックアロー (全パネル同時M。踏んではいけない)
   totalBeats: number;
 }
 
@@ -180,14 +181,20 @@ export function parseCompact(n: string): ParsedChart {
     }
   }
 
+  // 全パネル同時のMはショックアロー、それ以外のMは単独地雷として扱う
   const mines: { panel: number; beat: number }[] = [];
+  const shocks: ChartRow[] = [];
   for (const row of rows) {
+    if (row.cols === "MMMM") {
+      shocks.push(row);
+      continue;
+    }
     for (let c = 0; c < 4; c++) {
       if (row.cols[c] === "M") mines.push({ panel: c, beat: row.beat });
     }
   }
 
-  return { measures, rows, events, holds, mines, totalBeats };
+  return { measures, rows, events, holds, mines, shocks, totalBeats };
 }
 
 // ビート位置を整数チケット (1ビート=48tick) に変換する。
@@ -363,15 +370,17 @@ export interface ChartStats {
   jacks: number;
   crossovers: number;
   doubleSteps: number;
+  shocks: number;
 }
 
-export function statsOf(footsteps: FootStep[]): ChartStats {
+export function statsOf(footsteps: FootStep[], shocks = 0): ChartStats {
   return {
     steps: footsteps.length,
     jumps: footsteps.filter((f) => f.jump).length,
     jacks: footsteps.filter((f) => f.jack).length,
     crossovers: footsteps.filter((f) => f.crossover).length,
     doubleSteps: footsteps.filter((f) => f.doubleStep).length,
+    shocks,
   };
 }
 

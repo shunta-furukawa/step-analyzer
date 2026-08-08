@@ -14,7 +14,7 @@ import {
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import { compressCompact } from "@/lib/codec";
-import { parseOverrides, serializeOverrides, toggleNote } from "@/lib/edit";
+import { parseOverrides, serializeOverrides, toggleNote, toggleShock } from "@/lib/edit";
 import {
   beatAtTime,
   bpmAtBeat,
@@ -95,6 +95,7 @@ export default function Viewer({
   );
   const [editMode, setEditMode] = useState(false);
   const [editRes, setEditRes] = useState(16);
+  const [editShock, setEditShock] = useState(false);
   const [showText, setShowText] = useState(false);
   const [fs, setFs] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -148,7 +149,10 @@ export default function Viewer({
     () => (chart ? assignFeet(chart.events, overrides, chart.holds) : []),
     [chart, overrides]
   );
-  const stats = useMemo(() => statsOf(footsteps), [footsteps]);
+  const stats = useMemo(
+    () => statsOf(footsteps, chart?.shocks.length ?? 0),
+    [footsteps, chart]
+  );
 
   // ソフラン・停止のタイミングデータ
   const bpms = useMemo(() => parseBpmParam(bpm), [bpm]);
@@ -579,6 +583,12 @@ export default function Viewer({
               <div className="num">{stats.doubleSteps}</div>
               <div className="label">踏み替え</div>
             </div>
+            {stats.shocks > 0 && (
+              <div className="stat">
+                <div className="num shock-num">{stats.shocks}</div>
+                <div className="label">ショック</div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -601,6 +611,15 @@ export default function Viewer({
               </option>
             ))}
           </select>
+        )}
+        {editMode && (
+          <button
+            className={editShock ? "" : "secondary"}
+            onClick={() => setEditShock(!editShock)}
+            title="ショックアロー配置モード"
+          >
+            ⚡{editShock ? "ショック配置中" : "ショック"}
+          </button>
         )}
         <button className="secondary" onClick={() => setShowText(!showText)}>
           {narrow ? "テキスト" : "テキスト入力"}
@@ -633,7 +652,9 @@ export default function Viewer({
 
       {editMode && (
         <p className="hint edit-hint">
-          グリッドをタップでノーツを追加、ノーツをタップで削除。結果は即URLに反映されます。
+          {editShock
+            ? "グリッドをタップでショックアロー (⚡踏んではいけない全パネル) を配置・削除します。"
+            : "グリッドをタップでノーツを追加、ノーツをタップで削除。結果は即URLに反映されます。"}
         </p>
       )}
 
@@ -813,7 +834,13 @@ export default function Viewer({
                           width: noteSize,
                           height: cellH,
                         }}
-                        onClick={() => applyEdit(toggleNote(compact, mi, r, editRes, p))}
+                        onClick={() =>
+                          applyEdit(
+                            editShock
+                              ? toggleShock(compact, mi, r, editRes)
+                              : toggleNote(compact, mi, r, editRes, p)
+                          )
+                        }
                       />
                     ));
                   });
@@ -856,6 +883,39 @@ export default function Viewer({
                     background: h.roll ? "#ff9f43" : "#2ecc71",
                   }}
                 />
+              ))}
+
+              {chart.shocks.map((r, i) => (
+                r.beat < viewBeats.a || r.beat > viewBeats.b ? null :
+                <div
+                  key={`shock${i}`}
+                  className="shock-row"
+                  style={{
+                    left: 2,
+                    top: r.beat * pxPerBeat + noteSize * 0.1,
+                    width: laneW * 4 - 4,
+                    height: noteSize * 0.8,
+                  }}
+                  title="ショックアロー (踏んではいけない)"
+                >
+                  {[0, 1, 2, 3].map((p) => (
+                    <svg
+                      key={p}
+                      viewBox={ARROW_VIEWBOX}
+                      width={noteSize * 0.62}
+                      height={noteSize * 0.62}
+                      style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
+                    >
+                      <path
+                        d={ARROW_PATH}
+                        fill="rgba(125, 249, 255, 0.16)"
+                        stroke="#7df9ff"
+                        strokeWidth={4}
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  ))}
+                </div>
               ))}
 
               {chart.mines.map((m, i) => (

@@ -98,6 +98,34 @@ export function toggleNote(
   return measures.map((m) => m.join("")).join("-");
 }
 
+/**
+ * 指定行のショックアロー (MMMM) をトグルする。
+ * 置く場合はその行のノーツを上書きする (踏めない行なので共存しない)。
+ */
+export function toggleShock(
+  compact: string,
+  mIdx: number,
+  resRow: number,
+  res: number
+): string {
+  const measures = compact.split("-").map(splitRows);
+  const rows = measures[mIdx];
+  if (!rows) return compact;
+
+  const L = lcm(rows.length, res);
+  const f = L / rows.length;
+  const expanded: string[] = [];
+  for (let i = 0; i < L; i++) {
+    expanded.push(i % f === 0 ? rows[i / f] : "0000");
+  }
+  const target = resRow * (L / res);
+  expanded[target] = expanded[target] === "MMMM" ? "0000" : "MMMM";
+
+  measures[mIdx] = reduceRows(expanded);
+  cleanupHolds(measures);
+  return measures.map((m) => m.join("")).join("-");
+}
+
 // ===== 足の手動指定 (fパラメータ) のシリアライズ =====
 
 export function parseOverrides(f: string | undefined): Map<number, Foot> {

@@ -34,6 +34,8 @@ const DEFAULT_BG = "#29d6a2";
 function bestWindow(chart: ParsedChart, laneCount: number): number {
   const counts = new Array(chart.measures.length).fill(0);
   for (const ev of chart.events) counts[ev.row.measure] += ev.panels.length;
+  // ショックアローも見どころなので密度に加える
+  for (const r of chart.shocks) counts[r.measure] += 2;
   let best = 0;
   let bestScore = -1;
   for (let s = 0; s + laneCount <= counts.length; s++) {
@@ -242,6 +244,53 @@ function ChartLanes({
                   />
                 );
               })}
+              {chart.shocks
+                .filter((r) => r.measure === mi)
+                .map((r) => {
+                  const y = 8 + (r.idx / r.total) * (laneH - cell - 16);
+                  return (
+                    <div
+                      key={`shock${r.idx}`}
+                      style={{
+                        display: "flex",
+                        position: "absolute",
+                        left: 2,
+                        right: 2,
+                        top: y + S * 0.1,
+                        height: S * 0.8,
+                        alignItems: "center",
+                        justifyContent: "space-around",
+                        background: "rgba(125, 249, 255, 0.16)",
+                        borderTop: "2px solid #7df9ff",
+                        borderBottom: "2px solid #7df9ff",
+                      }}
+                    >
+                      {[0, 1, 2, 3].map((p) => (
+                        <div
+                          key={p}
+                          style={{
+                            display: "flex",
+                            transform: `rotate(${ARROW_ROTATIONS[p]}deg)`,
+                          }}
+                        >
+                          <svg
+                            width={S * 0.58}
+                            height={S * 0.58}
+                            viewBox={ARROW_VIEWBOX}
+                          >
+                            <path
+                              d={ARROW_PATH}
+                              fill="rgba(125, 249, 255, 0.16)"
+                              stroke="#7df9ff"
+                              strokeWidth="4"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })}
               {rows.map((_, ri) => {
                 const y = 8 + (ri / rows.length) * (laneH - cell - 16);
                 const notes = [];
@@ -337,7 +386,7 @@ export async function GET(request: Request) {
   }
 
   const footsteps = chart ? assignFeet(chart.events, overrides, chart.holds) : [];
-  const stats = statsOf(footsteps);
+  const stats = statsOf(footsteps, chart ? chart.shocks.length : 0);
   const laneCount = chart ? Math.min(chart.measures.length, MAX_LANES) : 0;
   const startMeasure = chart ? bestWindow(chart, laneCount) : 0;
 
@@ -390,11 +439,14 @@ export async function GET(request: Request) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {[
-              { num: stats.steps, label: "STEPS" },
-              { num: stats.jumps, label: "JUMPS" },
-              { num: stats.crossovers, label: "CROSS" },
+              { num: stats.steps, label: "STEPS", color: MINT },
+              { num: stats.jumps, label: "JUMPS", color: MINT },
+              { num: stats.crossovers, label: "CROSS", color: MINT },
+              ...(stats.shocks > 0
+                ? [{ num: stats.shocks, label: "SHOCK", color: "#7df9ff" }]
+                : []),
             ].map((s) => (
               <div
                 key={s.label}
@@ -403,14 +455,14 @@ export async function GET(request: Request) {
                   flexDirection: "column",
                   alignItems: "center",
                   background: INK,
-                  padding: "10px 18px",
+                  padding: stats.shocks > 0 ? "10px 12px" : "10px 18px",
                   boxShadow: "0 4px 0 rgba(0,0,0,0.28)",
                 }}
               >
                 <div
                   style={{
                     display: "flex",
-                    color: MINT,
+                    color: s.color,
                     fontSize: 34,
                     ...(antonFont ? { fontFamily: "Anton" } : {}),
                     fontWeight: 700,

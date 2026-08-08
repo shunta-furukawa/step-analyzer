@@ -539,6 +539,41 @@ select {
   font-weight: 700;
 }
 
+/* ショックアロー: 全パネルを貫く電撃ライン。タップは下の編集グリッドへ透過 */
+.shock-row {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(125, 249, 255, 0.05),
+    rgba(125, 249, 255, 0.22) 50%,
+    rgba(125, 249, 255, 0.05)
+  );
+  border-top: 1px solid rgba(125, 249, 255, 0.65);
+  border-bottom: 1px solid rgba(125, 249, 255, 0.65);
+  box-shadow:
+    0 0 10px rgba(125, 249, 255, 0.45),
+    inset 0 0 14px rgba(125, 249, 255, 0.25);
+  animation: shock-flicker 0.9s steps(2, jump-none) infinite;
+  z-index: 2;
+}
+
+@keyframes shock-flicker {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+.stat .num.shock-num {
+  color: #7df9ff;
+}
+
 .facing-band {
   position: absolute;
   left: 0;
