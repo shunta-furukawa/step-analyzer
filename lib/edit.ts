@@ -52,7 +52,8 @@ function cleanupHolds(measures: string[][]): void {
         if (ch === "2" || ch === "4") {
           if (open) rows[i] = setChar(rows[i], c, "1");
           else open = true;
-        } else if (ch === "3") {
+        } else if (ch === "3" || ch === "6") {
+          // 6 = 終端+空打ち。孤児になったら終端ごと消す (3と同じ扱い)
           if (open) open = false;
           else rows[i] = setChar(rows[i], c, "0");
         }
@@ -93,10 +94,15 @@ export function toggleNote(
   }
   const target = resRow * (L / res);
   const cur = expanded[target][panel];
-  // フリーズ終端 (3) は譜面上に見えないため、グリッドタップでは触れない。
-  // 消すとフリーズの終わりを失って譜面末尾まで伸びてしまう
-  if (cur === "3") return compact;
-  expanded[target] = setChar(expanded[target], panel, cur === "0" ? ch : "0");
+  // フリーズ終端は消すと終わりを失うため削除不可。代わりに
+  // タップで「3 (終端) ⇔ 6 (終端+空打ち)」をトグルする
+  if (cur === "3") {
+    expanded[target] = setChar(expanded[target], panel, "6");
+  } else if (cur === "6") {
+    expanded[target] = setChar(expanded[target], panel, "3");
+  } else {
+    expanded[target] = setChar(expanded[target], panel, cur === "0" ? ch : "0");
+  }
 
   measures[mIdx] = reduceRows(expanded);
   cleanupHolds(measures);
@@ -124,8 +130,8 @@ export function toggleShock(
     expanded.push(i % f === 0 ? rows[i / f] : "0000");
   }
   const target = resRow * (L / res);
-  // フリーズ終端 (3) を含む行への上書きは、終端を失わせるため許可しない
-  if (expanded[target] !== "MMMM" && expanded[target].includes("3")) return compact;
+  // フリーズ終端 (3/6) を含む行への上書きは、終端を失わせるため許可しない
+  if (expanded[target] !== "MMMM" && /[36]/.test(expanded[target])) return compact;
   expanded[target] = expanded[target] === "MMMM" ? "0000" : "MMMM";
 
   measures[mIdx] = reduceRows(expanded);

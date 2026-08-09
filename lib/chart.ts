@@ -122,8 +122,9 @@ const MAX_ROTATION = 180.5;
 
 /**
  * コンパクト形式の譜面文字列をパースする。
- * 形式: 小節を "-" 区切りで連結。各小節は4文字/行を改行なしで連結した [012345M] の列。
+ * 形式: 小節を "-" 区切りで連結。各小節は4文字/行を改行なしで連結した [0123456M] の列。
  * 5 = 空打ち (フリーズ保持中の踏み直し。判定はないが足の持ち替えを表す)
+ * 6 = フリーズ終端 + 空打ち (終端のタイミングで踏み直す。3と5を兼ねる)
  * 例: "0001001001001000-1000010000100001" (2小節、各4分×4行)
  */
 export function parseCompact(n: string): ParsedChart {
@@ -134,7 +135,7 @@ export function parseCompact(n: string): ParsedChart {
 
   const measures: string[][] = [];
   for (const [mi, ms] of measureStrs.entries()) {
-    if (!/^[012345M]+$/.test(ms))
+    if (!/^[0123456M]+$/.test(ms))
       throw new Error(`${mi + 1}小節目に不正な文字が含まれています`);
     if (ms.length % 4 !== 0)
       throw new Error(`${mi + 1}小節目の長さが4の倍数ではありません`);
@@ -166,7 +167,7 @@ export function parseCompact(n: string): ParsedChart {
     for (let c = 0; c < 4; c++) {
       const ch = row.cols[c];
       if (ch === "1" || ch === "2" || ch === "4") panels.push(c);
-      else if (ch === "5") {
+      else if (ch === "5" || ch === "6") {
         panels.push(c);
         ghostPanels.push(c);
       }
@@ -183,7 +184,7 @@ export function parseCompact(n: string): ParsedChart {
       const ch = row.cols[c];
       if (ch === "2" || ch === "4") {
         open[c] = { panel: c, startBeat: row.beat, endBeat: row.beat, roll: ch === "4" };
-      } else if (ch === "3" && open[c]) {
+      } else if ((ch === "3" || ch === "6") && open[c]) {
         open[c]!.endBeat = row.beat;
         holds.push(open[c]!);
         open[c] = null;
