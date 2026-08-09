@@ -67,6 +67,14 @@ export interface Strings {
   noSingleCharts: string;
   fetchFailed: string;
   chartFallback: (i: number) => string;
+  // オプションモーダル
+  optionsBtn: string;
+  optionsTitle: string;
+  hispeedLabel: string;
+  transformLabel: string;
+  transformOff: string;
+  transformRandomReroll: string;
+  close: string;
   // コントロール
   toStartTitle: string;
   playTitle: string;
@@ -183,6 +191,13 @@ const ja: Strings = {
   noSingleCharts: "シングル (4パネル) の譜面が見つかりませんでした",
   fetchFailed: "取得に失敗しました。URLを確認してください",
   chartFallback: (i) => `譜面${i}`,
+  optionsBtn: "オプション",
+  optionsTitle: "オプション",
+  hispeedLabel: "ハイスピード (縦縮尺)",
+  transformLabel: "変形 (矢印の並べ替え)",
+  transformOff: "OFF",
+  transformRandomReroll: "タップするたびに並びを引き直します",
+  close: "閉じる",
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
   clapTitle: "クラップ音",
@@ -301,6 +316,13 @@ const en: Strings = {
   noSingleCharts: "No single (4-panel) charts found",
   fetchFailed: "Failed to fetch. Check the URL",
   chartFallback: (i) => `Chart ${i}`,
+  optionsBtn: "Options",
+  optionsTitle: "Options",
+  hispeedLabel: "Hi-Speed (vertical scale)",
+  transformLabel: "Transform (arrow shuffle)",
+  transformOff: "OFF",
+  transformRandomReroll: "Tap again to reroll the arrangement",
+  close: "Close",
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
   clapTitle: "Clap sound",
@@ -418,6 +440,13 @@ const ko: Strings = {
   noSingleCharts: "싱글 (4패널) 채보를 찾지 못했습니다",
   fetchFailed: "불러오지 못했습니다. URL을 확인하세요",
   chartFallback: (i) => `채보 ${i}`,
+  optionsBtn: "옵션",
+  optionsTitle: "옵션",
+  hispeedLabel: "하이스피드 (세로 배율)",
+  transformLabel: "변형 (화살표 재배치)",
+  transformOff: "OFF",
+  transformRandomReroll: "탭할 때마다 배치를 다시 뽑습니다",
+  close: "닫기",
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",
   clapTitle: "클랩 사운드",

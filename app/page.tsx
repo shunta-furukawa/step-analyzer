@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Viewer from "@/components/Viewer";
 import { decompressCompact } from "@/lib/codec-server";
 import { STRINGS, normalizeLang } from "@/lib/i18n";
+import { parseTransform } from "@/lib/transform";
 import { SAMPLE_BPM, SAMPLE_COMPACT, SAMPLE_TITLE } from "@/lib/sample";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -39,6 +40,7 @@ export async function generateMetadata({
   const b = pick(sp.b);
   const f = pick(sp.f);
   const c = pick(sp.c);
+  const tr = pick(sp.tr);
 
   if (!n || !ogParam) {
     return {
@@ -57,6 +59,7 @@ export async function generateMetadata({
   if (t) qs.set("t", t);
   if (f) qs.set("f", f);
   if (c && /^[0-9a-fA-F]{6}$/.test(c)) qs.set("c", c.toLowerCase());
+  if (tr && parseTransform(tr)) qs.set("tr", tr);
   const ogUrl = `/og?${qs.toString()}`;
 
   return {
@@ -92,6 +95,7 @@ export default async function Page({
   const c = pick(sp.c);
   const bg = c && /^[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : undefined;
   const lang = normalizeLang(pick(sp.l));
+  const tr = pick(sp.tr);
   const isDefault = !n;
 
   return (
@@ -114,6 +118,7 @@ export default async function Page({
         speed={spd}
         bg={bg}
         lang={lang}
+        transform={tr}
       />
       <footer className="site-footer">{STRINGS[lang].footerContact}</footer>
     </main>

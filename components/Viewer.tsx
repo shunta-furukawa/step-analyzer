@@ -28,6 +28,12 @@ import {
   timeAtBeat,
 } from "@/lib/timing";
 import { LANGS, STRINGS, type Lang, type Strings } from "@/lib/i18n";
+import {
+  applyTransform,
+  invertPerm,
+  parseTransform,
+  randomTransform,
+} from "@/lib/transform";
 import { listSmCharts, normalizeNotesInput, type SmChartInfo } from "@/lib/url";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
@@ -60,6 +66,14 @@ const FOOT_TRAVEL_SEC = 0.25;
 // 背景色のデフォルト (DDR WORLDミントグリーン)
 const DEFAULT_BG = "29d6a2";
 
+// ツールバーに出す変形オプションの短縮ラベル
+function transformShortLabel(tr: string): string {
+  if (tr === "mirror") return "MIRROR";
+  if (tr === "left") return "LEFT";
+  if (tr === "right") return "RIGHT";
+  return "RND";
+}
+
 export default function Viewer({
   compact: initialCompact,
   title: initialTitle,
@@ -70,6 +84,7 @@ export default function Viewer({
   speed: initialSpeed,
   bg: initialBg,
   lang: initialLang,
+  transform: initialTransform,
 }: {
   compact: string;
   title?: string;
@@ -80,9 +95,15 @@ export default function Viewer({
   speed?: string;
   bg?: string;
   lang?: Lang;
+  transform?: string;
 }) {
   const [lang, setLang] = useState<Lang>(initialLang ?? "ja");
   const S = STRINGS[lang];
+  // 変形オプション (mirror/left/right/ランダムの4桁順列)。表示用のビュー変換
+  const [transform, setTransform] = useState(
+    initialTransform && parseTransform(initialTransform) ? initialTransform : ""
+  );
+  const [showOptions, setShowOptions] = useState(false);
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
@@ -151,13 +172,21 @@ export default function Viewer({
   const noteSize = fs ? fsLane - 10 : narrow ? 28 : 40;
   const laneW = fs ? fsLane : narrow ? 36 : 52;
 
+  // 変形オプション適用後の譜面 (表示・解析はすべてこちらを使う)。
+  // 元データ (compact) はURLにそのまま保存され、変形は tr= として別に持つ
+  const perm = useMemo(() => parseTransform(transform), [transform]);
+  const viewCompact = useMemo(
+    () => (perm ? applyTransform(compact, perm) : compact),
+    [compact, perm]
+  );
+
   const parsed = useMemo(() => {
     try {
-      return { chart: parseCompact(compact), error: null };
+      return { chart: parseCompact(viewCompact), error: null };
     } catch (e) {
       return { chart: null, error: e instanceof Error ? e.message : String(e) };
     }
-  }, [compact]);
+  }, [viewCompact]);
 
   const chart = parsed.chart;
   const footsteps = useMemo(
@@ -227,8 +256,9 @@ export default function Viewer({
     if (speed !== 1) parts.push(`sp=${speed}`);
     if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
     if (lang !== "ja") parts.push(`l=${lang}`);
+    if (transform) parts.push(`tr=${transform}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, bpm, stops, overrides, hispeed, speed, bgColor, lang]);
+  }, [compact, title, bpm, stops, overrides, hispeed, speed, bgColor, lang, transform]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -534,6 +564,11 @@ export default function Viewer({
     setDirty(true);
   };
 
+  // 変形ビュー上での編集結果を元データに逆変換して保存する
+  const applyViewEdit = (nextView: string) => {
+    applyEdit(perm ? applyTransform(nextView, invertPerm(perm)) : nextView);
+  };
+
   const applyEdit = (next: string) => {
     setPlaying(false);
     setCompact(next);
@@ -748,25 +783,89 @@ export default function Viewer({
         >
           {S.timingBtn}
         </button>
-        <select
-          value={hispeed}
-          onChange={(e) => {
-            setHispeed(Number(e.target.value));
-            setDirty(true);
-          }}
-          title={S.hispeedTitle}
+        <button
+          className={transform ? "" : "secondary"}
+          onClick={() => setShowOptions(true)}
+          title={S.optionsTitle}
         >
-          {HISPEED_OPTIONS.map((h) => (
-            <option key={h} value={h}>
-              HS {h}×
-            </option>
-          ))}
-        </select>
+          ⚙ {narrow ? `HS${hispeed}×` : S.optionsBtn}
+          {transform && ` ${transformShortLabel(transform)}`}
+        </button>
         <span className="toolbar-spacer" />
         <button className="secondary" onClick={copyUrl}>
           {copied ? S.copied : narrow ? S.copyShort : S.copyUrl}
         </button>
       </div>
+
+      {showOptions && (
+        <div className="modal-backdrop" onClick={() => setShowOptions(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{S.optionsTitle}</h2>
+              <button className="secondary modal-close" onClick={() => setShowOptions(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="opt-row">
+              <span className="opt-label">{S.hispeedLabel}</span>
+              <select
+                value={hispeed}
+                onChange={(e) => {
+                  setHispeed(Number(e.target.value));
+                  setDirty(true);
+                }}
+              >
+                {HISPEED_OPTIONS.map((h) => (
+                  <option key={h} value={h}>
+                    HS {h}×
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="opt-row">
+              <span className="opt-label">{S.transformLabel}</span>
+              <div className="opt-btns">
+                <button
+                  className={!transform ? "" : "secondary"}
+                  onClick={() => {
+                    setTransform("");
+                    setDirty(true);
+                  }}
+                >
+                  {S.transformOff}
+                </button>
+                {(["mirror", "left", "right"] as const).map((t) => (
+                  <button
+                    key={t}
+                    className={transform === t ? "" : "secondary"}
+                    onClick={() => {
+                      setTransform(t);
+                      setDirty(true);
+                    }}
+                  >
+                    {t.toUpperCase()}
+                  </button>
+                ))}
+                <button
+                  className={/^[0-3]{4}$/.test(transform) ? "" : "secondary"}
+                  onClick={() => {
+                    setTransform(randomTransform());
+                    setDirty(true);
+                  }}
+                >
+                  RANDOM
+                </button>
+              </div>
+              {perm && (
+                <p className="hint opt-hint">
+                  ←↓↑→ ⇒ {perm.map((o) => ["←", "↓", "↑", "→"][o]).join("")}
+                  {/^[0-3]{4}$/.test(transform) && ` · ${S.transformRandomReroll}`}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {editMode && (
         <p className="hint edit-hint">
@@ -961,11 +1060,11 @@ export default function Viewer({
                               beat > h.startBeat + 1e-6 &&
                               beat < h.endBeat - 1e-6
                           );
-                          applyEdit(
+                          applyViewEdit(
                             editShock
-                              ? toggleShock(compact, mi, r, editRes)
+                              ? toggleShock(viewCompact, mi, r, editRes)
                               : toggleNote(
-                                  compact,
+                                  viewCompact,
                                   mi,
                                   r,
                                   editRes,
@@ -1124,7 +1223,7 @@ export default function Viewer({
                       onClick={() => {
                         setPlaying(false);
                         if (editMode) {
-                          applyEdit(toggleNote(compact, ev.row.measure, ev.row.idx, ev.row.total, p));
+                          applyViewEdit(toggleNote(viewCompact, ev.row.measure, ev.row.idx, ev.row.total, p));
                         } else {
                           go(i);
                         }

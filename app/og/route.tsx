@@ -8,6 +8,7 @@ import {
   lighten,
 } from "@/lib/arrowShape";
 import { decompressCompact } from "@/lib/codec-server";
+import { applyTransform, parseTransform } from "@/lib/transform";
 import { parseOverrides } from "@/lib/edit";
 import {
   ARROW_ROTATIONS,
@@ -377,6 +378,9 @@ export async function GET(request: Request) {
       n = "";
     }
   }
+  // 変形オプション (tr=) を適用してから描画する
+  const trPerm = parseTransform(searchParams.get("tr"));
+  if (n && trPerm) n = applyTransform(n, trPerm);
   const rawTitle = searchParams.get("t") ?? "";
   const overrides = parseOverrides(searchParams.get("f") ?? undefined);
   const cRaw = searchParams.get("c");
