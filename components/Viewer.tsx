@@ -1502,12 +1502,19 @@ function TextImport({
   const [choices, setChoices] = useState<SmChartInfo[] | null>(null);
   const [excluded, setExcluded] = useState(0);
 
-  // 選んだ譜面 (またはテキスト全体) を読み込む。タイミング・タイトルは常にファイル全体から
-  const applyChart = (noteText: string, full: string) => {
+  // 選んだ譜面 (またはテキスト全体) を読み込む。
+  // タイミングはSSCの譜面別定義があればそれを優先し、なければファイル全体から。
+  // タイトルは常にファイル全体から
+  const applyChart = (noteText: string, full: string, timingText?: string) => {
     try {
       const result = normalizeNotesInput(noteText);
       if (result.warning) setWarning(result.warning);
-      const timing = extractTimingFromSM(full);
+      const globalTiming = extractTimingFromSM(full);
+      const chartTiming = timingText ? extractTimingFromSM(timingText) : {};
+      const timing = {
+        b: chartTiming.b ?? globalTiming.b,
+        s: chartTiming.s ?? globalTiming.s,
+      };
       const tm = full.match(/#TITLE\s*:\s*([^;]*);/i);
       const smTitle = tm ? tm[1].trim() : undefined;
       onApply(result.compact, timing, smTitle);
@@ -1532,7 +1539,7 @@ function TextImport({
         return;
       }
       if (singles.length === 1) {
-        applyChart(singles[0].notes, body);
+        applyChart(singles[0].notes, body, singles[0].timingText);
         return;
       }
       setChoices(singles);
@@ -1603,7 +1610,7 @@ function TextImport({
             <button
               key={i}
               className="secondary"
-              onClick={() => applyChart(c.notes, text)}
+              onClick={() => applyChart(c.notes, text, c.timingText)}
             >
               {c.difficulty || `譜面${i + 1}`}
               {c.meter && ` (${c.meter})`}

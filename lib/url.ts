@@ -83,6 +83,9 @@ export interface SmChartInfo {
   difficulty: string; // Beginner / Expert / Challenge など
   meter: string; // 難易度値
   notes: string; // ノートデータ本体
+  // SSCの譜面別タイミング (#NOTEDATAセクション内の#BPMS/#STOPSを含むテキスト)。
+  // SM形式や譜面別定義がない場合はundefinedで、ファイル全体から抽出する
+  timingText?: string;
 }
 
 /**
@@ -108,12 +111,15 @@ export function listSmCharts(text: string): SmChartInfo[] {
         notes: parts.slice(5).join(":"),
       });
     } else {
-      // SSC形式: このブロックより前の直近のタグから拾う
+      // SSC形式: この譜面の#NOTEDATAセクション内のタグから拾う
+      // (前の譜面のタグを誤って拾わないようセクションに限定する)
       const before = src.slice(0, m.index);
+      const sectionStart = before.toUpperCase().lastIndexOf("#NOTEDATA");
+      const section = sectionStart >= 0 ? before.slice(sectionStart) : before;
       const grabLast = (tag: string): string => {
-        const i = before.toUpperCase().lastIndexOf(`#${tag}`);
+        const i = section.toUpperCase().lastIndexOf(`#${tag}`);
         if (i < 0) return "";
-        const mm = before.slice(i).match(/:\s*([^;]*);/);
+        const mm = section.slice(i).match(/:\s*([^;]*);/);
         return mm ? mm[1].trim() : "";
       };
       out.push({
@@ -121,6 +127,7 @@ export function listSmCharts(text: string): SmChartInfo[] {
         difficulty: grabLast("DIFFICULTY"),
         meter: grabLast("METER"),
         notes: block,
+        timingText: sectionStart >= 0 ? section : undefined,
       });
     }
     if (end >= 0) re.lastIndex = end;
