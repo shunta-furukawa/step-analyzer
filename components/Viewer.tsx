@@ -391,6 +391,41 @@ export default function Viewer({
     };
   }, [fs]);
 
+  // 自動再生中は画面をスリープさせない (Screen Wake Lock、iOS 16.4+)。
+  // ロックはタブが隠れると自動解放されるため、復帰時に取り直す
+  useEffect(() => {
+    if (!playing) return;
+    type WakeLockSentinel = { release: () => Promise<void> };
+    let lock: WakeLockSentinel | null = null;
+    let stopped = false;
+    const acquire = async () => {
+      try {
+        const nav = navigator as unknown as {
+          wakeLock?: { request: (t: "screen") => Promise<WakeLockSentinel> };
+        };
+        const wl = await nav.wakeLock?.request("screen");
+        if (!wl) return;
+        if (stopped) {
+          void wl.release().catch(() => {});
+          return;
+        }
+        lock = wl;
+      } catch {
+        // 非対応ブラウザ・低電力モードなどでは黙って諦める
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void acquire();
+    };
+    void acquire();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      stopped = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      void lock?.release().catch(() => {});
+    };
+  }, [playing]);
+
   // キーボード操作 (←/→ or J/K、スペースで再生/停止)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
