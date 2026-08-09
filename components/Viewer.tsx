@@ -461,9 +461,11 @@ export default function Viewer({
     };
   }, [pxPerBeat, chart]);
 
-  // 手動操作時に現在のイベントが見えるようにスクロール
+  // 手動操作時に現在のイベントが見えるようにスクロール。
+  // 編集モード中は譜面の書き換えのたびに発火してスクロール位置が
+  // 先頭に飛んでしまうため、自動スクロールしない
   useEffect(() => {
-    if (playing || !chart || !scrollRef.current) return;
+    if (playing || editMode || !chart || !scrollRef.current) return;
     const ev = chart.events[current];
     if (!ev) return;
     const el = scrollRef.current;
@@ -473,7 +475,7 @@ export default function Viewer({
         : ev.row.beat * pxPerBeat - el.clientHeight / 2 + noteSize,
       behavior: "smooth",
     });
-  }, [current, chart, playing, pxPerBeat, noteSize, fs]);
+  }, [current, chart, playing, editMode, pxPerBeat, noteSize, fs]);
 
   const copyUrl = async () => {
     const url = await buildUrl();
