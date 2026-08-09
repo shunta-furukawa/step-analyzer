@@ -74,6 +74,39 @@ select,
   align-items: center;
 }
 
+/* 言語バッジ: 見た目はチップ、タップでネイティブのプルダウンを開く */
+.lang-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lang-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 27px;
+  padding: 0 8px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.lang-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  font-size: 16px; /* iOSのフォーカスズーム防止 */
+}
+
 .bg-reset {
   width: 27px;
   height: 27px;

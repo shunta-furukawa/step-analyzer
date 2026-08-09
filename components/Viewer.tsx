@@ -27,6 +27,7 @@ import {
   sanitizeTimingInput,
   timeAtBeat,
 } from "@/lib/timing";
+import { LANGS, STRINGS, type Lang, type Strings } from "@/lib/i18n";
 import { listSmCharts, normalizeNotesInput, type SmChartInfo } from "@/lib/url";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
@@ -68,6 +69,7 @@ export default function Viewer({
   hispeed: initialHispeed,
   speed: initialSpeed,
   bg: initialBg,
+  lang: initialLang,
 }: {
   compact: string;
   title?: string;
@@ -77,7 +79,10 @@ export default function Viewer({
   hispeed?: string;
   speed?: string;
   bg?: string;
+  lang?: Lang;
 }) {
+  const [lang, setLang] = useState<Lang>(initialLang ?? "ja");
+  const S = STRINGS[lang];
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
@@ -221,8 +226,9 @@ export default function Viewer({
     if (hispeed !== 1) parts.push(`hs=${hispeed}`);
     if (speed !== 1) parts.push(`sp=${speed}`);
     if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
+    if (lang !== "ja") parts.push(`l=${lang}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, bpm, stops, overrides, hispeed, speed, bgColor]);
+  }, [compact, title, bpm, stops, overrides, hispeed, speed, bgColor, lang]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -498,10 +504,10 @@ export default function Viewer({
   if (!chart) {
     return (
       <div className="card">
-        <h2>譜面を読み込めませんでした</h2>
+        <h2>{S.loadError}</h2>
         <p className="error">{parsed.error}</p>
         <p style={{ marginTop: 12 }}>
-          <a href="/">トップに戻る</a>
+          <a href="/">{S.backToTop}</a>
         </p>
       </div>
     );
@@ -537,6 +543,27 @@ export default function Viewer({
   return (
     <div className={fs ? "viewer-fs" : undefined}>
       <div className="bg-picker-wrap">
+        <div className="lang-wrap">
+          <span className="lang-badge">
+            {LANGS.find((l) => l.value === lang)?.flag}
+            {lang.toUpperCase()}
+          </span>
+          <select
+            className="lang-select"
+            value={lang}
+            onChange={(e) => {
+              setLang(e.target.value as Lang);
+              setDirty(true);
+            }}
+            aria-label="Language"
+          >
+            {LANGS.map((l) => (
+              <option key={l.value} value={l.value}>
+                {l.flag} {l.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {bgColor !== DEFAULT_BG && (
           <button
             className="secondary bg-reset"
@@ -544,7 +571,7 @@ export default function Viewer({
               setBgColor(DEFAULT_BG);
               setDirty(true);
             }}
-            title="デフォルト色に戻す"
+            title={S.bgResetTitle}
           >
             ↺
           </button>
@@ -557,7 +584,7 @@ export default function Viewer({
             setBgColor(e.target.value.slice(1).toLowerCase());
             setDirty(true);
           }}
-          title="背景色をカスタマイズ"
+          title={S.bgPickerTitle}
         />
       </div>
       <div className="card head-card">
@@ -570,7 +597,7 @@ export default function Viewer({
                   className="title-input"
                   value={title}
                   autoFocus
-                  placeholder="タイトルを入力"
+                  placeholder={S.titlePlaceholder}
                   onChange={(e) => {
                     setTitle(e.target.value);
                     setDirty(true);
@@ -582,7 +609,7 @@ export default function Viewer({
                 />
               ) : (
                 <button className="title-btn" onClick={() => setEditingTitle(true)}>
-                  {title || "無題の譜面"} <span className="edit-pen">✎</span>
+                  {title || S.untitled} <span className="edit-pen">✎</span>
                 </button>
               )}
               <span className="bpm">
@@ -599,27 +626,27 @@ export default function Viewer({
                     setDirty(true);
                   }}
                 />
-                {hasSofran && <span className="sofran-chip">変速</span>}
+                {hasSofran && <span className="sofran-chip">{S.timingBtn}</span>}
               </span>
             </div>
             <div className="legend">
               <span className="chip">
-                <span className="dot" style={{ background: FOOT_COLORS.L }} /> 左足
+                <span className="dot" style={{ background: FOOT_COLORS.L }} /> {S.leftFoot}
               </span>
               <span className="chip">
-                <span className="dot" style={{ background: FOOT_COLORS.R }} /> 右足
+                <span className="dot" style={{ background: FOOT_COLORS.R }} /> {S.rightFoot}
               </span>
               <span className="chip">
-                <span className="dot" style={{ background: QUANT_COLORS[4] }} /> 4分
+                <span className="dot" style={{ background: QUANT_COLORS[4] }} /> 4{S.quantSuffix}
               </span>
               <span className="chip">
-                <span className="dot" style={{ background: QUANT_COLORS[8] }} /> 8分
+                <span className="dot" style={{ background: QUANT_COLORS[8] }} /> 8{S.quantSuffix}
               </span>
               <span className="chip">
-                <span className="dot" style={{ background: QUANT_COLORS[12] }} /> 12分
+                <span className="dot" style={{ background: QUANT_COLORS[12] }} /> 12{S.quantSuffix}
               </span>
               <span className="chip">
-                <span className="dot" style={{ background: QUANT_COLORS[16] }} /> 16分
+                <span className="dot" style={{ background: QUANT_COLORS[16] }} /> 16{S.quantSuffix}
               </span>
               <span className="chip">
                 <span className="facing-legend">
@@ -628,41 +655,41 @@ export default function Viewer({
                   <span style={{ background: "rgba(56,189,248,0.2)" }} />
                   <span style={{ background: "rgba(56,189,248,0.5)" }} />
                 </span>
-                背景=体の向き (左←→右)
+                {S.facingLegend}
               </span>
             </div>
           </div>
           <div className="stats">
             <div className="stat">
               <div className="num">{stats.steps}</div>
-              <div className="label">ステップ</div>
+              <div className="label">{S.steps}</div>
             </div>
             <div className="stat">
               <div className="num">{stats.jumps}</div>
-              <div className="label">ジャンプ</div>
+              <div className="label">{S.jumps}</div>
             </div>
             <div className="stat">
               <div className="num">{stats.jacks}</div>
-              <div className="label">縦連</div>
+              <div className="label">{S.jacks}</div>
             </div>
             <div className="stat">
               <div className="num">{stats.crossovers}</div>
-              <div className="label">交差</div>
+              <div className="label">{S.crossovers}</div>
             </div>
             <div className="stat">
               <div className="num">{stats.doubleSteps}</div>
-              <div className="label">踏み替え</div>
+              <div className="label">{S.doubleSteps}</div>
             </div>
             {stats.holdSwaps > 0 && (
               <div className="stat">
                 <div className="num swap-num">{stats.holdSwaps}</div>
-                <div className="label">空打ち</div>
+                <div className="label">{S.ghosts}</div>
               </div>
             )}
             {stats.shocks > 0 && (
               <div className="stat">
                 <div className="num shock-num">{stats.shocks}</div>
-                <div className="label">ショック</div>
+                <div className="label">{S.shocks}</div>
               </div>
             )}
           </div>
@@ -677,13 +704,13 @@ export default function Viewer({
             setEditMode(!editMode);
           }}
         >
-          ✎ {editMode ? "編集中" : "編集"}
+          ✎ {editMode ? S.editing : S.edit}
         </button>
         {editMode && (
           <select value={editRes} onChange={(e) => setEditRes(Number(e.target.value))}>
             {EDIT_RESOLUTIONS.map((r) => (
               <option key={r} value={r}>
-                {r}分で配置
+                {S.placeAt(r)}
               </option>
             ))}
           </select>
@@ -695,9 +722,9 @@ export default function Viewer({
               setEditShock(!editShock);
               setEditGhost(false);
             }}
-            title="ショックアロー配置モード"
+            title={S.shockModeTitle}
           >
-            ⚡{editShock ? "ショック配置中" : "ショック"}
+            ⚡{editShock ? S.shockModeActive : S.shockMode}
           </button>
         )}
         {editMode && (
@@ -707,19 +734,19 @@ export default function Viewer({
               setEditGhost(!editGhost);
               setEditShock(false);
             }}
-            title="空打ち配置モード (足の置き直し)"
+            title={S.ghostModeTitle}
           >
-            ◇{editGhost ? "空打ち配置中" : "空打ち"}
+            ◇{editGhost ? S.ghostModeActive : S.ghostMode}
           </button>
         )}
         <button className="secondary" onClick={() => setShowText(!showText)}>
-          {narrow ? "テキスト" : "テキスト入力"}
+          {narrow ? S.textBtnShort : S.textBtn}
         </button>
         <button
           className={hasSofran && !showTiming ? "" : "secondary"}
           onClick={() => setShowTiming(!showTiming)}
         >
-          変速
+          {S.timingBtn}
         </button>
         <select
           value={hispeed}
@@ -727,7 +754,7 @@ export default function Viewer({
             setHispeed(Number(e.target.value));
             setDirty(true);
           }}
-          title="ハイスピ (縦縮尺)"
+          title={S.hispeedTitle}
         >
           {HISPEED_OPTIONS.map((h) => (
             <option key={h} value={h}>
@@ -737,30 +764,26 @@ export default function Viewer({
         </select>
         <span className="toolbar-spacer" />
         <button className="secondary" onClick={copyUrl}>
-          {copied ? "✓ コピー済" : narrow ? "コピー" : "URLをコピー"}
+          {copied ? S.copied : narrow ? S.copyShort : S.copyUrl}
         </button>
       </div>
 
       {editMode && (
         <p className="hint edit-hint">
           {editShock
-            ? "グリッドをタップでショックアロー (⚡踏んではいけない全パネル) を配置・削除します。"
+            ? S.hintShock
             : editGhost
-            ? "グリッドをタップで空打ち (◇判定のない踏み直し・足の置き直し) を配置・削除します。"
-            : "グリッドをタップでノーツを追加、ノーツをタップで削除。フリーズ中のセルは空打ち、終端は空打ちトグルになります。"}
+            ? S.hintGhost
+            : S.hintNormal}
         </p>
       )}
 
       {showTiming && (
         <div className="card text-import">
-          <PanelHead title="変速・停止">
-            ソフラン (途中変速) と停止を設定できます。拍はSMの <code>#BPMS</code> /{" "}
-            <code>#STOPS</code> と同じ0起点のビート単位 (1小節=4拍) です。
-            SMファイルごと「テキスト入力」に貼り付けると自動で取り込まれます。
-          </PanelHead>
+          <PanelHead title={S.timingPanelTitle} helpTitle={S.helpTitle}>{S.timingPanelDesc}</PanelHead>
           <div className="form-row">
             <label className="timing-label">
-              BPM変化 (初期BPM,拍:BPM,…)
+              {S.bpmField}
               <input
                 type="text"
                 value={bpm}
@@ -772,7 +795,7 @@ export default function Viewer({
               />
             </label>
             <label className="timing-label">
-              停止 (拍:秒,…)
+              {S.stopsField}
               <input
                 type="text"
                 value={stops}
@@ -790,6 +813,7 @@ export default function Viewer({
       {showText && (
         <TextImport
           compact={compact}
+          S={S}
           onApply={(next, timing, smTitle) => {
             applyEdit(next);
             setOverrides(new Map());
@@ -1006,7 +1030,7 @@ export default function Viewer({
                 const evIdx = chart.events.findIndex((e) => e.shock && e.row === r);
                 const ov = overrides.get(tickOf(r.beat));
                 const label =
-                  ov === "C" ? "◇両足" : ov === "CL" ? "◇L" : ov === "CR" ? "◇R" : null;
+                  ov === "C" ? S.badgeBoth : ov === "CL" ? "◇L" : ov === "CR" ? "◇R" : null;
                 return (
                 <div
                   key={`shock${i}`}
@@ -1019,7 +1043,7 @@ export default function Viewer({
                     width: laneW * 4 - 4,
                     height: noteSize * 0.8,
                   }}
-                  title="ショックアロー (タップで捌き方を指定)"
+                  title={S.shockRowTitle}
                   onClick={() => {
                     if (editMode || evIdx < 0) return;
                     setPlaying(false);
@@ -1074,7 +1098,7 @@ export default function Viewer({
                     height: noteSize,
                     fontSize: noteSize * 0.6,
                   }}
-                  title="地雷 (踏まない)"
+                  title={S.mineTitle}
                 >
                   ✕
                 </div>
@@ -1139,11 +1163,11 @@ export default function Viewer({
                         </span>
                       )}
                       {step.crossover && step.feet[p] && !step.jump && (
-                        <span className="note-flag flag-cross">交差</span>
+                        <span className="note-flag flag-cross">{S.flagCross}</span>
                       )}
-                      {step.jack && <span className="note-flag flag-jack">縦連</span>}
+                      {step.jack && <span className="note-flag flag-jack">{S.flagJack}</span>}
                       {step.doubleStep && (
-                        <span className="note-flag flag-ds">踏替</span>
+                        <span className="note-flag flag-ds">{S.flagSwitch}</span>
                       )}
                     </div>
                   );
@@ -1176,7 +1200,7 @@ export default function Viewer({
                   go(0);
                   beatRef.current = 0;
                 }}
-                title="最初に戻る"
+                title={S.toStartTitle}
               >
                 {"⏮︎"}
               </button>
@@ -1192,7 +1216,7 @@ export default function Viewer({
                   }
                   togglePlay();
                 }}
-                title="再生 / 停止 (スペースキー)"
+                title={S.playTitle}
               >
                 {playing ? "⏸︎" : "▶︎"}
               </button>
@@ -1228,7 +1252,7 @@ export default function Viewer({
                   }
                   if (next) clapTrackRef.current?.el.pause();
                 }}
-                title="クラップ音"
+                title={S.clapTitle}
               >
                 {muted ? "🔇" : "👏"}
               </button>
@@ -1242,7 +1266,7 @@ export default function Viewer({
                     // 再生中は再生effectがprepareし直して続きから鳴る
                     clapTrackRef.current?.el.pause();
                   }}
-                  title="空打ちのストンプ音"
+                  title={S.stompTitle}
                 >
                   ◇{ghostSound ? "♪" : "🔇"}
                 </button>
@@ -1250,7 +1274,7 @@ export default function Viewer({
               <button
                 className="secondary"
                 onClick={enterFs}
-                title="フルスクリーン再生 (撮影モード)"
+                title={S.fsTitle}
               >
                 ⛶
               </button>
@@ -1263,7 +1287,7 @@ export default function Viewer({
                   go(current - 1);
                 }}
               >
-                ◀ 前
+                {S.prev}
               </button>
               <span className="pos">
                 {footsteps.length > 0 ? current + 1 : 0} / {footsteps.length}
@@ -1275,7 +1299,7 @@ export default function Viewer({
                   go(current + 1);
                 }}
               >
-                次 ▶
+                {S.next}
               </button>
             </div>
             <input
@@ -1291,22 +1315,21 @@ export default function Viewer({
             {curEvent && curStep && (
               <div className="event-info">
                 <div>
-                  {curEvent.row.measure + 1}小節目 —{" "}
+                  {S.measureLabel(curEvent.row.measure + 1)} —{" "}
                   {curEvent.shock
-                    ? "⚡ショックアロー"
+                    ? S.shockArrow
                     : curEvent.panels
                         .map(
                           (p) =>
                             `${["←", "↓", "↑", "→"][p]}${
-                              curStep.feet[p] === "L" ? "左" : curStep.feet[p] === "R" ? "右" : ""
+                              curStep.feet[p] === "L" ? S.footL : curStep.feet[p] === "R" ? S.footR : ""
                             }`
                         )
                         .join(" ")}
                   {facing !== 0 && (
                     <span className="facing-label">
                       {" "}
-                      体の向き {facing > 0 ? "右" : "左"}
-                      {Math.abs(facing)}°
+                      {S.facingLabel(facing > 0 ? "R" : "L", Math.abs(facing))}
                     </span>
                   )}
                   {hasSofran && (
@@ -1315,7 +1338,7 @@ export default function Viewer({
                 </div>
                 {curEvent.panels.length === 2 && (
                   <div className="override-row">
-                    <span className="override-label">踏む足:</span>
+                    <span className="override-label">{S.stepFootLabel}</span>
                     {(["L", "R"] as const).map((opt) => {
                       const [a, b] = curEvent.panels;
                       const arrows = ["←", "↓", "↑", "→"];
@@ -1352,25 +1375,25 @@ export default function Viewer({
                           >
                             {opt === "LL" ? "L" : "R"}
                           </span>
-                          で2枚抜き
+                          {S.bracketWith(opt === "LL" ? "L" : "R")}
                         </button>
                       ))}
                     {curOverride && (
                       <button className="ov-btn" onClick={() => setOverride(null)}>
-                        自動に戻す
+                        {S.resetAuto}
                       </button>
                     )}
                   </div>
                 )}
                 {curEvent.shock && (
                   <div className="override-row">
-                    <span className="override-label">捌き方:</span>
+                    <span className="override-label">{S.handlingLabel}</span>
                     {(
                       [
-                        ["C", "両足で中央"],
-                        ["CL", "Lで中央"],
-                        ["CR", "Rで中央"],
-                      ] as const
+                        ["C", S.centerBoth],
+                        ["CL", S.centerL],
+                        ["CR", S.centerR],
+                      ] as [FootOverride, string][]
                     ).map(([opt, label]) => (
                       <button
                         key={opt}
@@ -1382,29 +1405,29 @@ export default function Viewer({
                     ))}
                     {curOverride && (
                       <button className="ov-btn" onClick={() => setOverride(null)}>
-                        無視に戻す
+                        {S.resetIgnore}
                       </button>
                     )}
                   </div>
                 )}
                 {curEvent.panels.length === 1 && (
                   <div className="override-row">
-                    <span className="override-label">踏む足:</span>
+                    <span className="override-label">{S.stepFootLabel}</span>
                     <button
                       className={`ov-btn foot-l${curOverride === "L" ? " active-l" : ""}`}
                       onClick={() => setOverride(curOverride === "L" ? null : "L")}
                     >
-                      L 左
+                      {S.footLBtn}
                     </button>
                     <button
                       className={`ov-btn foot-r${curOverride === "R" ? " active-r" : ""}`}
                       onClick={() => setOverride(curOverride === "R" ? null : "R")}
                     >
-                      R 右
+                      {S.footRBtn}
                     </button>
                     {curOverride && (
                       <button className="ov-btn" onClick={() => setOverride(null)}>
-                        自動に戻す
+                        {S.resetAuto}
                       </button>
                     )}
                   </div>
@@ -1412,7 +1435,7 @@ export default function Viewer({
                 <div className="tags">
                   {curStep.shock && (
                     <span className="tag shocktag">
-                      {curStep.ghost ? "ショック: 中央空打ちで捌く" : "ショック: 無視 (踏まない)"}
+                      {curStep.ghost ? S.tagShockGhost : S.tagShockIgnore}
                     </span>
                   )}
                   {curStep.ghost && !curStep.shock && (
@@ -1423,23 +1446,23 @@ export default function Viewer({
                           curEvent.row.beat > h.startBeat + 1e-6 &&
                           curEvent.row.beat <= h.endBeat + 1e-6
                       )
-                        ? "空打ち (フリーズ持ち替え)"
-                        : "空打ち (足の置き直し)"}
+                        ? S.tagGhostSwap
+                        : S.tagGhostReposition}
                     </span>
                   )}
-                  {curStep.stretch && <span className="tag onefoot">2枚抜き</span>}
-                  {curStep.jump && !curStep.oneFootJump && <span className="tag jump">ジャンプ</span>}
-                  {curStep.jack && <span className="tag jack">縦連 (同じ足)</span>}
+                  {curStep.stretch && <span className="tag onefoot">{S.tagBracket}</span>}
+                  {curStep.jump && !curStep.oneFootJump && <span className="tag jump">{S.tagJump}</span>}
+                  {curStep.jack && <span className="tag jack">{S.tagJack}</span>}
                   {curStep.crossover && (
-                    <span className="tag crossover">交差 (体を捻る)</span>
+                    <span className="tag crossover">{S.tagCrossover}</span>
                   )}
                   {curStep.doubleStep && (
-                    <span className="tag ds">踏み替え (スライド)</span>
+                    <span className="tag ds">{S.tagFootswitch}</span>
                   )}
                   {curStep.heldFeet.length > 0 && (
                     <span className="tag hold">
-                      フリーズ中:{" "}
-                      {curStep.heldFeet.map((f) => (f === "L" ? "左" : "右")).join("・")}
+                      {S.holding}{" "}
+                      {curStep.heldFeet.map((f) => (f === "L" ? S.footL : S.footR)).join("・")}
                     </span>
                   )}
                 </div>
@@ -1447,9 +1470,9 @@ export default function Viewer({
             )}
             {overrides.size > 0 && (
               <div className="override-summary">
-                手動指定 {overrides.size}件
+                {S.overrideCount(overrides.size)}
                 <button className="ov-btn" onClick={() => { setOverrides(new Map()); setDirty(true); }}>
-                  全て解除
+                  {S.clearAll}
                 </button>
               </div>
             )}
@@ -1462,7 +1485,15 @@ export default function Viewer({
 
 // ===== パネル見出し (?アイコンで説明をトグル表示) =====
 
-function PanelHead({ title, children }: { title: string; children: React.ReactNode }) {
+function PanelHead({
+  title,
+  helpTitle,
+  children,
+}: {
+  title: string;
+  helpTitle?: string;
+  children: React.ReactNode;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div className="panel-head">
@@ -1470,7 +1501,7 @@ function PanelHead({ title, children }: { title: string; children: React.ReactNo
       <button
         className={`help-btn${open ? " open" : ""}`}
         onClick={() => setOpen(!open)}
-        aria-label="ヘルプ"
+        aria-label={helpTitle ?? "Help"}
         type="button"
       >
         ?
@@ -1484,9 +1515,11 @@ function PanelHead({ title, children }: { title: string; children: React.ReactNo
 
 function TextImport({
   compact,
+  S,
   onApply,
 }: {
   compact: string;
+  S: Strings;
   onApply: (next: string, timing?: { b?: string; s?: string }, smTitle?: string) => void;
 }) {
   const [text, setText] = useState(() =>
@@ -1539,7 +1572,7 @@ function TextImport({
       const singles = charts.filter((c) => !/double|couple|routine/i.test(c.type));
       setExcluded(charts.length - singles.length);
       if (singles.length === 0) {
-        setError("シングル (4パネル) の譜面が見つかりませんでした");
+        setError(S.noSingleCharts);
         return;
       }
       if (singles.length === 1) {
@@ -1570,7 +1603,7 @@ function TextImport({
       setText(data.text);
       apply(data.text);
     } catch {
-      setError("取得に失敗しました。URLを確認してください");
+      setError(S.fetchFailed);
     } finally {
       setLoading(false);
     }
@@ -1578,18 +1611,13 @@ function TextImport({
 
   return (
     <div className="card text-import">
-      <PanelHead title="テキスト入力">
-        SM/SSCファイルの <code>#NOTES</code> 以下のノートデータ (小節を <code>,</code> 区切り、
-        1行4文字) を貼り付けて読み込めます。ファイル全体を貼ると{" "}
-        <code>#BPMS</code> / <code>#STOPS</code> (ソフラン・停止) も自動で取り込みます。
-        Webにホストされた <code>.sm</code>/<code>.ssc</code> ファイルのURLを指定して直接読み込むこともできます。
-      </PanelHead>
+      <PanelHead title={S.textPanelTitle} helpTitle={S.helpTitle}>{S.textPanelDesc}</PanelHead>
       <div className="form-row url-import-row">
         <input
           type="url"
           className="url-input"
           value={url}
-          placeholder="https://…/譜面ファイル.sm のURLから読み込む (オプション)"
+          placeholder={S.urlPlaceholder}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") fetchFromUrl();
@@ -1597,18 +1625,17 @@ function TextImport({
           spellCheck={false}
         />
         <button className="secondary" onClick={fetchFromUrl} disabled={loading || !url.trim()}>
-          {loading ? "取得中…" : "URLから読み込み"}
+          {loading ? S.loading : S.loadFromUrl}
         </button>
       </div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <div className="form-row">
-        <button onClick={() => apply()}>この内容を読み込む</button>
+        <button onClick={() => apply()}>{S.loadText}</button>
       </div>
       {choices && (
         <div className="chart-choices">
           <p className="hint" style={{ flexBasis: "100%" }}>
-            複数の譜面が見つかりました。読み込む譜面を選んでください
-            {excluded > 0 && ` (シングル以外の${excluded}譜面は除外)`}:
+            {S.multiCharts(excluded)}
           </p>
           {choices.map((c, i) => (
             <button
@@ -1616,7 +1643,7 @@ function TextImport({
               className="secondary"
               onClick={() => applyChart(c.notes, text, c.timingText)}
             >
-              {c.difficulty || `譜面${i + 1}`}
+              {c.difficulty || S.chartFallback(i + 1)}
               {c.meter && ` (${c.meter})`}
             </button>
           ))}

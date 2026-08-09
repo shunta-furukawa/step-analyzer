@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Viewer from "@/components/Viewer";
 import { decompressCompact } from "@/lib/codec-server";
+import { STRINGS, normalizeLang } from "@/lib/i18n";
 import { SAMPLE_BPM, SAMPLE_COMPACT, SAMPLE_TITLE } from "@/lib/sample";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
@@ -90,6 +91,7 @@ export default async function Page({
   const spd = pick(sp.sp);
   const c = pick(sp.c);
   const bg = c && /^[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : undefined;
+  const lang = normalizeLang(pick(sp.l));
   const isDefault = !n;
 
   return (
@@ -111,14 +113,9 @@ export default async function Page({
         hispeed={hs}
         speed={spd}
         bg={bg}
+        lang={lang}
       />
-      <footer className="site-footer">
-        機能要望・感想は{" "}
-        <a href="https://x.com/MONO_DDR" target="_blank" rel="noopener noreferrer">
-          @MONO_DDR
-        </a>{" "}
-        まで
-      </footer>
+      <footer className="site-footer">{STRINGS[lang].footerContact}</footer>
     </main>
   );
 }
