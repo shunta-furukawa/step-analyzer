@@ -38,6 +38,9 @@ export interface FootStep {
   crossover: boolean; // 足が交差した状態
   doubleStep: boolean;
   oneFootJump: boolean; // 2枚抜き (ジャンプを片足で取る)
+  // 片足が2パネルをまたいで踏んでいる状態 (2枚抜き / フリーズ保持しながらつま先で拾う)。
+  // panels は [保持側 or 若い番号, 踏む側] の2パネル
+  stretch: { foot: Foot; panels: number[] } | null;
   heldFeet: Foot[]; // このイベント時点でフリーズ保持中の足
   facing: number; // 譜面開始からの連続回転角 (負=左向き, 正=右向き)
 }
@@ -266,6 +269,7 @@ export function assignFeet(
     let jack = false;
     let doubleStep = false;
     let oneFootJump = false;
+    let stretch: { foot: Foot; panels: number[] } | null = null;
     const ps = ev.panels;
 
     if (ps.length >= 2) {
@@ -286,6 +290,7 @@ export function assignFeet(
         // 足の位置は横パネル (←/→) を優先して記録する (体の向き計算の近似)
         oneFootJump = true;
         const foot: Foot = jumpOv === "LL" ? "L" : "R";
+        stretch = { foot, panels: [a, b] };
         feet[a] = foot;
         feet[b] = foot;
         const pos = a === 0 || a === 3 ? a : b === 0 || b === 3 ? b : a;
@@ -353,11 +358,21 @@ export function assignFeet(
         }
       }
 
+      // フリーズ保持中の足でもう1パネルを踏む指定 (かかとで保持したまま
+      // つま先で拾う)。足は保持パネルに留め、2枚抜きと同じまたぎ表示にする
+      const heldOther = active.find((x) => x.foot === foot && x.panel !== p);
+      if (heldOther) {
+        stretch = { foot, panels: [heldOther.panel, p] };
+      }
+
       jack = lastPanel === p && lastFoot === foot;
-      doubleStep = !jack && lastFoot === foot && lastPanel !== null && lastPanel !== p;
+      doubleStep =
+        !jack && !stretch && lastFoot === foot && lastPanel !== null && lastPanel !== p;
       feet[p] = foot;
-      if (foot === "L") leftPos = p;
-      else rightPos = p;
+      if (!stretch) {
+        if (foot === "L") leftPos = p;
+        else rightPos = p;
+      }
       lastFoot = foot;
       lastPanel = p;
     }
@@ -379,6 +394,7 @@ export function assignFeet(
       crossover: crossed(leftPos, rightPos),
       doubleStep,
       oneFootJump,
+      stretch,
       heldFeet: Array.from(new Set(active.map((a) => a.foot))),
       facing: contFacing,
     });

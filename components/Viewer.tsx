@@ -466,17 +466,9 @@ export default function Viewer({
   // 再生中の足の描画位置は先読みインデックスから取る (ジャスト到着)
   const footStep = (playing ? footsteps[footIdx] : curStep) ?? curStep;
   const curEvent = chart.events[current];
-  // 2枚抜き中は踏み足を2パネルの中間に表示する
-  const footEventForStage = chart.events[playing ? footIdx : current];
-  const stageOneFoot =
-    footStep?.oneFootJump &&
-    footEventForStage?.panels.length === 2 &&
-    footStep.feet[footEventForStage.panels[0]]
-      ? {
-          foot: footStep.feet[footEventForStage.panels[0]]!,
-          panels: footEventForStage.panels,
-        }
-      : null;
+  // 2枚抜き・フリーズ保持しながらのつま先拾いでは、
+  // 踏み足を2パネルの中間にまたがせて表示する
+  const stageOneFoot = footStep?.stretch ?? null;
   const curTick = curEvent ? tickOf(curEvent.row.beat) : null;
   const curOverride = curTick !== null ? overrides.get(curTick) : undefined;
   const facing = curStep?.facing ?? 0;
@@ -1234,7 +1226,7 @@ export default function Viewer({
                   </div>
                 )}
                 <div className="tags">
-                  {curStep.oneFootJump && <span className="tag onefoot">2枚抜き</span>}
+                  {curStep.stretch && <span className="tag onefoot">2枚抜き</span>}
                   {curStep.jump && !curStep.oneFootJump && <span className="tag jump">ジャンプ</span>}
                   {curStep.jack && <span className="tag jack">縦連 (同じ足)</span>}
                   {curStep.crossover && (
@@ -1491,8 +1483,10 @@ function FootStage({
   }
   const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
   const midY = (STAGE_CENTERS[leftPos].y + STAGE_CENTERS[rightPos].y) / 2;
-  const lStepping = stepping.includes(leftPos) && feet[leftPos] === "L";
-  const rStepping = stepping.includes(rightPos) && feet[rightPos] === "R";
+  const lStepping =
+    (stepping.includes(leftPos) && feet[leftPos] === "L") || oneFoot?.foot === "L";
+  const rStepping =
+    (stepping.includes(rightPos) && feet[rightPos] === "R") || oneFoot?.foot === "R";
 
   // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
   const rot = facing;
