@@ -1466,16 +1466,27 @@ function FootStage({
   let ly = lc.y;
   let rx = rc.x + (same ? 0.22 : 0);
   let ry = rc.y;
-  // 2枚抜き: 踏んでいる足は2パネルの中間 (角) に置いて両パネルをカバーする
+  // 2枚抜き: 踏んでいる足は2パネルの中間 (角) に置き、
+  // 2パネルを結ぶ対角線に沿って斜め (±45°) に傾けて両パネルをカバーする
+  let lTilt = 0;
+  let rTilt = 0;
   if (oneFoot) {
-    const mx = (STAGE_CENTERS[oneFoot.panels[0]].x + STAGE_CENTERS[oneFoot.panels[1]].x) / 2;
-    const my = (STAGE_CENTERS[oneFoot.panels[0]].y + STAGE_CENTERS[oneFoot.panels[1]].y) / 2;
+    const c1 = STAGE_CENTERS[oneFoot.panels[0]];
+    const c2 = STAGE_CENTERS[oneFoot.panels[1]];
+    const mx = (c1.x + c2.x) / 2;
+    const my = (c1.y + c2.y) / 2;
+    // 対角線の向き (0°=上向き)。つま先が上半分を向く側に正規化
+    let tilt = (Math.atan2(c2.x - c1.x, c1.y - c2.y) * 180) / Math.PI;
+    if (tilt > 90) tilt -= 180;
+    if (tilt < -90) tilt += 180;
     if (oneFoot.foot === "L") {
       lx = mx;
       ly = my;
+      lTilt = tilt;
     } else {
       rx = mx;
       ry = my;
+      rTilt = tilt;
     }
   }
   const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
@@ -1528,7 +1539,7 @@ function FootStage({
             style={{
               left: `${(lx / 3) * 100}%`,
               top: `${(ly / 3) * 100}%`,
-              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+              transform: `translate(-50%, -50%) rotate(${rot + lTilt}deg)`,
             }}
           >
             <div className="foot3d-shadow" />
@@ -1545,7 +1556,7 @@ function FootStage({
             style={{
               left: `${(rx / 3) * 100}%`,
               top: `${(ry / 3) * 100}%`,
-              transform: `translate(-50%, -50%) rotate(${rot}deg)`,
+              transform: `translate(-50%, -50%) rotate(${rot + rTilt}deg)`,
             }}
           >
             <div className="foot3d-shadow" />
