@@ -145,8 +145,8 @@ export function parseOverrides(f: string | undefined): Map<number, FootOverride>
   const map = new Map<number, FootOverride>();
   if (!f) return map;
   for (const part of f.split("-")) {
-    // LL/RR = 2枚抜き (ジャンプを片足で取る)
-    const m = part.match(/^(\d+)(LL|RR|L|R)$/);
+    // LL/RR = 2枚抜き (ジャンプを片足で取る)。C/CL/CR = ショックの中央空打ち
+    const m = part.match(/^(\d+)(CL|CR|C|LL|RR|L|R)$/);
     if (m) map.set(Number(m[1]), m[2] as FootOverride);
   }
   return map;

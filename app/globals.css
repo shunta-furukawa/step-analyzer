@@ -837,6 +837,10 @@ input[type="range"]:focus {
   color: #7ce8a9;
 }
 
+.tag.shocktag {
+  color: #7df9ff;
+}
+
 .stat .num.swap-num {
   color: #7ce8a9;
 }

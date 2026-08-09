@@ -4,8 +4,9 @@
 export type Foot = "L" | "R";
 
 // 手動の踏み足指定。L/R = その足で踏む (ジャンプでは若い番号のパネル側)。
-// LL/RR = 2枚抜き (ジャンプの2パネルを片足だけでまとめて踏む)
-export type FootOverride = Foot | "LL" | "RR";
+// LL/RR = 2枚抜き (ジャンプの2パネルを片足だけでまとめて踏む)。
+// C/CL/CR = ショックアローを中央パネルの空打ちで捌く (両足/左足/右足)
+export type FootOverride = Foot | "LL" | "RR" | "C" | "CL" | "CR";
 
 export interface ChartRow {
   measure: number; // 小節番号 (0-based)
@@ -21,6 +22,7 @@ export interface StepEvent {
   row: ChartRow;
   panels: number[]; // 踏むパネル (0=←, 1=↓, 2=↑, 3=→)、昇順。空打ちも含む
   ghostPanels: number[]; // このうち空打ち (5) のパネル
+  shock?: boolean; // ショックアロー行 (panelsは空。中央空打ち指定の対象になる)
 }
 
 export interface Hold {
@@ -43,6 +45,7 @@ export interface FootStep {
   // 空打ちの持ち替えで解放され、まだ次を踏んでいない足。
   // 表示上はパネルから浮かせてニュートラル位置に置く
   liftedFoot: Foot | null;
+  shock: boolean; // ショックアロー行 (中央空打ち指定があれば ghost=true)
   // 片足が2パネルをまたいで踏んでいる状態 (2枚抜き / フリーズ保持しながらつま先で拾う)。
   // panels は [保持側 or 若い番号, 踏む側] の2パネル
   stretch: { foot: Foot; panels: number[] } | null;
@@ -84,11 +87,14 @@ export const QUANT_COLORS: Record<number, string> = {
 };
 
 // パネルの物理座標 (足の移動距離・体の向きの計算用)。0=←, 1=↓, 2=↑, 3=→
+// 4=中央 (ショックアローの中央空打ちで足を置く位置)
+export const CENTER_POS = 4;
 export const PANEL_COORDS = [
   { x: 0, y: 1 },
   { x: 1, y: 2 },
   { x: 1, y: 0 },
   { x: 2, y: 1 },
+  { x: 1, y: 1 },
 ];
 
 function dist(a: number, b: number): number {
@@ -165,6 +171,11 @@ export function parseCompact(n: string): ParsedChart {
 
   const events: StepEvent[] = [];
   for (const row of rows) {
+    // ショックアロー行はパネルなしのイベントとして選択・指定の対象にする
+    if (row.cols === "MMMM") {
+      events.push({ eventIdx: events.length, row, panels: [], ghostPanels: [], shock: true });
+      continue;
+    }
     const panels: number[] = [];
     const ghostPanels: number[] = [];
     for (let c = 0; c < 4; c++) {
@@ -286,6 +297,45 @@ export function assignFeet(
     let stretch: { foot: Foot; panels: number[] } | null = null;
     const ps = ev.panels;
 
+    // ショックアロー: デフォルトは無視 (足は動かない)。
+    // C/CL/CR 指定で中央パネルを両足/左足/右足の空打ちで捌く
+    if (ev.shock) {
+      const ovS = overrides?.get(tickOf(beat));
+      let ghostFlag = false;
+      if (ovS === "C" || ovS === "CL" || ovS === "CR") {
+        ghostFlag = true;
+        if (ovS !== "CR") {
+          leftPos = CENTER_POS;
+          if (lifted === "L") lifted = null;
+        }
+        if (ovS !== "CL") {
+          rightPos = CENTER_POS;
+          if (lifted === "R") lifted = null;
+        }
+        // 片足踏みなら次はその逆足からの交互、両足なら再スタート
+        lastFoot = ovS === "CL" ? "L" : ovS === "CR" ? "R" : null;
+        lastPanel = null;
+      }
+      contFacing = unwrapDeg(facingDeg(leftPos, rightPos), contFacing);
+      out.push({
+        feet,
+        leftPos,
+        rightPos,
+        jump: false,
+        jack: false,
+        crossover: crossed(leftPos, rightPos),
+        doubleStep: false,
+        oneFootJump: false,
+        ghost: ghostFlag,
+        liftedFoot: lifted,
+        shock: true,
+        stretch: null,
+        heldFeet: Array.from(new Set(active.map((a) => a.foot))),
+        facing: contFacing,
+      });
+      continue;
+    }
+
     if (ps.length >= 2) {
       jump = true;
       const [a, b] = ps;
@@ -314,7 +364,7 @@ export function assignFeet(
         lastFoot = foot;
         lastPanel = null;
       } else {
-        if (jumpOv ? jumpOv === "L" : cost(a, b) <= cost(b, a)) {
+        if (jumpOv === "L" || jumpOv === "R" ? jumpOv === "L" : cost(a, b) <= cost(b, a)) {
           leftPos = a;
           rightPos = b;
         } else {
@@ -431,6 +481,7 @@ export function assignFeet(
       oneFootJump,
       ghost: ev.ghostPanels.length > 0,
       liftedFoot: lifted,
+      shock: false,
       stretch,
       heldFeet: Array.from(new Set(active.map((a) => a.foot))),
       facing: contFacing,
@@ -451,7 +502,7 @@ export interface ChartStats {
 
 export function statsOf(footsteps: FootStep[], shocks = 0): ChartStats {
   return {
-    steps: footsteps.filter((f) => !f.ghost).length,
+    steps: footsteps.filter((f) => !f.ghost && !f.shock).length,
     jumps: footsteps.filter((f) => f.jump).length,
     jacks: footsteps.filter((f) => f.jack).length,
     crossovers: footsteps.filter((f) => f.crossover).length,

@@ -268,19 +268,22 @@ export default function Viewer({
   const prepareClapTrack = useCallback(() => {
     if (!chart || timeline.length === 0) return null;
     setPlaybackAudioSession();
-    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}`;
+    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}|${serializeOverrides(overrides)}`;
     if (clapTrackRef.current?.key === key) return clapTrackRef.current.el;
     if (clapTrackRef.current) {
       clapTrackRef.current.el.pause();
       URL.revokeObjectURL(clapTrackRef.current.url);
     }
-    // 空打ちはクラップではなく低いストンプ音 (オプションでOFF可)
-    const judged = chart.events.filter((e) => e.ghostPanels.length === 0);
+    // 空打ちはクラップではなく低いストンプ音 (オプションでOFF可)。
+    // ショックは無視ならミュート、中央空打ち指定ならストンプ
+    const judged = chart.events.filter(
+      (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
+    );
     const times = judged.map((e) => timeAtBeat(timeline, e.row.beat) / speed);
     const accents = judged.map((e) => e.panels.length >= 2);
     const ghostTimes = ghostSound
       ? chart.events
-          .filter((e) => e.ghostPanels.length > 0)
+          .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
           .map((e) => timeAtBeat(timeline, e.row.beat) / speed)
       : [];
     const url = buildClapTrackUrl(
@@ -294,7 +297,7 @@ export default function Viewer({
     el.setAttribute("playsinline", "");
     clapTrackRef.current = { key, el, url };
     return el;
-  }, [chart, timeline, compact, bpm, stops, speed, ghostSound]);
+  }, [chart, timeline, compact, bpm, stops, speed, ghostSound, overrides, footsteps]);
 
   // 再生開始 (ユーザー操作の文脈で呼ぶこと: audio.play()の許可が必要)
   const startPlayback = useCallback(() => {
@@ -1127,7 +1130,9 @@ export default function Viewer({
             <FootStage
               leftPos={footStep?.leftPos ?? 0}
               rightPos={footStep?.rightPos ?? 3}
-              stepping={curEvent?.panels ?? []}
+              stepping={
+                curStep?.shock && curStep.ghost ? [4] : curEvent?.panels ?? []
+              }
               feet={curStep?.feet ?? [null, null, null, null]}
               facing={footStep?.facing ?? facing}
               stepKey={current}
@@ -1199,7 +1204,8 @@ export default function Viewer({
               >
                 {muted ? "🔇" : "👏"}
               </button>
-              {chart.events.some((e) => e.ghostPanels.length > 0) && (
+              {(chart.events.some((e) => e.ghostPanels.length > 0) ||
+                footsteps.some((s) => s.shock && s.ghost)) && (
                 <button
                   className={ghostSound ? "" : "secondary"}
                   onClick={() => {
@@ -1258,14 +1264,16 @@ export default function Viewer({
               <div className="event-info">
                 <div>
                   {curEvent.row.measure + 1}小節目 —{" "}
-                  {curEvent.panels
-                    .map(
-                      (p) =>
-                        `${["←", "↓", "↑", "→"][p]}${
-                          curStep.feet[p] === "L" ? "左" : curStep.feet[p] === "R" ? "右" : ""
-                        }`
-                    )
-                    .join(" ")}
+                  {curEvent.shock
+                    ? "⚡ショックアロー"
+                    : curEvent.panels
+                        .map(
+                          (p) =>
+                            `${["←", "↓", "↑", "→"][p]}${
+                              curStep.feet[p] === "L" ? "左" : curStep.feet[p] === "R" ? "右" : ""
+                            }`
+                        )
+                        .join(" ")}
                   {facing !== 0 && (
                     <span className="facing-label">
                       {" "}
@@ -1326,6 +1334,31 @@ export default function Viewer({
                     )}
                   </div>
                 )}
+                {curEvent.shock && (
+                  <div className="override-row">
+                    <span className="override-label">捌き方:</span>
+                    {(
+                      [
+                        ["C", "両足で中央"],
+                        ["CL", "Lで中央"],
+                        ["CR", "Rで中央"],
+                      ] as const
+                    ).map(([opt, label]) => (
+                      <button
+                        key={opt}
+                        className={`ov-btn${curOverride === opt ? " active" : ""}`}
+                        onClick={() => setOverride(curOverride === opt ? null : opt)}
+                      >
+                        ◇{label}
+                      </button>
+                    ))}
+                    {curOverride && (
+                      <button className="ov-btn" onClick={() => setOverride(null)}>
+                        無視に戻す
+                      </button>
+                    )}
+                  </div>
+                )}
                 {curEvent.panels.length === 1 && (
                   <div className="override-row">
                     <span className="override-label">踏む足:</span>
@@ -1349,7 +1382,12 @@ export default function Viewer({
                   </div>
                 )}
                 <div className="tags">
-                  {curStep.ghost && (
+                  {curStep.shock && (
+                    <span className="tag shocktag">
+                      {curStep.ghost ? "ショック: 中央空打ちで捌く" : "ショック: 無視 (踏まない)"}
+                    </span>
+                  )}
+                  {curStep.ghost && !curStep.shock && (
                     <span className="tag ghostswap">
                       {chart.holds.some(
                         (h) =>
@@ -1559,6 +1597,7 @@ const STAGE_CENTERS = [
   { x: 1.5, y: 2.5 },
   { x: 1.5, y: 0.5 },
   { x: 2.5, y: 1.5 },
+  { x: 1.5, y: 1.5 }, // 4 = 中央 (ショックの中央空打ち)
 ];
 
 const STAGE_LAYOUT: (number | null)[][] = [
@@ -1633,9 +1672,11 @@ function FootStage({
   const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
   const midY = (STAGE_CENTERS[leftPos].y + STAGE_CENTERS[rightPos].y) / 2;
   const lStepping =
-    (stepping.includes(leftPos) && feet[leftPos] === "L") || oneFoot?.foot === "L";
+    (stepping.includes(leftPos) && (leftPos === 4 || feet[leftPos] === "L")) ||
+    oneFoot?.foot === "L";
   const rStepping =
-    (stepping.includes(rightPos) && feet[rightPos] === "R") || oneFoot?.foot === "R";
+    (stepping.includes(rightPos) && (rightPos === 4 || feet[rightPos] === "R")) ||
+    oneFoot?.foot === "R";
 
   return (
     <div className="stage3d">
