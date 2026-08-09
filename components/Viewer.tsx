@@ -1001,18 +1001,30 @@ export default function Viewer({
                 />
               ))}
 
-              {chart.shocks.map((r, i) => (
-                r.beat < viewBeats.a || r.beat > viewBeats.b ? null :
+              {chart.shocks.map((r, i) => {
+                if (r.beat < viewBeats.a || r.beat > viewBeats.b) return null;
+                const evIdx = chart.events.findIndex((e) => e.shock && e.row === r);
+                const ov = overrides.get(tickOf(r.beat));
+                const label =
+                  ov === "C" ? "◇両足" : ov === "CL" ? "◇L" : ov === "CR" ? "◇R" : null;
+                return (
                 <div
                   key={`shock${i}`}
-                  className="shock-row"
+                  className={`shock-row${editMode ? " editing" : ""}${
+                    evIdx === current && !editMode ? " current" : ""
+                  }`}
                   style={{
                     left: 2,
                     top: r.beat * pxPerBeat + noteSize * 0.1,
                     width: laneW * 4 - 4,
                     height: noteSize * 0.8,
                   }}
-                  title="ショックアロー (踏んではいけない)"
+                  title="ショックアロー (タップで捌き方を指定)"
+                  onClick={() => {
+                    if (editMode || evIdx < 0) return;
+                    setPlaying(false);
+                    go(evIdx);
+                  }}
                 >
                   {[0, 1, 2, 3].map((p) => (
                     <svg
@@ -1031,8 +1043,24 @@ export default function Viewer({
                       />
                     </svg>
                   ))}
+                  {label && (
+                    <span
+                      className="shock-label"
+                      style={{
+                        color:
+                          ov === "CL"
+                            ? "var(--foot-l)"
+                            : ov === "CR"
+                            ? "var(--foot-r)"
+                            : "#7df9ff",
+                      }}
+                    >
+                      {label}
+                    </span>
+                  )}
                 </div>
-              ))}
+                );
+              })}
 
               {chart.mines.map((m, i) => (
                 m.beat < viewBeats.a || m.beat > viewBeats.b ? null :

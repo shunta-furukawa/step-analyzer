@@ -563,13 +563,14 @@ select {
   font-weight: 700;
 }
 
-/* ショックアロー: 全パネルを貫く電撃ライン。タップは下の編集グリッドへ透過 */
+/* ショックアロー: 全パネルを貫く電撃ライン。タップで選択して捌き方を指定。
+   編集モード中だけタップを下のグリッドへ透過する */
 .shock-row {
   position: absolute;
   display: flex;
   align-items: center;
   justify-content: space-around;
-  pointer-events: none;
+  cursor: pointer;
   background: linear-gradient(
     90deg,
     rgba(125, 249, 255, 0.05),
@@ -592,6 +593,32 @@ select {
   100% {
     opacity: 0.55;
   }
+}
+
+.shock-row.editing {
+  pointer-events: none;
+}
+
+.shock-row.current {
+  outline: 3px solid #fff;
+  outline-offset: 1px;
+  animation: none;
+  z-index: 3;
+}
+
+/* ショックの捌き方バッジ (◇両足/◇L/◇R) */
+.shock-label {
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 3px 4px;
+  background: rgba(13, 15, 20, 0.88);
+  border: 1px solid currentColor;
+  white-space: nowrap;
 }
 
 .stat .num.shock-num {
