@@ -873,10 +873,48 @@ select {
   flex-wrap: wrap;
 }
 
-/* 再生コントロール: 指で押しやすい最小タップ寸法を確保する */
+/* 再生コントロール: 指で押しやすい最小タップ寸法を確保する。
+   ボタン内のラベルは折り返さない */
 .controls button {
   min-width: 48px;
   min-height: 42px;
+  white-space: nowrap;
+}
+
+/* 前/次のナビ行はボタンの並び自体も折り返さない (英語のPrev/Next対策)。
+   スペースが足りないときはカウンター側を縮める */
+.nav-controls {
+  flex-wrap: nowrap;
+}
+
+.nav-controls button {
+  flex-shrink: 0;
+  padding-left: 10px;
+  padding-right: 10px;
+}
+
+.nav-controls .pos {
+  min-width: 0;
+  flex-shrink: 1;
+  white-space: nowrap;
+}
+
+/* 狭い画面ではナビボタンを詰めてカード内に収める */
+@media (max-width: 430px) {
+  .nav-controls {
+    gap: 4px;
+  }
+
+  .nav-controls button {
+    padding-left: 8px;
+    padding-right: 8px;
+    font-size: 12px;
+    min-width: 0;
+  }
+
+  .nav-controls .pos {
+    font-size: 11px;
+  }
 }
 
 .controls .pos {

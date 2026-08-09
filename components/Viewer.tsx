@@ -1279,7 +1279,7 @@ export default function Viewer({
                 ⛶
               </button>
             </div>
-            <div className="controls">
+            <div className="controls nav-controls">
               <button
                 className="secondary"
                 onClick={() => {
