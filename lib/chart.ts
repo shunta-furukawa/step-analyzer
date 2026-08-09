@@ -40,6 +40,9 @@ export interface FootStep {
   doubleStep: boolean;
   oneFootJump: boolean; // 2枚抜き (ジャンプを片足で取る)
   ghost: boolean; // 空打ち (フリーズの踏み直し・持ち替え)
+  // 空打ちの持ち替えで解放され、まだ次を踏んでいない足。
+  // 表示上はパネルから浮かせてニュートラル位置に置く
+  liftedFoot: Foot | null;
   // 片足が2パネルをまたいで踏んでいる状態 (2枚抜き / フリーズ保持しながらつま先で拾う)。
   // panels は [保持側 or 若い番号, 踏む側] の2パネル
   stretch: { foot: Foot; panels: number[] } | null;
@@ -264,6 +267,8 @@ export function assignFeet(
   // 現在保持中のフリーズ。テール拍のノーツも保持足では踏めないため、
   // ロックは endBeat を含む (beat <= endBeat の間有効)
   let active: { panel: number; endBeat: number; foot: Foot }[] = [];
+  // 持ち替えで解放され、まだ次を踏んでいない足
+  let lifted: Foot | null = null;
   // 譜面開始からの連続回転角 (±180を超える回転は禁止)
   let contFacing = 0;
 
@@ -392,12 +397,19 @@ export function assignFeet(
     }
     contFacing = unwrapDeg(facingDeg(leftPos, rightPos), contFacing);
 
-    // 空打ち (踏み直し) されたフリーズは、踏んだ足に保持を引き継ぐ
+    // このイベントで踏んだ足は「浮き」状態を解除
+    if (lifted && feet.includes(lifted)) lifted = null;
+
+    // 空打ち (踏み直し) されたフリーズは、踏んだ足に保持を引き継ぐ。
+    // 引き継ぎで解放された足は次に踏むまで浮かせる
     for (const gp of ev.ghostPanels) {
       const f = feet[gp];
       if (!f) continue;
       for (const a of active) {
-        if (a.panel === gp) a.foot = f;
+        if (a.panel === gp) {
+          if (a.foot !== f) lifted = a.foot;
+          a.foot = f;
+        }
       }
     }
 
@@ -418,6 +430,7 @@ export function assignFeet(
       doubleStep,
       oneFootJump,
       ghost: ev.ghostPanels.length > 0,
+      liftedFoot: lifted,
       stretch,
       heldFeet: Array.from(new Set(active.map((a) => a.foot))),
       facing: contFacing,

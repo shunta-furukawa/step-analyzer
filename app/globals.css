@@ -721,6 +721,16 @@ select {
   z-index: 2;
 }
 
+/* 持ち替えで解放され浮いている足: 接地していないので影を薄く・少し透ける */
+.foot3d.lifted {
+  opacity: 0.8;
+}
+
+.foot3d.lifted .foot3d-shadow {
+  opacity: 0.25;
+  transform: scale(0.8);
+}
+
 .foot3d-shadow {
   position: absolute;
   inset: 6% 0 -4% 0;

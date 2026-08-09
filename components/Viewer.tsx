@@ -1133,6 +1133,7 @@ export default function Viewer({
               stepKey={current}
               heldFeet={footStep?.heldFeet ?? []}
               oneFoot={stageOneFoot}
+              liftedFoot={footStep?.liftedFoot ?? null}
             />
             <div className="controls">
               <button
@@ -1575,6 +1576,7 @@ function FootStage({
   stepKey,
   heldFeet,
   oneFoot,
+  liftedFoot,
 }: {
   leftPos: number;
   rightPos: number;
@@ -1584,8 +1586,9 @@ function FootStage({
   stepKey: number;
   heldFeet: Foot[];
   oneFoot: { foot: Foot; panels: number[] } | null;
+  liftedFoot: Foot | null;
 }) {
-  const same = leftPos === rightPos;
+  const same = leftPos === rightPos && !liftedFoot;
   // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
   const rot = facing;
   const lc = STAGE_CENTERS[leftPos];
@@ -1617,6 +1620,15 @@ function FootStage({
       ry = my;
       rRot = tilt;
     }
+  }
+
+  // 持ち替えで解放された足は、次に踏むまで中央 (ニュートラル位置) に浮かせる
+  if (liftedFoot === "L") {
+    lx = 1.5 - 0.28;
+    ly = 1.5;
+  } else if (liftedFoot === "R") {
+    rx = 1.5 + 0.28;
+    ry = 1.5;
   }
   const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
   const midY = (STAGE_CENTERS[leftPos].y + STAGE_CENTERS[rightPos].y) / 2;
@@ -1663,7 +1675,7 @@ function FootStage({
 
           {/* 足 */}
           <div
-            className="foot3d"
+            className={`foot3d${liftedFoot === "L" ? " lifted" : ""}`}
             style={{
               left: `${(lx / 3) * 100}%`,
               top: `${(ly / 3) * 100}%`,
@@ -1680,7 +1692,7 @@ function FootStage({
             </div>
           </div>
           <div
-            className="foot3d"
+            className={`foot3d${liftedFoot === "R" ? " lifted" : ""}`}
             style={{
               left: `${(rx / 3) * 100}%`,
               top: `${(ry / 3) * 100}%`,
