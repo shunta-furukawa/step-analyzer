@@ -823,6 +823,19 @@ input[type="range"]:focus {
   color: #7df9ff;
 }
 
+.tag.ghostswap {
+  color: #7ce8a9;
+}
+
+.stat .num.swap-num {
+  color: #7ce8a9;
+}
+
+/* 空打ちノーツ (破線ゴースト) は実ノーツより控えめに */
+.note.ghost-note {
+  opacity: 0.92;
+}
+
 .tag.jack {
   color: #ffab8a;
 }

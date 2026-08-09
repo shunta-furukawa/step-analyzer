@@ -71,13 +71,15 @@ function setChar(row: string, i: number, ch: string): string {
  * @param resRow 解像度res上での行番号 (0 <= resRow < res)
  * @param res 小節あたりの行数としての解像度 (4/8/12/16/24 または小節の元解像度)
  * @param panel 0=←, 1=↓, 2=↑, 3=→
+ * @param ch 置くノーツ文字 (通常 "1"、フリーズ中のセルには "5"=空打ち)
  */
 export function toggleNote(
   compact: string,
   mIdx: number,
   resRow: number,
   res: number,
-  panel: number
+  panel: number,
+  ch: "1" | "5" = "1"
 ): string {
   const measures = compact.split("-").map(splitRows);
   const rows = measures[mIdx];
@@ -91,7 +93,7 @@ export function toggleNote(
   }
   const target = resRow * (L / res);
   const cur = expanded[target][panel];
-  expanded[target] = setChar(expanded[target], panel, cur === "0" ? "1" : "0");
+  expanded[target] = setChar(expanded[target], panel, cur === "0" ? ch : "0");
 
   measures[mIdx] = reduceRows(expanded);
   cleanupHolds(measures);

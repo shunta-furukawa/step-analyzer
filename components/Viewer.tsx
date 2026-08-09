@@ -162,6 +162,37 @@ export default function Viewer({
     [footsteps, chart]
   );
 
+  // フリーズバーを保持足の色で塗り分けるためのセグメント。
+  // 空打ち (持ち替え) のたびに区間を切り、以降は引き継いだ足の色にする
+  const holdSegments = useMemo(() => {
+    if (!chart) return [];
+    const segs: {
+      panel: number;
+      start: number;
+      end: number;
+      foot: Foot | null;
+      roll: boolean;
+    }[] = [];
+    for (const h of chart.holds) {
+      const headIdx = chart.events.findIndex(
+        (e) => Math.abs(e.row.beat - h.startBeat) < 1e-6 && e.panels.includes(h.panel)
+      );
+      let foot: Foot | null =
+        headIdx >= 0 ? footsteps[headIdx]?.feet[h.panel] ?? null : null;
+      let segStart = h.startBeat;
+      chart.events.forEach((e, i) => {
+        if (!e.ghostPanels.includes(h.panel)) return;
+        const b = e.row.beat;
+        if (b <= h.startBeat + 1e-6 || b >= h.endBeat - 1e-6) return;
+        segs.push({ panel: h.panel, start: segStart, end: b, foot, roll: h.roll });
+        segStart = b;
+        foot = footsteps[i]?.feet[h.panel] ?? foot;
+      });
+      segs.push({ panel: h.panel, start: segStart, end: h.endBeat, foot, roll: h.roll });
+    }
+    return segs;
+  }, [chart, footsteps]);
+
   // ソフラン・停止のタイミングデータ
   const bpms = useMemo(() => parseBpmParam(bpm), [bpm]);
   const stopList = useMemo(() => parseStopsParam(stops), [stops]);
@@ -241,8 +272,10 @@ export default function Viewer({
       clapTrackRef.current.el.pause();
       URL.revokeObjectURL(clapTrackRef.current.url);
     }
-    const times = chart.events.map((e) => timeAtBeat(timeline, e.row.beat) / speed);
-    const accents = chart.events.map((e) => e.panels.length >= 2);
+    // 空打ちは判定のあるノーツではないのでクラップを鳴らさない
+    const judged = chart.events.filter((e) => e.ghostPanels.length === 0);
+    const times = judged.map((e) => timeAtBeat(timeline, e.row.beat) / speed);
+    const accents = judged.map((e) => e.panels.length >= 2);
     const url = buildClapTrackUrl(
       times,
       accents,
@@ -607,6 +640,12 @@ export default function Viewer({
               <div className="num">{stats.doubleSteps}</div>
               <div className="label">踏み替え</div>
             </div>
+            {stats.holdSwaps > 0 && (
+              <div className="stat">
+                <div className="num swap-num">{stats.holdSwaps}</div>
+                <div className="label">空打ち</div>
+              </div>
+            )}
             {stats.shocks > 0 && (
               <div className="stat">
                 <div className="num shock-num">{stats.shocks}</div>
@@ -859,13 +898,20 @@ export default function Viewer({
                           width: noteSize,
                           height: cellH,
                         }}
-                        onClick={() =>
+                        onClick={() => {
+                          // フリーズ保持中のセルには空打ち (5) を置く
+                          const inHold = chart.holds.some(
+                            (h) =>
+                              h.panel === p &&
+                              beat > h.startBeat + 1e-6 &&
+                              beat < h.endBeat - 1e-6
+                          );
                           applyEdit(
                             editShock
                               ? toggleShock(compact, mi, r, editRes)
-                              : toggleNote(compact, mi, r, editRes, p)
-                          )
-                        }
+                              : toggleNote(compact, mi, r, editRes, p, inHold ? "5" : "1")
+                          );
+                        }}
                       />
                     ));
                   });
@@ -895,17 +941,24 @@ export default function Viewer({
                 ) : null
               )}
 
-              {chart.holds.map((h, i) => (
-                h.endBeat < viewBeats.a || h.startBeat > viewBeats.b ? null :
+              {holdSegments.map((s, i) => (
+                s.end < viewBeats.a || s.start > viewBeats.b ? null :
                 <div
                   key={`h${i}`}
                   className="hold-body"
                   style={{
-                    left: h.panel * laneW + (laneW - noteSize) / 2 + 6,
-                    top: h.startBeat * pxPerBeat + noteSize / 2,
+                    left: s.panel * laneW + (laneW - noteSize) / 2 + 6,
+                    top: s.start * pxPerBeat + noteSize / 2,
                     width: noteSize - 12,
-                    height: (h.endBeat - h.startBeat) * pxPerBeat,
-                    background: h.roll ? "#ff9f43" : "#2ecc71",
+                    height: (s.end - s.start) * pxPerBeat,
+                    // ロールはオレンジ、フリーズは保持足の色 (不明なら緑)
+                    background: s.roll
+                      ? "#ff9f43"
+                      : s.foot === "L"
+                      ? "rgba(255, 92, 168, 0.66)"
+                      : s.foot === "R"
+                      ? "rgba(56, 189, 248, 0.66)"
+                      : "#2ecc71",
                   }}
                 />
               ))}
@@ -967,10 +1020,11 @@ export default function Viewer({
                 return ev.panels.map((p) => {
                   const foot = step.feet[p];
                   const hasOverride = overrides.has(tickOf(ev.row.beat));
+                  const isGhost = ev.ghostPanels.includes(p);
                   return (
                     <div
                       key={`${i}-${p}`}
-                      className={`note${i === current && !editMode ? " current" : ""}`}
+                      className={`note${i === current && !editMode ? " current" : ""}${isGhost ? " ghost-note" : ""}`}
                       style={{
                         left: p * laneW + (laneW - noteSize) / 2,
                         top: ev.row.beat * pxPerBeat,
@@ -986,11 +1040,30 @@ export default function Viewer({
                         }
                       }}
                     >
-                      <Arrow
-                        size={noteSize}
-                        rotation={ARROW_ROTATIONS[p]}
-                        color={QUANT_COLORS[ev.row.quant] ?? "#9aa3b5"}
-                      />
+                      {isGhost ? (
+                        // 空打ち: 破線の白抜き矢印 (判定のないゴーストノーツ)
+                        <svg
+                          viewBox={ARROW_VIEWBOX}
+                          width={noteSize}
+                          height={noteSize}
+                          style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
+                        >
+                          <path
+                            d={ARROW_PATH}
+                            fill="rgba(46, 204, 113, 0.12)"
+                            stroke="#7ce8a9"
+                            strokeWidth={3.5}
+                            strokeDasharray="7 5"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ) : (
+                        <Arrow
+                          size={noteSize}
+                          rotation={ARROW_ROTATIONS[p]}
+                          color={QUANT_COLORS[ev.row.quant] ?? "#9aa3b5"}
+                        />
+                      )}
                       {foot && (
                         <span
                           className={`foot-badge${hasOverride ? " pinned" : ""}`}
@@ -1226,6 +1299,9 @@ export default function Viewer({
                   </div>
                 )}
                 <div className="tags">
+                  {curStep.ghost && (
+                    <span className="tag ghostswap">空打ち (フリーズ持ち替え)</span>
+                  )}
                   {curStep.stretch && <span className="tag onefoot">2枚抜き</span>}
                   {curStep.jump && !curStep.oneFootJump && <span className="tag jump">ジャンプ</span>}
                   {curStep.jack && <span className="tag jack">縦連 (同じ足)</span>}

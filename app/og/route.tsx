@@ -162,7 +162,10 @@ function ChartLanes({
   const laneInnerW = cell * 4;
   const laneH = H - 100;
 
-  const noteMap = new Map<string, { color: string; ring: string | null }>();
+  const noteMap = new Map<
+    string,
+    { color: string; ring: string | null; ghost: boolean }
+  >();
   chart.events.forEach((ev, i) => {
     const step = footsteps[i];
     for (const p of ev.panels) {
@@ -170,6 +173,7 @@ function ChartLanes({
       noteMap.set(`${ev.row.measure}:${ev.row.idx}:${p}`, {
         color: QUANT_COLORS[ev.row.quant] ?? "#9aa3b5",
         ring: foot ? FOOT_COLORS[foot] : null,
+        ghost: ev.ghostPanels.includes(p),
       });
     }
   });
@@ -305,6 +309,7 @@ function ChartLanes({
                         position: "absolute",
                         left: 8 + p * cell,
                         top: y,
+                        opacity: info.ghost ? 0.45 : 1,
                       }}
                     >
                       <OgArrow

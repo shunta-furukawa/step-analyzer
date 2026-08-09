@@ -14,10 +14,10 @@ export function normalizeNotesInput(text: string): NormalizeResult {
   if (!trimmed) throw new Error("譜面データを入力してください");
 
   // すでにコンパクト形式ならそのまま検証して返す
-  if (/^[01234M-]+$/.test(trimmed) && trimmed.includes("-")) {
+  if (/^[012345M-]+$/.test(trimmed) && trimmed.includes("-")) {
     return validateCompact(trimmed);
   }
-  if (/^[01234M]+$/.test(trimmed) && trimmed.length % 4 === 0 && !trimmed.includes("\n")) {
+  if (/^[012345M]+$/.test(trimmed) && trimmed.length % 4 === 0 && !trimmed.includes("\n")) {
     return validateCompact(trimmed);
   }
 
@@ -46,8 +46,8 @@ export function normalizeNotesInput(text: string): NormalizeResult {
       if (line.length === 8)
         throw new Error("8パネルの譜面 (ダブル) には対応していません。4パネル (シングル) の譜面を入力してください");
       if (line.length !== 4) continue;
-      // 未対応のノート種 (K/L/F など) は 0 に置換
-      rows.push(line.toUpperCase().replace(/[^01234M]/g, "0"));
+      // 未対応のノート種 (K/L/F など) は 0 に置換 (5=空打ちは本アプリ独自の拡張)
+      rows.push(line.toUpperCase().replace(/[^012345M]/g, "0"));
     }
     if (rows.length > 0) measures.push(rows.join(""));
   }

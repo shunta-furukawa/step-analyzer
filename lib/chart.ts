@@ -19,7 +19,8 @@ export interface ChartRow {
 export interface StepEvent {
   eventIdx: number;
   row: ChartRow;
-  panels: number[]; // 踏むパネル (0=←, 1=↓, 2=↑, 3=→)、昇順
+  panels: number[]; // 踏むパネル (0=←, 1=↓, 2=↑, 3=→)、昇順。空打ちも含む
+  ghostPanels: number[]; // このうち空打ち (5) のパネル
 }
 
 export interface Hold {
@@ -38,6 +39,7 @@ export interface FootStep {
   crossover: boolean; // 足が交差した状態
   doubleStep: boolean;
   oneFootJump: boolean; // 2枚抜き (ジャンプを片足で取る)
+  ghost: boolean; // 空打ち (フリーズの踏み直し・持ち替え)
   // 片足が2パネルをまたいで踏んでいる状態 (2枚抜き / フリーズ保持しながらつま先で拾う)。
   // panels は [保持側 or 若い番号, 踏む側] の2パネル
   stretch: { foot: Foot; panels: number[] } | null;
@@ -120,7 +122,8 @@ const MAX_ROTATION = 180.5;
 
 /**
  * コンパクト形式の譜面文字列をパースする。
- * 形式: 小節を "-" 区切りで連結。各小節は4文字/行を改行なしで連結した [01234M] の列。
+ * 形式: 小節を "-" 区切りで連結。各小節は4文字/行を改行なしで連結した [012345M] の列。
+ * 5 = 空打ち (フリーズ保持中の踏み直し。判定はないが足の持ち替えを表す)
  * 例: "0001001001001000-1000010000100001" (2小節、各4分×4行)
  */
 export function parseCompact(n: string): ParsedChart {
@@ -131,7 +134,7 @@ export function parseCompact(n: string): ParsedChart {
 
   const measures: string[][] = [];
   for (const [mi, ms] of measureStrs.entries()) {
-    if (!/^[01234M]+$/.test(ms))
+    if (!/^[012345M]+$/.test(ms))
       throw new Error(`${mi + 1}小節目に不正な文字が含まれています`);
     if (ms.length % 4 !== 0)
       throw new Error(`${mi + 1}小節目の長さが4の倍数ではありません`);
@@ -159,12 +162,17 @@ export function parseCompact(n: string): ParsedChart {
   const events: StepEvent[] = [];
   for (const row of rows) {
     const panels: number[] = [];
+    const ghostPanels: number[] = [];
     for (let c = 0; c < 4; c++) {
       const ch = row.cols[c];
       if (ch === "1" || ch === "2" || ch === "4") panels.push(c);
+      else if (ch === "5") {
+        panels.push(c);
+        ghostPanels.push(c);
+      }
     }
     if (panels.length > 0) {
-      events.push({ eventIdx: events.length, row, panels });
+      events.push({ eventIdx: events.length, row, panels, ghostPanels });
     }
   }
 
@@ -367,7 +375,12 @@ export function assignFeet(
 
       jack = lastPanel === p && lastFoot === foot;
       doubleStep =
-        !jack && !stretch && lastFoot === foot && lastPanel !== null && lastPanel !== p;
+        !jack &&
+        !stretch &&
+        ev.ghostPanels.length === 0 &&
+        lastFoot === foot &&
+        lastPanel !== null &&
+        lastPanel !== p;
       feet[p] = foot;
       if (!stretch) {
         if (foot === "L") leftPos = p;
@@ -377,6 +390,15 @@ export function assignFeet(
       lastPanel = p;
     }
     contFacing = unwrapDeg(facingDeg(leftPos, rightPos), contFacing);
+
+    // 空打ち (踏み直し) されたフリーズは、踏んだ足に保持を引き継ぐ
+    for (const gp of ev.ghostPanels) {
+      const f = feet[gp];
+      if (!f) continue;
+      for (const a of active) {
+        if (a.panel === gp) a.foot = f;
+      }
+    }
 
     // このイベントで始まるフリーズを登録
     for (const p of ps) {
@@ -394,6 +416,7 @@ export function assignFeet(
       crossover: crossed(leftPos, rightPos),
       doubleStep,
       oneFootJump,
+      ghost: ev.ghostPanels.length > 0,
       stretch,
       heldFeet: Array.from(new Set(active.map((a) => a.foot))),
       facing: contFacing,
@@ -409,16 +432,18 @@ export interface ChartStats {
   crossovers: number;
   doubleSteps: number;
   shocks: number;
+  holdSwaps: number; // 空打ち (フリーズの持ち替え)
 }
 
 export function statsOf(footsteps: FootStep[], shocks = 0): ChartStats {
   return {
-    steps: footsteps.length,
+    steps: footsteps.filter((f) => !f.ghost).length,
     jumps: footsteps.filter((f) => f.jump).length,
     jacks: footsteps.filter((f) => f.jack).length,
     crossovers: footsteps.filter((f) => f.crossover).length,
     doubleSteps: footsteps.filter((f) => f.doubleStep).length,
     shocks,
+    holdSwaps: footsteps.filter((f) => f.ghost).length,
   };
 }
 
