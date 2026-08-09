@@ -1452,6 +1452,8 @@ function FootStage({
   oneFoot: { foot: Foot; panels: number[] } | null;
 }) {
   const same = leftPos === rightPos;
+  // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
+  const rot = facing;
   const lc = STAGE_CENTERS[leftPos];
   const rc = STAGE_CENTERS[rightPos];
   let lx = lc.x + (same ? -0.22 : 0);
@@ -1459,9 +1461,10 @@ function FootStage({
   let rx = rc.x + (same ? 0.22 : 0);
   let ry = rc.y;
   // 2枚抜き: 踏んでいる足は2パネルの中間 (角) に置き、
-  // 2パネルを結ぶ対角線に沿って斜め (±45°) に傾けて両パネルをカバーする
-  let lTilt = 0;
-  let rTilt = 0;
+  // 2パネルを結ぶ対角線に沿った絶対角度 (±45°) で表示する。
+  // パネルの組み合わせで足の向きは物理的に決まるため、体の向きは合成しない
+  let lRot = rot;
+  let rRot = rot;
   if (oneFoot) {
     const c1 = STAGE_CENTERS[oneFoot.panels[0]];
     const c2 = STAGE_CENTERS[oneFoot.panels[1]];
@@ -1474,11 +1477,11 @@ function FootStage({
     if (oneFoot.foot === "L") {
       lx = mx;
       ly = my;
-      lTilt = tilt;
+      lRot = tilt;
     } else {
       rx = mx;
       ry = my;
-      rTilt = tilt;
+      rRot = tilt;
     }
   }
   const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
@@ -1487,9 +1490,6 @@ function FootStage({
     (stepping.includes(leftPos) && feet[leftPos] === "L") || oneFoot?.foot === "L";
   const rStepping =
     (stepping.includes(rightPos) && feet[rightPos] === "R") || oneFoot?.foot === "R";
-
-  // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
-  const rot = facing;
 
   return (
     <div className="stage3d">
@@ -1533,7 +1533,7 @@ function FootStage({
             style={{
               left: `${(lx / 3) * 100}%`,
               top: `${(ly / 3) * 100}%`,
-              transform: `translate(-50%, -50%) rotate(${rot + lTilt}deg)`,
+              transform: `translate(-50%, -50%) rotate(${lRot}deg)`,
             }}
           >
             <div className="foot3d-shadow" />
@@ -1550,7 +1550,7 @@ function FootStage({
             style={{
               left: `${(rx / 3) * 100}%`,
               top: `${(ry / 3) * 100}%`,
-              transform: `translate(-50%, -50%) rotate(${rot + rTilt}deg)`,
+              transform: `translate(-50%, -50%) rotate(${rRot}deg)`,
             }}
           >
             <div className="foot3d-shadow" />
