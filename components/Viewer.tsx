@@ -1511,9 +1511,13 @@ function TextImport({
       if (result.warning) setWarning(result.warning);
       const globalTiming = extractTimingFromSM(full);
       const chartTiming = timingText ? extractTimingFromSM(timingText) : {};
+      // SM/SSCファイル全体の取り込みなら曲が変わったとみなし、
+      // 停止がファイルに無ければ前の曲の停止を残さずクリアする ("" = クリア)。
+      // ノーツ断片だけの貼り付けではタイミングに触らない
+      const isFullFile = /#NOTES\s*:/i.test(full);
       const timing = {
         b: chartTiming.b ?? globalTiming.b,
-        s: chartTiming.s ?? globalTiming.s,
+        s: chartTiming.s ?? globalTiming.s ?? (isFullFile ? "" : undefined),
       };
       const tm = full.match(/#TITLE\s*:\s*([^;]*);/i);
       const smTitle = tm ? tm[1].trim() : undefined;
