@@ -203,6 +203,8 @@ input[type="url"]:focus {
 /* ===== ボタン (ミント=主 / 白+黒枠=副) ===== */
 
 button {
+  appearance: none;
+  -webkit-appearance: none;
   background: var(--mint);
   border: none;
   border-radius: 0;
@@ -212,6 +214,10 @@ button {
   font-weight: 800;
   padding: 9px 14px;
   box-shadow: 0 2px 0 rgba(0, 0, 0, 0.3);
+  /* モバイルでダブルタップズーム判定によるタップ遅延・取りこぼしを防ぐ */
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 button:hover {
@@ -809,6 +815,12 @@ select {
   justify-content: center;
   margin-top: 10px;
   flex-wrap: wrap;
+}
+
+/* 再生コントロール: 指で押しやすい最小タップ寸法を確保する */
+.controls button {
+  min-width: 48px;
+  min-height: 42px;
 }
 
 .controls .pos {

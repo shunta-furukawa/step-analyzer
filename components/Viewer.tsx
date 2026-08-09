@@ -1178,7 +1178,7 @@ export default function Viewer({
                 }}
                 title="最初に戻る"
               >
-                ⏮
+                {"⏮︎"}
               </button>
               <button
                 onClick={() => {
@@ -1194,7 +1194,7 @@ export default function Viewer({
                 }}
                 title="再生 / 停止 (スペースキー)"
               >
-                {playing ? "⏸" : "▶"}
+                {playing ? "⏸︎" : "▶︎"}
               </button>
               <select
                 value={speed}
@@ -1210,7 +1210,7 @@ export default function Viewer({
                 ))}
               </select>
               <button
-                className="secondary"
+                className={muted ? "secondary" : ""}
                 onClick={() => {
                   const next = !muted;
                   setMuted(next);
