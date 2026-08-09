@@ -819,6 +819,10 @@ input[type="range"]:focus {
   color: #c9b6ff;
 }
 
+.tag.onefoot {
+  color: #7df9ff;
+}
+
 .tag.jack {
   color: #ffab8a;
 }

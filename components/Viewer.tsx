@@ -11,6 +11,7 @@ import {
   statsOf,
   tickOf,
   type Foot,
+  type FootOverride,
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import { compressCompact } from "@/lib/codec";
@@ -82,7 +83,7 @@ export default function Viewer({
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
   const [stops, setStops] = useState(() => normalizeParam(initialStops ?? ""));
   const [showTiming, setShowTiming] = useState(false);
-  const [overrides, setOverrides] = useState<Map<number, Foot>>(() =>
+  const [overrides, setOverrides] = useState<Map<number, FootOverride>>(() =>
     parseOverrides(initialOverrides)
   );
   const [dirty, setDirty] = useState(false);
@@ -465,11 +466,22 @@ export default function Viewer({
   // 再生中の足の描画位置は先読みインデックスから取る (ジャスト到着)
   const footStep = (playing ? footsteps[footIdx] : curStep) ?? curStep;
   const curEvent = chart.events[current];
+  // 2枚抜き中は踏み足を2パネルの中間に表示する
+  const footEventForStage = chart.events[playing ? footIdx : current];
+  const stageOneFoot =
+    footStep?.oneFootJump &&
+    footEventForStage?.panels.length === 2 &&
+    footStep.feet[footEventForStage.panels[0]]
+      ? {
+          foot: footStep.feet[footEventForStage.panels[0]]!,
+          panels: footEventForStage.panels,
+        }
+      : null;
   const curTick = curEvent ? tickOf(curEvent.row.beat) : null;
   const curOverride = curTick !== null ? overrides.get(curTick) : undefined;
   const facing = curStep?.facing ?? 0;
 
-  const setOverride = (foot: Foot | null) => {
+  const setOverride = (foot: FootOverride | null) => {
     if (curTick === null) return;
     const next = new Map(overrides);
     if (foot === null) next.delete(curTick);
@@ -1020,6 +1032,7 @@ export default function Viewer({
               facing={footStep?.facing ?? facing}
               stepKey={current}
               heldFeet={footStep?.heldFeet ?? []}
+              oneFoot={stageOneFoot}
             />
             <div className="controls">
               <button
@@ -1172,6 +1185,25 @@ export default function Viewer({
                         </button>
                       );
                     })}
+                    {/* 2枚抜き: 隣接する2パネル (横+縦) だけ片足でまとめて踏める */}
+                    {(curEvent.panels[0] === 0 || curEvent.panels[0] === 3) !==
+                      (curEvent.panels[1] === 0 || curEvent.panels[1] === 3) &&
+                      (["LL", "RR"] as const).map((opt) => (
+                        <button
+                          key={opt}
+                          className={`ov-btn${curOverride === opt ? " active" : ""}`}
+                          onClick={() => setOverride(curOverride === opt ? null : opt)}
+                        >
+                          <span
+                            style={{
+                              color: opt === "LL" ? "var(--foot-l)" : "var(--foot-r)",
+                            }}
+                          >
+                            {opt === "LL" ? "L" : "R"}
+                          </span>
+                          で2枚抜き
+                        </button>
+                      ))}
                     {curOverride && (
                       <button className="ov-btn" onClick={() => setOverride(null)}>
                         自動に戻す
@@ -1202,7 +1234,8 @@ export default function Viewer({
                   </div>
                 )}
                 <div className="tags">
-                  {curStep.jump && <span className="tag jump">ジャンプ</span>}
+                  {curStep.oneFootJump && <span className="tag onefoot">2枚抜き</span>}
+                  {curStep.jump && !curStep.oneFootJump && <span className="tag jump">ジャンプ</span>}
                   {curStep.jack && <span className="tag jack">縦連 (同じ足)</span>}
                   {curStep.crossover && (
                     <span className="tag crossover">交差 (体を捻る)</span>
@@ -1415,6 +1448,7 @@ function FootStage({
   facing,
   stepKey,
   heldFeet,
+  oneFoot,
 }: {
   leftPos: number;
   rightPos: number;
@@ -1423,12 +1457,27 @@ function FootStage({
   facing: number;
   stepKey: number;
   heldFeet: Foot[];
+  oneFoot: { foot: Foot; panels: number[] } | null;
 }) {
   const same = leftPos === rightPos;
   const lc = STAGE_CENTERS[leftPos];
   const rc = STAGE_CENTERS[rightPos];
-  const lx = lc.x + (same ? -0.22 : 0);
-  const rx = rc.x + (same ? 0.22 : 0);
+  let lx = lc.x + (same ? -0.22 : 0);
+  let ly = lc.y;
+  let rx = rc.x + (same ? 0.22 : 0);
+  let ry = rc.y;
+  // 2枚抜き: 踏んでいる足は2パネルの中間 (角) に置いて両パネルをカバーする
+  if (oneFoot) {
+    const mx = (STAGE_CENTERS[oneFoot.panels[0]].x + STAGE_CENTERS[oneFoot.panels[1]].x) / 2;
+    const my = (STAGE_CENTERS[oneFoot.panels[0]].y + STAGE_CENTERS[oneFoot.panels[1]].y) / 2;
+    if (oneFoot.foot === "L") {
+      lx = mx;
+      ly = my;
+    } else {
+      rx = mx;
+      ry = my;
+    }
+  }
   const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
   const midY = (STAGE_CENTERS[leftPos].y + STAGE_CENTERS[rightPos].y) / 2;
   const lStepping = stepping.includes(leftPos) && feet[leftPos] === "L";
@@ -1478,7 +1527,7 @@ function FootStage({
             className="foot3d"
             style={{
               left: `${(lx / 3) * 100}%`,
-              top: `${(lc.y / 3) * 100}%`,
+              top: `${(ly / 3) * 100}%`,
               transform: `translate(-50%, -50%) rotate(${rot}deg)`,
             }}
           >
@@ -1495,7 +1544,7 @@ function FootStage({
             className="foot3d"
             style={{
               left: `${(rx / 3) * 100}%`,
-              top: `${(rc.y / 3) * 100}%`,
+              top: `${(ry / 3) * 100}%`,
               transform: `translate(-50%, -50%) rotate(${rot}deg)`,
             }}
           >

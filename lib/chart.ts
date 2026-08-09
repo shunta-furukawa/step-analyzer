@@ -3,6 +3,10 @@
 
 export type Foot = "L" | "R";
 
+// 手動の踏み足指定。L/R = その足で踏む (ジャンプでは若い番号のパネル側)。
+// LL/RR = 2枚抜き (ジャンプの2パネルを片足だけでまとめて踏む)
+export type FootOverride = Foot | "LL" | "RR";
+
 export interface ChartRow {
   measure: number; // 小節番号 (0-based)
   idx: number; // 小節内の行インデックス
@@ -33,6 +37,7 @@ export interface FootStep {
   jack: boolean; // 縦連 (同じパネルを同じ足で連続)
   crossover: boolean; // 足が交差した状態
   doubleStep: boolean;
+  oneFootJump: boolean; // 2枚抜き (ジャンプを片足で取る)
   heldFeet: Foot[]; // このイベント時点でフリーズ保持中の足
   facing: number; // 譜面開始からの連続回転角 (負=左向き, 正=右向き)
 }
@@ -216,7 +221,7 @@ export function tickOf(beat: number): number {
  */
 export function assignFeet(
   events: StepEvent[],
-  overrides?: Map<number, Foot>,
+  overrides?: Map<number, FootOverride>,
   holds?: Hold[]
 ): FootStep[] {
   let leftPos = 0;
@@ -260,6 +265,7 @@ export function assignFeet(
     let jump = false;
     let jack = false;
     let doubleStep = false;
+    let oneFootJump = false;
     const ps = ev.panels;
 
     if (ps.length >= 2) {
@@ -275,24 +281,39 @@ export function assignFeet(
         (rp === 0 ? 1 : 0) +
         // 累積回転が±180を超える割り当ては強く忌避
         (Math.abs(unwrapDeg(facingDeg(lp, rp), contFacing)) > MAX_ROTATION ? 100 : 0);
-      if (jumpOv ? jumpOv === "L" : cost(a, b) <= cost(b, a)) {
-        leftPos = a;
-        rightPos = b;
+      if (jumpOv === "LL" || jumpOv === "RR") {
+        // 2枚抜き: 2パネルを片足でまとめて踏む。もう片方の足は動かさない。
+        // 足の位置は横パネル (←/→) を優先して記録する (体の向き計算の近似)
+        oneFootJump = true;
+        const foot: Foot = jumpOv === "LL" ? "L" : "R";
+        feet[a] = foot;
+        feet[b] = foot;
+        const pos = a === 0 || a === 3 ? a : b === 0 || b === 3 ? b : a;
+        if (foot === "L") leftPos = pos;
+        else rightPos = pos;
+        // 次のノーツは通常のステップ同様、逆足からの交互で続ける
+        lastFoot = foot;
+        lastPanel = null;
       } else {
-        leftPos = b;
-        rightPos = a;
+        if (jumpOv ? jumpOv === "L" : cost(a, b) <= cost(b, a)) {
+          leftPos = a;
+          rightPos = b;
+        } else {
+          leftPos = b;
+          rightPos = a;
+        }
+        feet[leftPos] = "L";
+        feet[rightPos] = "R";
+        lastFoot = null;
+        lastPanel = null;
       }
-      feet[leftPos] = "L";
-      feet[rightPos] = "R";
-      lastFoot = null;
-      lastPanel = null;
     } else {
       const p = ps[0];
       const key = `${tickOf(beat)}:${p}`;
       let foot: Foot;
       let flexible = false; // 回転制限で足を差し替えてよいか
       const ov = overrides?.get(tickOf(beat));
-      if (ov) {
+      if (ov === "L" || ov === "R") {
         foot = ov;
       } else if (lockedL !== lockedR) {
         // 片足がフリーズ保持中 → 空いている足で踏むしかない
@@ -357,6 +378,7 @@ export function assignFeet(
       jack,
       crossover: crossed(leftPos, rightPos),
       doubleStep,
+      oneFootJump,
       heldFeet: Array.from(new Set(active.map((a) => a.foot))),
       facing: contFacing,
     });

@@ -1,6 +1,6 @@
 // GUIによるノーツ編集: コンパクト形式の譜面文字列に対するトグル操作。
 
-import type { Foot } from "./chart";
+import type { FootOverride } from "./chart";
 
 function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
@@ -128,17 +128,18 @@ export function toggleShock(
 
 // ===== 足の手動指定 (fパラメータ) のシリアライズ =====
 
-export function parseOverrides(f: string | undefined): Map<number, Foot> {
-  const map = new Map<number, Foot>();
+export function parseOverrides(f: string | undefined): Map<number, FootOverride> {
+  const map = new Map<number, FootOverride>();
   if (!f) return map;
   for (const part of f.split("-")) {
-    const m = part.match(/^(\d+)(L|R)$/);
-    if (m) map.set(Number(m[1]), m[2] as Foot);
+    // LL/RR = 2枚抜き (ジャンプを片足で取る)
+    const m = part.match(/^(\d+)(LL|RR|L|R)$/);
+    if (m) map.set(Number(m[1]), m[2] as FootOverride);
   }
   return map;
 }
 
-export function serializeOverrides(map: Map<number, Foot>): string {
+export function serializeOverrides(map: Map<number, FootOverride>): string {
   return Array.from(map.entries())
     .sort((a, b) => a[0] - b[0])
     .map(([tick, foot]) => `${tick}${foot}`)
