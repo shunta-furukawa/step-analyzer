@@ -28,6 +28,8 @@
 
 html {
   -webkit-text-size-adjust: 100%;
+  /* ダブルタップズームを全域で無効化 (スクロール・ピンチは可) */
+  touch-action: manipulation;
 }
 
 body {

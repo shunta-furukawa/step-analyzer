@@ -27,6 +27,9 @@ export const viewport: Viewport = {
   themeColor: "#29d6a2",
   width: "device-width",
   initialScale: 1,
+  // iOSの入力フォーカス時の自動ズームとダブルタップズームを抑止する。
+  // (iOS 10以降、ユーザーのピンチズーム自体はこの指定があっても可能)
+  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
