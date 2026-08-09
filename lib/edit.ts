@@ -93,6 +93,9 @@ export function toggleNote(
   }
   const target = resRow * (L / res);
   const cur = expanded[target][panel];
+  // フリーズ終端 (3) は譜面上に見えないため、グリッドタップでは触れない。
+  // 消すとフリーズの終わりを失って譜面末尾まで伸びてしまう
+  if (cur === "3") return compact;
   expanded[target] = setChar(expanded[target], panel, cur === "0" ? ch : "0");
 
   measures[mIdx] = reduceRows(expanded);
@@ -121,6 +124,8 @@ export function toggleShock(
     expanded.push(i % f === 0 ? rows[i / f] : "0000");
   }
   const target = resRow * (L / res);
+  // フリーズ終端 (3) を含む行への上書きは、終端を失わせるため許可しない
+  if (expanded[target] !== "MMMM" && expanded[target].includes("3")) return compact;
   expanded[target] = expanded[target] === "MMMM" ? "0000" : "MMMM";
 
   measures[mIdx] = reduceRows(expanded);
