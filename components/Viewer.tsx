@@ -104,6 +104,7 @@ export default function Viewer({
   const [editMode, setEditMode] = useState(false);
   const [editRes, setEditRes] = useState(16);
   const [editShock, setEditShock] = useState(false);
+  const [editGhost, setEditGhost] = useState(false);
   const [showText, setShowText] = useState(false);
   const [fs, setFs] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -680,10 +681,25 @@ export default function Viewer({
         {editMode && (
           <button
             className={editShock ? "" : "secondary"}
-            onClick={() => setEditShock(!editShock)}
+            onClick={() => {
+              setEditShock(!editShock);
+              setEditGhost(false);
+            }}
             title="ショックアロー配置モード"
           >
             ⚡{editShock ? "ショック配置中" : "ショック"}
+          </button>
+        )}
+        {editMode && (
+          <button
+            className={editGhost ? "" : "secondary"}
+            onClick={() => {
+              setEditGhost(!editGhost);
+              setEditShock(false);
+            }}
+            title="空打ち配置モード (足の置き直し)"
+          >
+            ◇{editGhost ? "空打ち配置中" : "空打ち"}
           </button>
         )}
         <button className="secondary" onClick={() => setShowText(!showText)}>
@@ -719,7 +735,9 @@ export default function Viewer({
         <p className="hint edit-hint">
           {editShock
             ? "グリッドをタップでショックアロー (⚡踏んではいけない全パネル) を配置・削除します。"
-            : "グリッドをタップでノーツを追加、ノーツをタップで削除。結果は即URLに反映されます。"}
+            : editGhost
+            ? "グリッドをタップで空打ち (◇判定のない踏み直し・足の置き直し) を配置・削除します。"
+            : "グリッドをタップでノーツを追加、ノーツをタップで削除。フリーズ中のセルは空打ち、終端は空打ちトグルになります。"}
         </p>
       )}
 
@@ -901,7 +919,8 @@ export default function Viewer({
                           height: cellH,
                         }}
                         onClick={() => {
-                          // フリーズ保持中のセルには空打ち (5) を置く
+                          // 空打ちモード中は常に5。通常モードでも
+                          // フリーズ保持中のセルには自動で空打ち (5) を置く
                           const inHold = chart.holds.some(
                             (h) =>
                               h.panel === p &&
@@ -911,7 +930,14 @@ export default function Viewer({
                           applyEdit(
                             editShock
                               ? toggleShock(compact, mi, r, editRes)
-                              : toggleNote(compact, mi, r, editRes, p, inHold ? "5" : "1")
+                              : toggleNote(
+                                  compact,
+                                  mi,
+                                  r,
+                                  editRes,
+                                  p,
+                                  editGhost || inHold ? "5" : "1"
+                                )
                           );
                         }}
                       />
@@ -1302,7 +1328,16 @@ export default function Viewer({
                 )}
                 <div className="tags">
                   {curStep.ghost && (
-                    <span className="tag ghostswap">空打ち (フリーズ持ち替え)</span>
+                    <span className="tag ghostswap">
+                      {chart.holds.some(
+                        (h) =>
+                          curEvent.ghostPanels.includes(h.panel) &&
+                          curEvent.row.beat > h.startBeat + 1e-6 &&
+                          curEvent.row.beat <= h.endBeat + 1e-6
+                      )
+                        ? "空打ち (フリーズ持ち替え)"
+                        : "空打ち (足の置き直し)"}
+                    </span>
                   )}
                   {curStep.stretch && <span className="tag onefoot">2枚抜き</span>}
                   {curStep.jump && !curStep.oneFootJump && <span className="tag jump">ジャンプ</span>}
