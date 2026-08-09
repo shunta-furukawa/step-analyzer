@@ -98,6 +98,7 @@ export default function Viewer({
     parseChoice(initialHispeed, HISPEED_OPTIONS, 1)
   );
   const [muted, setMuted] = useState(false);
+  const [ghostSound, setGhostSound] = useState(true); // 空打ちのストンプ音
   const [bgColor, setBgColor] = useState(() =>
     initialBg && /^[0-9a-fA-F]{6}$/.test(initialBg) ? initialBg.toLowerCase() : DEFAULT_BG
   );
@@ -267,27 +268,33 @@ export default function Viewer({
   const prepareClapTrack = useCallback(() => {
     if (!chart || timeline.length === 0) return null;
     setPlaybackAudioSession();
-    const key = `${compact}|${bpm}|${stops}|${speed}`;
+    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}`;
     if (clapTrackRef.current?.key === key) return clapTrackRef.current.el;
     if (clapTrackRef.current) {
       clapTrackRef.current.el.pause();
       URL.revokeObjectURL(clapTrackRef.current.url);
     }
-    // 空打ちは判定のあるノーツではないのでクラップを鳴らさない
+    // 空打ちはクラップではなく低いストンプ音 (オプションでOFF可)
     const judged = chart.events.filter((e) => e.ghostPanels.length === 0);
     const times = judged.map((e) => timeAtBeat(timeline, e.row.beat) / speed);
     const accents = judged.map((e) => e.panels.length >= 2);
+    const ghostTimes = ghostSound
+      ? chart.events
+          .filter((e) => e.ghostPanels.length > 0)
+          .map((e) => timeAtBeat(timeline, e.row.beat) / speed)
+      : [];
     const url = buildClapTrackUrl(
       times,
       accents,
-      timeAtBeat(timeline, chart.totalBeats) / speed
+      timeAtBeat(timeline, chart.totalBeats) / speed,
+      ghostTimes
     );
     const el = new Audio(url);
     el.preload = "auto";
     el.setAttribute("playsinline", "");
     clapTrackRef.current = { key, el, url };
     return el;
-  }, [chart, timeline, compact, bpm, stops, speed]);
+  }, [chart, timeline, compact, bpm, stops, speed, ghostSound]);
 
   // 再生開始 (ユーザー操作の文脈で呼ぶこと: audio.play()の許可が必要)
   const startPlayback = useCallback(() => {
@@ -1191,6 +1198,20 @@ export default function Viewer({
               >
                 {muted ? "🔇" : "👏"}
               </button>
+              {chart.events.some((e) => e.ghostPanels.length > 0) && (
+                <button
+                  className={ghostSound ? "" : "secondary"}
+                  onClick={() => {
+                    setGhostSound(!ghostSound);
+                    // トラックはキー違いで次回prepare時に作り直される。
+                    // 再生中は再生effectがprepareし直して続きから鳴る
+                    clapTrackRef.current?.el.pause();
+                  }}
+                  title="空打ちのストンプ音"
+                >
+                  ◇{ghostSound ? "♪" : "🔇"}
+                </button>
+              )}
               <button
                 className="secondary"
                 onClick={enterFs}

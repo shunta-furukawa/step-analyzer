@@ -31,21 +31,44 @@ function renderClapSamples(gain: number, sr: number): Float32Array {
   return out;
 }
 
+// 空打ち用の低いストンプ音 (床を踏む鈍い音)。クラップより低域・長め
+function renderStompSamples(gain: number, sr: number): Float32Array {
+  const len = Math.floor(sr * 0.12);
+  const out = new Float32Array(len);
+  const rand = makeRng(20250809);
+  let lp1 = 0;
+  let lp2 = 0;
+  for (let i = 0; i < len; i++) {
+    const t = i / len;
+    const x = rand() * Math.pow(1 - t, 3.2);
+    // カットオフを低めに: こもった「ドッ」という踏み音
+    lp1 += 0.09 * (x - lp1);
+    lp2 += 0.02 * (x - lp2);
+    // 立ち上がりに少しだけトーンを足して芯を出す
+    const tone = Math.sin((i / sr) * 2 * Math.PI * 110) * Math.pow(1 - t, 6) * 0.35;
+    out[i] = ((lp1 - lp2) * 3.4 + tone) * gain;
+  }
+  return out;
+}
+
 /**
  * 譜面全体のクラップトラックをWAVにレンダリングし、Blob URLを返す。
  * eventTimes は各ノーツの発音時刻 (秒、ソフラン・停止込み)。
+ * ghostTimes には空打ち (ストンプ音) の発音時刻を渡す。
  * 使い終わったURLは呼び出し側で URL.revokeObjectURL すること。
  */
 export function buildClapTrackUrl(
   eventTimes: number[],
   accents: boolean[],
-  durationSec: number
+  durationSec: number,
+  ghostTimes: number[] = []
 ): string {
   const sr = 44100;
   const len = Math.max(sr, Math.ceil((durationSec + 0.6) * sr));
   const mix = new Float32Array(len);
   const normal = renderClapSamples(0.6, sr);
   const accent = renderClapSamples(1.0, sr);
+  const stomp = renderStompSamples(0.9, sr);
 
   for (let i = 0; i < eventTimes.length; i++) {
     const off = Math.round(eventTimes[i] * sr);
@@ -53,6 +76,12 @@ export function buildClapTrackUrl(
     const s = accents[i] ? accent : normal;
     const end = Math.min(s.length, len - off);
     for (let j = 0; j < end; j++) mix[off + j] += s[j];
+  }
+  for (const t of ghostTimes) {
+    const off = Math.round(t * sr);
+    if (off < 0 || off >= len) continue;
+    const end = Math.min(stomp.length, len - off);
+    for (let j = 0; j < end; j++) mix[off + j] += stomp[j];
   }
 
   const bytes = new Uint8Array(44 + len * 2);
