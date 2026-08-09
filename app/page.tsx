@@ -112,6 +112,13 @@ export default async function Page({
         speed={spd}
         bg={bg}
       />
+      <footer className="site-footer">
+        機能要望・感想は{" "}
+        <a href="https://x.com/MONO_DDR" target="_blank" rel="noopener noreferrer">
+          @MONO_DDR
+        </a>{" "}
+        まで
+      </footer>
     </main>
   );
 }
