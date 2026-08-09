@@ -74,6 +74,7 @@ export interface Strings {
   transformLabel: string;
   transformOff: string;
   transformRandomReroll: string;
+  transformCustom: string;
   close: string;
   // コントロール
   toStartTitle: string;
@@ -197,6 +198,7 @@ const ja: Strings = {
   transformLabel: "変形 (矢印の並べ替え)",
   transformOff: "OFF",
   transformRandomReroll: "タップするたびに並びを引き直します",
+  transformCustom: "並びを自分で作る (2つタップで入れ替え)",
   close: "閉じる",
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
@@ -322,6 +324,7 @@ const en: Strings = {
   transformLabel: "Transform (arrow shuffle)",
   transformOff: "OFF",
   transformRandomReroll: "Tap again to reroll the arrangement",
+  transformCustom: "Custom arrangement (tap two lanes to swap)",
   close: "Close",
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
@@ -446,6 +449,7 @@ const ko: Strings = {
   transformLabel: "변형 (화살표 재배치)",
   transformOff: "OFF",
   transformRandomReroll: "탭할 때마다 배치를 다시 뽑습니다",
+  transformCustom: "직접 배치 만들기 (두 개를 탭해 교체)",
   close: "닫기",
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",

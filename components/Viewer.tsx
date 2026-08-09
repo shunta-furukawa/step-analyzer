@@ -29,6 +29,7 @@ import {
 } from "@/lib/timing";
 import { LANGS, STRINGS, type Lang, type Strings } from "@/lib/i18n";
 import {
+  NAMED_TRANSFORMS,
   applyTransform,
   invertPerm,
   parseTransform,
@@ -104,6 +105,8 @@ export default function Viewer({
     initialTransform && parseTransform(initialTransform) ? initialTransform : ""
   );
   const [showOptions, setShowOptions] = useState(false);
+  // カスタム並び替えで最初に選んだレーン (2つ目のタップで入れ替える)
+  const [swapSel, setSwapSel] = useState<number | null>(null);
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
@@ -856,12 +859,40 @@ export default function Viewer({
                   RANDOM
                 </button>
               </div>
-              {perm && (
-                <p className="hint opt-hint">
-                  ←↓↑→ ⇒ {perm.map((o) => ["←", "↓", "↑", "→"][o]).join("")}
-                  {/^[0-3]{4}$/.test(transform) && ` · ${S.transformRandomReroll}`}
-                </p>
+              {/^[0-3]{4}$/.test(transform) && (
+                <p className="hint opt-hint">{S.transformRandomReroll}</p>
               )}
+              <span className="opt-label perm-label">{S.transformCustom}</span>
+              <div className="perm-row">
+                {(perm ?? [0, 1, 2, 3]).map((o, i) => (
+                  <button
+                    key={i}
+                    className={`secondary perm-btn${swapSel === i ? " selected" : ""}`}
+                    onClick={() => {
+                      if (swapSel === null) {
+                        setSwapSel(i);
+                        return;
+                      }
+                      if (swapSel === i) {
+                        setSwapSel(null);
+                        return;
+                      }
+                      const cur = [...(perm ?? [0, 1, 2, 3])];
+                      [cur[swapSel], cur[i]] = [cur[i], cur[swapSel]];
+                      const digits = cur.join("");
+                      const named = Object.entries(NAMED_TRANSFORMS).find(
+                        ([, pm]) => pm.join("") === digits
+                      )?.[0];
+                      setTransform(digits === "0123" ? "" : named ?? digits);
+                      setSwapSel(null);
+                      setDirty(true);
+                    }}
+                  >
+                    <span className="perm-lane">{["←", "↓", "↑", "→"][i]}</span>
+                    {["←", "↓", "↑", "→"][o]}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>

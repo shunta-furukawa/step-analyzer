@@ -208,6 +208,40 @@ select,
   color: #aab;
 }
 
+.perm-label {
+  margin-top: 6px;
+}
+
+/* カスタム並び替え: 各レーンの中身を矢印チップで表示し、2つタップで入れ替え */
+.perm-row {
+  display: flex;
+  gap: 6px;
+}
+
+.perm-btn {
+  position: relative;
+  flex: 1;
+  min-height: 52px;
+  font-size: 20px;
+  font-weight: 800;
+  padding: 14px 0 6px;
+}
+
+.perm-btn .perm-lane {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-weight: 700;
+  color: #888;
+}
+
+.perm-btn.selected {
+  outline: 3px solid var(--mint);
+  outline-offset: -1px;
+}
+
 /* さりげない連絡先フッター (背景色カスタムでも読めるよう黒チップにする) */
 .site-footer {
   display: inline-block;
