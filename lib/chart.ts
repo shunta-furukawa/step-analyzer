@@ -351,13 +351,22 @@ export function assignFeet(
         (Math.abs(unwrapDeg(facingDeg(lp, rp), contFacing)) > MAX_ROTATION ? 100 : 0);
       if (jumpOv === "LL" || jumpOv === "RR") {
         // 2枚抜き: 2パネルを片足でまとめて踏む。もう片方の足は動かさない。
-        // 足の位置は横パネル (←/→) を優先して記録する (体の向き計算の近似)
+        // 足の位置は、フリーズの頭を含むならその保持パネル
+        // (足はそこに残り続ける)、なければ横パネル (←/→) を優先する
         oneFootJump = true;
         const foot: Foot = jumpOv === "LL" ? "L" : "R";
         stretch = { foot, panels: [a, b] };
         feet[a] = foot;
         feet[b] = foot;
-        const pos = a === 0 || a === 3 ? a : b === 0 || b === 3 ? b : a;
+        const holdPanel = ps.find((p) => holdByStart.has(`${tickOf(beat)}:${p}`));
+        const pos =
+          holdPanel !== undefined
+            ? holdPanel
+            : a === 0 || a === 3
+            ? a
+            : b === 0 || b === 3
+            ? b
+            : a;
         if (foot === "L") leftPos = pos;
         else rightPos = pos;
         // 次のノーツは通常のステップ同様、逆足からの交互で続ける
