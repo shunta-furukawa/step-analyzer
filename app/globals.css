@@ -1009,6 +1009,13 @@ select {
   margin-top: 6px;
 }
 
+/* フリーズ配置の始点セル */
+.edit-cell.freeze-anchor {
+  outline: 2px solid #2ecc71;
+  outline-offset: -2px;
+  background: rgba(46, 204, 113, 0.25);
+}
+
 /* 再生コントロール: 指で押しやすい最小タップ寸法を確保する。
    ボタン内のラベルは折り返さない */
 .controls button {

@@ -48,6 +48,11 @@ export interface Strings {
   ghostMode: string;
   ghostModeActive: string;
   ghostModeTitle: string;
+  freezeMode: string;
+  freezeModeActive: string;
+  freezeModeTitle: string;
+  hintFreezeStart: string;
+  hintFreezeEnd: string;
   hintShock: string;
   hintGhost: string;
   hintNormal: string;
@@ -171,6 +176,11 @@ const ja: Strings = {
   ghostMode: "空打ち",
   ghostModeActive: "空打ち配置中",
   ghostModeTitle: "空打ち配置モード (足の置き直し)",
+  freezeMode: "フリーズ",
+  freezeModeActive: "フリーズ配置中",
+  freezeModeTitle: "フリーズアロー配置モード",
+  hintFreezeStart: "フリーズの始点にしたいセルをタップしてください。",
+  hintFreezeEnd: "同じ列の終点セルをタップするとフリーズを配置します (同じセルをタップでキャンセル、別の列なら始点を取り直し)。頭の矢印をタップすると削除できます。",
   hintShock: "グリッドをタップでショックアロー (⚡踏んではいけない全パネル) を配置・削除します。",
   hintGhost: "グリッドをタップで空打ち (◇判定のない踏み直し・足の置き直し) を配置・削除します。",
   hintNormal:
@@ -307,6 +317,11 @@ const en: Strings = {
   ghostMode: "Ghost",
   ghostModeActive: "Placing ghosts",
   ghostModeTitle: "Ghost step placement mode (repositioning)",
+  freezeMode: "Freeze",
+  freezeModeActive: "Placing freeze",
+  freezeModeTitle: "Freeze arrow placement mode",
+  hintFreezeStart: "Tap the cell where the freeze should start.",
+  hintFreezeEnd: "Tap the end cell in the same lane to place the freeze (same cell cancels, another lane re-anchors). Tap a freeze head arrow to delete it.",
   hintShock: "Tap the grid to place / remove a shock arrow (⚡ all panels, don't step).",
   hintGhost: "Tap the grid to place / remove a ghost step (◇ no judgment, re-step / reposition).",
   hintNormal:
@@ -442,6 +457,11 @@ const ko: Strings = {
   ghostMode: "헛밟기",
   ghostModeActive: "헛밟기 배치 중",
   ghostModeTitle: "헛밟기 배치 모드 (발 위치 조정)",
+  freezeMode: "프리즈",
+  freezeModeActive: "프리즈 배치 중",
+  freezeModeTitle: "프리즈 애로우 배치 모드",
+  hintFreezeStart: "프리즈 시작 셀을 탭하세요.",
+  hintFreezeEnd: "같은 레인의 끝 셀을 탭하면 프리즈가 배치됩니다 (같은 셀은 취소, 다른 레인은 시작점 재설정). 머리 화살표를 탭하면 삭제됩니다.",
   hintShock: "그리드를 탭하여 쇼크 애로우 (⚡밟으면 안 되는 전체 패널) 를 배치·삭제합니다.",
   hintGhost: "그리드를 탭하여 헛밟기 (◇판정 없는 다시 밟기·발 위치 조정) 를 배치·삭제합니다.",
   hintNormal:

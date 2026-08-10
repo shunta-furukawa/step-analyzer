@@ -1,6 +1,6 @@
 // GUIによるノーツ編集: コンパクト形式の譜面文字列に対するトグル操作。
 
-import type { FootOverride } from "./chart";
+import { parseCompact, type FootOverride } from "./chart";
 
 function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b);
@@ -137,6 +137,68 @@ export function toggleShock(
   measures[mIdx] = reduceRows(expanded);
   cleanupHolds(measures);
   return measures.map((m) => m.join("")).join("-");
+}
+
+/**
+ * フリーズアローを配置する。始点 (aM, aRow) から終点 (bM, bRow) まで、
+ * 小節をまたいでもよい。範囲に重なる同列の既存フリーズ・ノーツは置き換える。
+ * 始点と終点が同じセルなら何もしない (キャンセル扱い)。
+ * @param res 解像度 (resRowはこの解像度上の行番号)
+ */
+export function placeHoldRange(
+  compact: string,
+  aM: number,
+  aRow: number,
+  bM: number,
+  bRow: number,
+  res: number,
+  panel: number
+): string {
+  const beatOf = (m: number, row: number) => m * 4 + (row / res) * 4;
+  let startBeat = beatOf(aM, aRow);
+  let endBeat = beatOf(bM, bRow);
+  if (Math.abs(startBeat - endBeat) < 1e-9) return compact;
+  if (startBeat > endBeat) [startBeat, endBeat] = [endBeat, startBeat];
+
+  // 範囲に重なる同列の既存フリーズは頭・尻尾ごと消す対象に含める
+  let clearFrom = startBeat;
+  let clearTo = endBeat;
+  try {
+    for (const h of parseCompact(compact).holds) {
+      if (h.panel !== panel) continue;
+      if (h.endBeat < startBeat - 1e-9 || h.startBeat > endBeat + 1e-9) continue;
+      clearFrom = Math.min(clearFrom, h.startBeat);
+      clearTo = Math.max(clearTo, h.endBeat);
+    }
+  } catch {
+    return compact;
+  }
+
+  const measures = compact.split("-").map(splitRows);
+  for (let m = 0; m < measures.length; m++) {
+    const rows = measures[m];
+    const L = lcm(rows.length, res);
+    const f = L / rows.length;
+    const expanded: string[] = [];
+    for (let i = 0; i < L; i++) expanded.push(i % f === 0 ? rows[i / f] : "0000");
+
+    let touched = false;
+    for (let i = 0; i < L; i++) {
+      const beat = m * 4 + (i / L) * 4;
+      const inClear = beat >= clearFrom - 1e-9 && beat <= clearTo + 1e-9;
+      if (!inClear) continue;
+      let ch = "0";
+      if (Math.abs(beat - startBeat) < 1e-9) ch = "2";
+      else if (Math.abs(beat - endBeat) < 1e-9) ch = "3";
+      if (expanded[i][panel] !== ch) {
+        expanded[i] = setChar(expanded[i], panel, ch);
+        touched = true;
+      }
+    }
+    if (touched) measures[m] = reduceRows(expanded);
+  }
+  cleanupHolds(measures);
+  return measures.map((mm) => mm.join("")).join("-");
 }
 
 // ===== 足の手動指定 (fパラメータ) のシリアライズ =====

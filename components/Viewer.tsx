@@ -16,7 +16,13 @@ import {
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
-import { parseOverrides, serializeOverrides, toggleNote, toggleShock } from "@/lib/edit";
+import {
+  parseOverrides,
+  placeHoldRange,
+  serializeOverrides,
+  toggleNote,
+  toggleShock,
+} from "@/lib/edit";
 import {
   beatAtTime,
   bpmAtBeat,
@@ -40,7 +46,7 @@ import { listSmCharts, normalizeNotesInput, type SmChartInfo } from "@/lib/url";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
 
-const EDIT_RESOLUTIONS = [4, 8, 12, 16, 24];
+const EDIT_RESOLUTIONS = [4, 8, 12, 16, 24, 32];
 const HISPEED_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1];
 
@@ -173,6 +179,13 @@ export default function Viewer({
   const [editRes, setEditRes] = useState(16);
   const [editShock, setEditShock] = useState(false);
   const [editGhost, setEditGhost] = useState(false);
+  const [editFreeze, setEditFreeze] = useState(false);
+  // フリーズ配置の始点 (終点タップで確定)
+  const [freezeAnchor, setFreezeAnchor] = useState<{
+    m: number;
+    row: number;
+    panel: number;
+  } | null>(null);
   const [showText, setShowText] = useState(false);
   const [fs, setFs] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
@@ -846,7 +859,13 @@ export default function Viewer({
 
       {editMode && (
         <div className="toolbar edit-toolbar">
-          <select value={editRes} onChange={(e) => setEditRes(Number(e.target.value))}>
+          <select
+            value={editRes}
+            onChange={(e) => {
+              setEditRes(Number(e.target.value));
+              setFreezeAnchor(null);
+            }}
+          >
             {EDIT_RESOLUTIONS.map((r) => (
               <option key={r} value={r}>
                 {S.placeAt(r)}
@@ -858,6 +877,8 @@ export default function Viewer({
             onClick={() => {
               setEditShock(!editShock);
               setEditGhost(false);
+              setEditFreeze(false);
+              setFreezeAnchor(null);
             }}
             title={S.shockModeTitle}
           >
@@ -868,10 +889,24 @@ export default function Viewer({
             onClick={() => {
               setEditGhost(!editGhost);
               setEditShock(false);
+              setEditFreeze(false);
+              setFreezeAnchor(null);
             }}
             title={S.ghostModeTitle}
           >
             ◇{editGhost ? S.ghostModeActive : S.ghostMode}
+          </button>
+          <button
+            className={editFreeze ? "" : "secondary"}
+            onClick={() => {
+              setEditFreeze(!editFreeze);
+              setEditShock(false);
+              setEditGhost(false);
+              setFreezeAnchor(null);
+            }}
+            title={S.freezeModeTitle}
+          >
+            ▮{editFreeze ? S.freezeModeActive : S.freezeMode}
           </button>
         </div>
       )}
@@ -1085,6 +1120,10 @@ export default function Viewer({
             ? S.hintShock
             : editGhost
             ? S.hintGhost
+            : editFreeze
+            ? freezeAnchor
+              ? S.hintFreezeEnd
+              : S.hintFreezeStart
             : S.hintNormal}
         </p>
       )}
@@ -1256,7 +1295,14 @@ export default function Viewer({
                     return [0, 1, 2, 3].map((p) => (
                       <div
                         key={`e${mi}-${r}-${p}`}
-                        className="edit-cell"
+                        className={`edit-cell${
+                          freezeAnchor &&
+                          freezeAnchor.m === mi &&
+                          freezeAnchor.row === r &&
+                          freezeAnchor.panel === p
+                            ? " freeze-anchor"
+                            : ""
+                        }`}
                         style={{
                           left: p * laneW + (laneW - noteSize) / 2,
                           top: beat * pxPerBeat + noteSize / 2 - cellH / 2,
@@ -1264,6 +1310,35 @@ export default function Viewer({
                           height: cellH,
                         }}
                         onClick={() => {
+                          // フリーズ配置モード: 始点→終点の2タップで配置
+                          if (editFreeze) {
+                            if (
+                              freezeAnchor &&
+                              freezeAnchor.m === mi &&
+                              freezeAnchor.row === r &&
+                              freezeAnchor.panel === p
+                            ) {
+                              setFreezeAnchor(null);
+                              return;
+                            }
+                            if (!freezeAnchor || freezeAnchor.panel !== p) {
+                              setFreezeAnchor({ m: mi, row: r, panel: p });
+                              return;
+                            }
+                            applyViewEdit(
+                              placeHoldRange(
+                                viewCompact,
+                                freezeAnchor.m,
+                                freezeAnchor.row,
+                                mi,
+                                r,
+                                editRes,
+                                p
+                              )
+                            );
+                            setFreezeAnchor(null);
+                            return;
+                          }
                           // 空打ちモード中は常に5。通常モードでも
                           // フリーズ保持中のセルには自動で空打ち (5) を置く
                           const inHold = chart.holds.some(
