@@ -116,6 +116,24 @@ export default function Viewer({
   const [clipName, setClipName] = useState("");
   const [clipCopied, setClipCopied] = useState(false);
   const [clipError, setClipError] = useState(false);
+  const [clipNameDirty, setClipNameDirty] = useState(false);
+
+  // 範囲に合わせてクリップ名を自動追従させる (ユーザーが名前を編集したら停止)
+  const syncClipName = (startStr: string, endStr: string) => {
+    if (clipNameDirty || !chart) return;
+    const st = Number(startStr);
+    const en = Number(endStr);
+    const base = title || S.untitled;
+    if (
+      Number.isInteger(st) &&
+      Number.isInteger(en) &&
+      st >= 1 &&
+      en <= chart.measures.length &&
+      st <= en
+    ) {
+      setClipName(st === 1 && en === chart.measures.length ? base : `${base} (${st}-${en})`);
+    }
+  };
 
   // クリップ範囲の検証。無効ならnull (エラー表示はblur/コピー時に行う)
   const parseClipRange = (): { start: number; end: number } | null => {
@@ -159,7 +177,6 @@ export default function Viewer({
   const [fs, setFs] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [narrow, setNarrow] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const beatRef = useRef(0);
@@ -582,13 +599,6 @@ export default function Viewer({
     });
   }, [current, chart, playing, editMode, pxPerBeat, noteSize, fs]);
 
-  const copyUrl = async () => {
-    const url = await buildUrl();
-    await navigator.clipboard.writeText(window.location.origin + url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-  };
-
   if (!chart) {
     return (
       <div className="card">
@@ -854,22 +864,16 @@ export default function Viewer({
           className="secondary"
           onClick={() => {
             if (!chart) return;
-            const total = chart.measures.length;
-            const cur = Math.min((curEvent?.row.measure ?? 0) + 1, total);
-            const st = cur;
-            const en = Math.min(st + 2, total);
-            setClipStart(String(st));
-            setClipEnd(String(en));
-            setClipName(`${title || S.untitled} (${st}-${en})`);
+            setClipStart("1");
+            setClipEnd(String(chart.measures.length));
+            setClipName(title || S.untitled);
+            setClipNameDirty(false);
             setClipCopied(false);
             setClipError(false);
             setShowClip(true);
           }}
         >
-          {narrow ? "✂" : S.clipBtn}
-        </button>
-        <button className="secondary" onClick={copyUrl}>
-          {copied ? S.copied : narrow ? S.copyShort : S.copyUrl}
+          {S.clipBtn}
         </button>
       </div>
 
@@ -990,6 +994,7 @@ export default function Viewer({
                   value={clipStart}
                   onChange={(e) => {
                     setClipStart(e.target.value);
+                    syncClipName(e.target.value, clipEnd);
                     setClipCopied(false);
                   }}
                   onBlur={() => setClipError(parseClipRange() === null)}
@@ -1003,6 +1008,7 @@ export default function Viewer({
                   value={clipEnd}
                   onChange={(e) => {
                     setClipEnd(e.target.value);
+                    syncClipName(clipStart, e.target.value);
                     setClipCopied(false);
                   }}
                   onBlur={() => setClipError(parseClipRange() === null)}
@@ -1020,7 +1026,10 @@ export default function Viewer({
               <input
                 type="text"
                 value={clipName}
-                onChange={(e) => setClipName(e.target.value)}
+                onChange={(e) => {
+                  setClipName(e.target.value);
+                  setClipNameDirty(true);
+                }}
               />
             </div>
             <button
