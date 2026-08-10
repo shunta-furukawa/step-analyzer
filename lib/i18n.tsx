@@ -76,6 +76,16 @@ export interface Strings {
   transformRandomReroll: string;
   transformCustom: string;
   close: string;
+  // クリップ共有
+  clipBtn: string;
+  clipTitle: string;
+  clipDesc: string;
+  clipStart: string;
+  clipEnd: string;
+  clipNameLabel: string;
+  clipMeasures: (n: number) => string;
+  clipCopy: string;
+  clipCopied: string;
   // コントロール
   toStartTitle: string;
   playTitle: string;
@@ -200,6 +210,15 @@ const ja: Strings = {
   transformRandomReroll: "タップするたびに並びを引き直します",
   transformCustom: "並びを自分で作る (2つタップで入れ替え)",
   close: "閉じる",
+  clipBtn: "✂ クリップ",
+  clipTitle: "部分クリップを共有",
+  clipDesc: "指定した小節だけを切り出した別のURLを作ります。変速・停止・足指定はクリップに合わせてシフトされ、ハイスピなどのオプションは引き継がれます。",
+  clipStart: "開始小節",
+  clipEnd: "終了小節",
+  clipNameLabel: "クリップ名 (コピー前に編集できます)",
+  clipMeasures: (n) => `${n}小節`,
+  clipCopy: "クリップURLをコピー",
+  clipCopied: "✓ コピーしました",
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
   clapTitle: "クラップ音",
@@ -326,6 +345,15 @@ const en: Strings = {
   transformRandomReroll: "Tap again to reroll the arrangement",
   transformCustom: "Custom arrangement (tap two lanes to swap)",
   close: "Close",
+  clipBtn: "✂ Clip",
+  clipTitle: "Share a clip",
+  clipDesc: "Creates a separate URL with only the selected measures. Timing and foot overrides are shifted to the clip; options like Hi-Speed are carried over.",
+  clipStart: "First measure",
+  clipEnd: "Last measure",
+  clipNameLabel: "Clip name (edit before copying)",
+  clipMeasures: (n) => `${n} measure${n === 1 ? "" : "s"}`,
+  clipCopy: "Copy clip URL",
+  clipCopied: "✓ Copied",
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
   clapTitle: "Clap sound",
@@ -451,6 +479,15 @@ const ko: Strings = {
   transformRandomReroll: "탭할 때마다 배치를 다시 뽑습니다",
   transformCustom: "직접 배치 만들기 (두 개를 탭해 교체)",
   close: "닫기",
+  clipBtn: "✂ 클립",
+  clipTitle: "부분 클립 공유",
+  clipDesc: "선택한 마디만 잘라낸 별도의 URL을 만듭니다. 변속·정지·발 지정은 클립에 맞게 이동되고, 하이스피드 등의 옵션은 이어집니다.",
+  clipStart: "시작 마디",
+  clipEnd: "끝 마디",
+  clipNameLabel: "클립 이름 (복사 전에 수정 가능)",
+  clipMeasures: (n) => `${n}마디`,
+  clipCopy: "클립 URL 복사",
+  clipCopied: "✓ 복사됨",
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",
   clapTitle: "클랩 사운드",

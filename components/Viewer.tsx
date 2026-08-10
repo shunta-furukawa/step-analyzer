@@ -14,6 +14,7 @@ import {
   type FootOverride,
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
+import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import { parseOverrides, serializeOverrides, toggleNote, toggleShock } from "@/lib/edit";
 import {
@@ -107,6 +108,12 @@ export default function Viewer({
   const [showOptions, setShowOptions] = useState(false);
   // カスタム並び替えで最初に選んだレーン (2つ目のタップで入れ替える)
   const [swapSel, setSwapSel] = useState<number | null>(null);
+  // クリップ共有モーダル
+  const [showClip, setShowClip] = useState(false);
+  const [clipStart, setClipStart] = useState(1);
+  const [clipEnd, setClipEnd] = useState(1);
+  const [clipName, setClipName] = useState("");
+  const [clipCopied, setClipCopied] = useState(false);
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
@@ -830,6 +837,23 @@ export default function Viewer({
           {transform && ` ${transformShortLabel(transform)}`}
         </button>
         <span className="toolbar-spacer" />
+        <button
+          className="secondary"
+          onClick={() => {
+            if (!chart) return;
+            const total = chart.measures.length;
+            const cur = Math.min((curEvent?.row.measure ?? 0) + 1, total);
+            const st = cur;
+            const en = Math.min(st + 2, total);
+            setClipStart(st);
+            setClipEnd(en);
+            setClipName(`${title || S.untitled} (${st}-${en})`);
+            setClipCopied(false);
+            setShowClip(true);
+          }}
+        >
+          {narrow ? "✂" : S.clipBtn}
+        </button>
         <button className="secondary" onClick={copyUrl}>
           {copied ? S.copied : narrow ? S.copyShort : S.copyUrl}
         </button>
@@ -929,6 +953,106 @@ export default function Viewer({
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showClip && chart && (
+        <div className="modal-backdrop" onClick={() => setShowClip(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{S.clipTitle}</h2>
+              <button className="secondary modal-close" onClick={() => setShowClip(false)}>
+                ✕
+              </button>
+            </div>
+            <p className="hint opt-hint">{S.clipDesc}</p>
+            <div className="clip-range">
+              <label className="timing-label">
+                {S.clipStart}
+                <input
+                  type="number"
+                  min={1}
+                  max={chart.measures.length}
+                  value={clipStart}
+                  onChange={(e) => {
+                    const v = Math.max(
+                      1,
+                      Math.min(chart.measures.length, Number(e.target.value) || 1)
+                    );
+                    setClipStart(v);
+                    if (clipEnd < v) setClipEnd(v);
+                    setClipCopied(false);
+                  }}
+                />
+              </label>
+              <label className="timing-label">
+                {S.clipEnd}
+                <input
+                  type="number"
+                  min={clipStart}
+                  max={chart.measures.length}
+                  value={clipEnd}
+                  onChange={(e) => {
+                    const v = Math.max(
+                      clipStart,
+                      Math.min(chart.measures.length, Number(e.target.value) || clipStart)
+                    );
+                    setClipEnd(v);
+                    setClipCopied(false);
+                  }}
+                />
+              </label>
+              <span className="opt-hint clip-count">
+                {S.clipMeasures(clipEnd - clipStart + 1)}
+              </span>
+            </div>
+            <div className="opt-row">
+              <span className="opt-label">{S.clipNameLabel}</span>
+              <input
+                type="text"
+                value={clipName}
+                onChange={(e) => setClipName(e.target.value)}
+              />
+            </div>
+            <button
+              onClick={async () => {
+                const clip = buildClipData(
+                  compact,
+                  bpms,
+                  stopList,
+                  overrides,
+                  clipStart,
+                  clipEnd
+                );
+                const enc = (v: string) =>
+                  encodeURIComponent(v).replace(/%2C/gi, ",").replace(/%3A/gi, ":");
+                const parts: string[] = [];
+                const encoded = await compressCompact(clip.compact);
+                if (encoded && encoded.length < clip.compact.length)
+                  parts.push(`d=${encoded}`);
+                else parts.push(`n=${clip.compact}`);
+                if (clipName) parts.push(`t=${encodeURIComponent(clipName)}`);
+                if (clip.b) parts.push(`b=${enc(clip.b)}`);
+                if (clip.s) parts.push(`s=${enc(clip.s)}`);
+                if (clip.f) parts.push(`f=${clip.f}`);
+                if (hispeed !== 1) parts.push(`hs=${hispeed}`);
+                if (speed !== 1) parts.push(`sp=${speed}`);
+                if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
+                if (lang !== "ja") parts.push(`l=${lang}`);
+                if (transform) parts.push(`tr=${transform}`);
+                try {
+                  await navigator.clipboard.writeText(
+                    `${location.origin}/?${parts.join("&")}`
+                  );
+                  setClipCopied(true);
+                } catch {
+                  // クリップボード不可の環境では諦める
+                }
+              }}
+            >
+              {clipCopied ? S.clipCopied : S.clipCopy}
+            </button>
           </div>
         </div>
       )}
