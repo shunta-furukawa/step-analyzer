@@ -41,12 +41,23 @@ export async function generateMetadata({
   const f = pick(sp.f);
   const c = pick(sp.c);
   const tr = pick(sp.tr);
+  // 背景色カスタム時はファビコン/ホーム画面アイコンも同じ色にする
+  const bgOk = c && /^[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : undefined;
+  const icons = bgOk
+    ? {
+        icon: [
+          { url: `/api/icon?s=64&c=${bgOk}`, type: "image/png", sizes: "64x64" },
+        ],
+        apple: [{ url: `/api/icon?s=180&c=${bgOk}`, sizes: "180x180" }],
+      }
+    : undefined;
 
   if (!n || !ogParam) {
     return {
       title: "Step Analyzer — DDR読譜トレーナー",
       description:
         "DDRの譜面の一部をURLで共有し、左右どちらの足でどのパネルを踏むべきかを可視化するツール",
+      ...(icons ? { icons } : {}),
     };
   }
 
@@ -65,6 +76,7 @@ export async function generateMetadata({
   return {
     title,
     description,
+    ...(icons ? { icons } : {}),
     openGraph: {
       title,
       description,

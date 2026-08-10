@@ -23,6 +23,11 @@ export const metadata: Metadata = {
     title: "StepAnalyzer",
     statusBarStyle: "black-translucent",
   },
+  // アイコンは動的ルートから配信 (c=で背景色カスタム可能)
+  icons: {
+    icon: [{ url: "/api/icon?s=64", type: "image/png", sizes: "64x64" }],
+    apple: [{ url: "/api/icon?s=180", sizes: "180x180" }],
+  },
 };
 
 export const viewport: Viewport = {
