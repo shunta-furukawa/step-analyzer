@@ -1004,6 +1004,11 @@ select {
   flex-wrap: wrap;
 }
 
+/* 編集モード時だけ出る2段目のツールバー (メイン行を押し出さない) */
+.edit-toolbar {
+  margin-top: 6px;
+}
+
 /* 再生コントロール: 指で押しやすい最小タップ寸法を確保する。
    ボタン内のラベルは折り返さない */
 .controls button {

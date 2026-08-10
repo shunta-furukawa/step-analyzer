@@ -809,39 +809,6 @@ export default function Viewer({
         >
           ✎ {editMode ? S.editing : S.edit}
         </button>
-        {editMode && (
-          <select value={editRes} onChange={(e) => setEditRes(Number(e.target.value))}>
-            {EDIT_RESOLUTIONS.map((r) => (
-              <option key={r} value={r}>
-                {S.placeAt(r)}
-              </option>
-            ))}
-          </select>
-        )}
-        {editMode && (
-          <button
-            className={editShock ? "" : "secondary"}
-            onClick={() => {
-              setEditShock(!editShock);
-              setEditGhost(false);
-            }}
-            title={S.shockModeTitle}
-          >
-            ⚡{editShock ? S.shockModeActive : S.shockMode}
-          </button>
-        )}
-        {editMode && (
-          <button
-            className={editGhost ? "" : "secondary"}
-            onClick={() => {
-              setEditGhost(!editGhost);
-              setEditShock(false);
-            }}
-            title={S.ghostModeTitle}
-          >
-            ◇{editGhost ? S.ghostModeActive : S.ghostMode}
-          </button>
-        )}
         <button className="secondary" onClick={() => setShowText(!showText)}>
           {narrow ? S.textBtnShort : S.textBtn}
         </button>
@@ -876,6 +843,38 @@ export default function Viewer({
           {S.clipBtn}
         </button>
       </div>
+
+      {editMode && (
+        <div className="toolbar edit-toolbar">
+          <select value={editRes} onChange={(e) => setEditRes(Number(e.target.value))}>
+            {EDIT_RESOLUTIONS.map((r) => (
+              <option key={r} value={r}>
+                {S.placeAt(r)}
+              </option>
+            ))}
+          </select>
+          <button
+            className={editShock ? "" : "secondary"}
+            onClick={() => {
+              setEditShock(!editShock);
+              setEditGhost(false);
+            }}
+            title={S.shockModeTitle}
+          >
+            ⚡{editShock ? S.shockModeActive : S.shockMode}
+          </button>
+          <button
+            className={editGhost ? "" : "secondary"}
+            onClick={() => {
+              setEditGhost(!editGhost);
+              setEditShock(false);
+            }}
+            title={S.ghostModeTitle}
+          >
+            ◇{editGhost ? S.ghostModeActive : S.ghostMode}
+          </button>
+        </div>
+      )}
 
       {showOptions && (
         <div className="modal-backdrop" onClick={() => setShowOptions(false)}>
