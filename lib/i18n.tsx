@@ -86,6 +86,7 @@ export interface Strings {
   clipMeasures: (n: number) => string;
   clipCopy: string;
   clipCopied: string;
+  clipRangeError: (max: number) => string;
   // コントロール
   toStartTitle: string;
   playTitle: string;
@@ -219,6 +220,7 @@ const ja: Strings = {
   clipMeasures: (n) => `${n}小節`,
   clipCopy: "クリップURLをコピー",
   clipCopied: "✓ コピーしました",
+  clipRangeError: (max) => `1〜${max}の小節番号で、開始≦終了になるように入力してください`,
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
   clapTitle: "クラップ音",
@@ -354,6 +356,7 @@ const en: Strings = {
   clipMeasures: (n) => `${n} measure${n === 1 ? "" : "s"}`,
   clipCopy: "Copy clip URL",
   clipCopied: "✓ Copied",
+  clipRangeError: (max) => `Enter measure numbers between 1 and ${max}, with start ≤ end`,
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
   clapTitle: "Clap sound",
@@ -488,6 +491,7 @@ const ko: Strings = {
   clipMeasures: (n) => `${n}마디`,
   clipCopy: "클립 URL 복사",
   clipCopied: "✓ 복사됨",
+  clipRangeError: (max) => `1〜${max} 사이의 마디 번호를 시작≦끝이 되도록 입력하세요`,
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",
   clapTitle: "클랩 사운드",

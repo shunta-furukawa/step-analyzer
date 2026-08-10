@@ -110,10 +110,23 @@ export default function Viewer({
   const [swapSel, setSwapSel] = useState<number | null>(null);
   // クリップ共有モーダル
   const [showClip, setShowClip] = useState(false);
-  const [clipStart, setClipStart] = useState(1);
-  const [clipEnd, setClipEnd] = useState(1);
+  // 入力途中の空欄や桁の途中を許すため文字列で持ち、検証はblur/コピー時のみ
+  const [clipStart, setClipStart] = useState("1");
+  const [clipEnd, setClipEnd] = useState("1");
   const [clipName, setClipName] = useState("");
   const [clipCopied, setClipCopied] = useState(false);
+  const [clipError, setClipError] = useState(false);
+
+  // クリップ範囲の検証。無効ならnull (エラー表示はblur/コピー時に行う)
+  const parseClipRange = (): { start: number; end: number } | null => {
+    if (!chart) return null;
+    const total = chart.measures.length;
+    const start = Number(clipStart);
+    const end = Number(clipEnd);
+    if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
+    if (start < 1 || end > total || start > end) return null;
+    return { start, end };
+  };
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
@@ -845,10 +858,11 @@ export default function Viewer({
             const cur = Math.min((curEvent?.row.measure ?? 0) + 1, total);
             const st = cur;
             const en = Math.min(st + 2, total);
-            setClipStart(st);
-            setClipEnd(en);
+            setClipStart(String(st));
+            setClipEnd(String(en));
             setClipName(`${title || S.untitled} (${st}-${en})`);
             setClipCopied(false);
+            setClipError(false);
             setShowClip(true);
           }}
         >
@@ -972,41 +986,35 @@ export default function Viewer({
                 {S.clipStart}
                 <input
                   type="number"
-                  min={1}
-                  max={chart.measures.length}
+                  inputMode="numeric"
                   value={clipStart}
                   onChange={(e) => {
-                    const v = Math.max(
-                      1,
-                      Math.min(chart.measures.length, Number(e.target.value) || 1)
-                    );
-                    setClipStart(v);
-                    if (clipEnd < v) setClipEnd(v);
+                    setClipStart(e.target.value);
                     setClipCopied(false);
                   }}
+                  onBlur={() => setClipError(parseClipRange() === null)}
                 />
               </label>
               <label className="timing-label">
                 {S.clipEnd}
                 <input
                   type="number"
-                  min={clipStart}
-                  max={chart.measures.length}
+                  inputMode="numeric"
                   value={clipEnd}
                   onChange={(e) => {
-                    const v = Math.max(
-                      clipStart,
-                      Math.min(chart.measures.length, Number(e.target.value) || clipStart)
-                    );
-                    setClipEnd(v);
+                    setClipEnd(e.target.value);
                     setClipCopied(false);
                   }}
+                  onBlur={() => setClipError(parseClipRange() === null)}
                 />
               </label>
-              <span className="opt-hint clip-count">
-                {S.clipMeasures(clipEnd - clipStart + 1)}
-              </span>
+              {parseClipRange() && (
+                <span className="opt-hint clip-count">
+                  {S.clipMeasures(parseClipRange()!.end - parseClipRange()!.start + 1)}
+                </span>
+              )}
             </div>
+            {clipError && <p className="error">{S.clipRangeError(chart.measures.length)}</p>}
             <div className="opt-row">
               <span className="opt-label">{S.clipNameLabel}</span>
               <input
@@ -1017,13 +1025,19 @@ export default function Viewer({
             </div>
             <button
               onClick={async () => {
+                const range = parseClipRange();
+                if (!range) {
+                  setClipError(true);
+                  return;
+                }
+                setClipError(false);
                 const clip = buildClipData(
                   compact,
                   bpms,
                   stopList,
                   overrides,
-                  clipStart,
-                  clipEnd
+                  range.start,
+                  range.end
                 );
                 const enc = (v: string) =>
                   encodeURIComponent(v).replace(/%2C/gi, ",").replace(/%3A/gi, ":");
