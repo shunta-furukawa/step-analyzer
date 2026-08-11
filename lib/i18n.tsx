@@ -92,6 +92,12 @@ export interface Strings {
   clipCopy: string;
   clipCopied: string;
   clipRangeError: (max: number) => string;
+  imageBtnTitle: string;
+  imageTitle: string;
+  imageDesc: string;
+  imageSave: string;
+  imageSaving: string;
+  imageSaved: string;
   // コントロール
   toStartTitle: string;
   playTitle: string;
@@ -231,6 +237,13 @@ const ja: Strings = {
   clipCopy: "URLをコピー",
   clipCopied: "✓ コピーしました",
   clipRangeError: (max) => `1〜${max}の小節番号で、開始≦終了になるように入力してください`,
+  imageBtnTitle: "譜面を画像で保存・共有",
+  imageTitle: "画像を書き出し",
+  imageDesc:
+    "指定した小節範囲の譜面を、体の向きの色分けや足バッジ付きの画像にして保存・共有できます。",
+  imageSave: "画像を保存・共有",
+  imageSaving: "生成中…",
+  imageSaved: "✓ 書き出しました",
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
   clapTitle: "クラップ音",
@@ -372,6 +385,13 @@ const en: Strings = {
   clipCopy: "Copy URL",
   clipCopied: "✓ Copied",
   clipRangeError: (max) => `Enter measure numbers between 1 and ${max}, with start ≤ end`,
+  imageBtnTitle: "Save / share the chart as an image",
+  imageTitle: "Export image",
+  imageDesc:
+    "Renders the selected measure range as an image with facing colors and foot badges, ready to save or share.",
+  imageSave: "Save / share image",
+  imageSaving: "Rendering…",
+  imageSaved: "✓ Exported",
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
   clapTitle: "Clap sound",
@@ -512,6 +532,13 @@ const ko: Strings = {
   clipCopy: "URL 복사",
   clipCopied: "✓ 복사됨",
   clipRangeError: (max) => `1〜${max} 사이의 마디 번호를 시작≦끝이 되도록 입력하세요`,
+  imageBtnTitle: "채보를 이미지로 저장·공유",
+  imageTitle: "이미지 내보내기",
+  imageDesc:
+    "지정한 마디 범위의 채보를 몸 방향 색상과 발 배지가 포함된 이미지로 저장·공유할 수 있습니다.",
+  imageSave: "이미지 저장·공유",
+  imageSaving: "생성 중…",
+  imageSaved: "✓ 내보냈습니다",
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",
   clapTitle: "클랩 사운드",

@@ -14,6 +14,7 @@ import {
   type FootOverride,
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
+import { renderChartImage } from "@/lib/chartImage";
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
@@ -147,6 +148,24 @@ export default function Viewer({
     const total = chart.measures.length;
     const start = Number(clipStart);
     const end = Number(clipEnd);
+    if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
+    if (start < 1 || end > total || start > end) return null;
+    return { start, end };
+  };
+
+  // 画像書き出しモーダル (クリップと同じ「検証はblur/実行時のみ」方式)
+  const [showImage, setShowImage] = useState(false);
+  const [imgStart, setImgStart] = useState("1");
+  const [imgEnd, setImgEnd] = useState("1");
+  const [imgBusy, setImgBusy] = useState(false);
+  const [imgDone, setImgDone] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
+  const parseImgRange = (): { start: number; end: number } | null => {
+    if (!chart) return null;
+    const total = chart.measures.length;
+    const start = Number(imgStart);
+    const end = Number(imgEnd);
     if (!Number.isInteger(start) || !Number.isInteger(end)) return null;
     if (start < 1 || end > total || start > end) return null;
     return { start, end };
@@ -855,6 +874,20 @@ export default function Viewer({
         >
           {S.clipBtn}
         </button>
+        <button
+          className="secondary"
+          onClick={() => {
+            if (!chart) return;
+            setImgStart("1");
+            setImgEnd(String(chart.measures.length));
+            setImgDone(false);
+            setImgError(false);
+            setShowImage(true);
+          }}
+          title={S.imageBtnTitle}
+        >
+          📷
+        </button>
       </div>
 
       {editMode && (
@@ -1109,6 +1142,109 @@ export default function Viewer({
               }}
             >
               {clipCopied ? S.clipCopied : S.clipCopy}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showImage && chart && (
+        <div className="modal-backdrop" onClick={() => setShowImage(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{S.imageTitle}</h2>
+              <button className="secondary modal-close" onClick={() => setShowImage(false)}>
+                ✕
+              </button>
+            </div>
+            <p className="hint opt-hint">{S.imageDesc}</p>
+            <div className="clip-range">
+              <label className="timing-label">
+                {S.clipStart}
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={imgStart}
+                  onChange={(e) => {
+                    setImgStart(e.target.value);
+                    setImgDone(false);
+                  }}
+                  onBlur={() => setImgError(parseImgRange() === null)}
+                />
+              </label>
+              <label className="timing-label">
+                {S.clipEnd}
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={imgEnd}
+                  onChange={(e) => {
+                    setImgEnd(e.target.value);
+                    setImgDone(false);
+                  }}
+                  onBlur={() => setImgError(parseImgRange() === null)}
+                />
+              </label>
+              {parseImgRange() && (
+                <span className="opt-hint clip-count">
+                  {S.clipMeasures(parseImgRange()!.end - parseImgRange()!.start + 1)}
+                </span>
+              )}
+            </div>
+            {imgError && <p className="error">{S.clipRangeError(chart.measures.length)}</p>}
+            <button
+              disabled={imgBusy}
+              onClick={async () => {
+                const range = parseImgRange();
+                if (!range) {
+                  setImgError(true);
+                  return;
+                }
+                setImgError(false);
+                setImgBusy(true);
+                try {
+                  const canvas = renderChartImage({
+                    chart,
+                    footsteps,
+                    overrides,
+                    startMeasure: range.start,
+                    endMeasure: range.end,
+                    title: title || S.untitled,
+                    bgColor,
+                  });
+                  const blob = await new Promise<Blob | null>((resolve) =>
+                    canvas.toBlob(resolve, "image/png")
+                  );
+                  if (!blob) return;
+                  const base = (title || S.untitled).replace(/[\\/:*?"<>|]/g, "_");
+                  const file = new File(
+                    [blob],
+                    `${base}_${range.start}-${range.end}.png`,
+                    { type: "image/png" }
+                  );
+                  // iOSなどでは共有シート、それ以外はダウンロード
+                  if (navigator.canShare?.({ files: [file] })) {
+                    try {
+                      await navigator.share({ files: [file] });
+                      setImgDone(true);
+                      return;
+                    } catch (err) {
+                      // ユーザーが共有シートを閉じただけなら何もしない
+                      if ((err as DOMException)?.name === "AbortError") return;
+                    }
+                  }
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = file.name;
+                  a.click();
+                  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+                  setImgDone(true);
+                } finally {
+                  setImgBusy(false);
+                }
+              }}
+            >
+              {imgBusy ? S.imageSaving : imgDone ? S.imageSaved : S.imageSave}
             </button>
           </div>
         </div>
