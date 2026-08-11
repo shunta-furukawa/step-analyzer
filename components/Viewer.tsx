@@ -624,6 +624,11 @@ export default function Viewer({
           // GPU合成されるtransformで小数px単位の追従をする (目の疲れ対策)
           const offset = beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y;
           inner.style.transform = `translate3d(0, ${-offset}px, 0)`;
+          // フリーズバーを受け皿の中心 (判定線) で消費させるための現在位置
+          inner.style.setProperty(
+            "--fs-cut",
+            `${beatRef.current * pxPerBeat + noteSize / 2}px`
+          );
           if (el.scrollTop !== 0) el.scrollTop = 0;
           // transformではscrollイベントが出ないので、仮想化の範囲もここで更新
           const a = offset / pxPerBeat - 8;
@@ -645,6 +650,7 @@ export default function Viewer({
       const inner = chartInnerRef.current;
       if (inner && inner.style.transform) {
         inner.style.transform = "";
+        inner.style.removeProperty("--fs-cut");
         const el = scrollRef.current;
         if (el)
           el.scrollTop = Math.max(
@@ -1731,6 +1737,15 @@ export default function Viewer({
                     top: s.start * pxPerBeat + noteSize / 2,
                     width: noteSize - 12,
                     height: (s.end - s.start) * pxPerBeat,
+                    // fs再生中は判定線より上を削って「消費されていく」見た目に。
+                    // --fs-cut未設定時はcalcが大きな負値になりクリップ無効
+                    ...(fs
+                      ? {
+                          clipPath: `inset(calc(var(--fs-cut, -99999px) - ${
+                            s.start * pxPerBeat + noteSize / 2
+                          }px) 0 0 0)`,
+                        }
+                      : {}),
                     // ロールはオレンジ、フリーズは保持足の色 (不明なら緑)
                     background: s.roll
                       ? "#ff9f43"
