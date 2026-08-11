@@ -1478,6 +1478,11 @@ input[type="range"]:focus {
   display: none;
 }
 
+/* fs再生はtransformで追従するため、合成レイヤーを事前確保する */
+.viewer-fs .chart-inner {
+  will-change: transform;
+}
+
 .viewer-fs .note {
   pointer-events: none;
 }

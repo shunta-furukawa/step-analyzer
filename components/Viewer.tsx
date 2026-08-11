@@ -238,6 +238,8 @@ export default function Viewer({
   const [narrow, setNarrow] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  // fs再生時のサブピクセルスクロール用 (scrollTopは整数に量子化されるため)
+  const chartInnerRef = useRef<HTMLDivElement>(null);
   const beatRef = useRef(0);
   const timeRef = useRef(0);
   // 仮想化: 描画するビート範囲 (画面内 + バッファ)
@@ -610,11 +612,24 @@ export default function Viewer({
       if (fIdx >= 0) setFootIdx((c) => (c !== fIdx ? fIdx : c));
 
       const el = scrollRef.current;
+      const inner = chartInnerRef.current;
       if (el) {
-        // fs時はステップゾーンに現在ビートが重なるよう合わせる
-        el.scrollTop = fs
-          ? beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y
-          : beatRef.current * pxPerBeat - el.clientHeight * 0.4;
+        if (fs && inner) {
+          // fs時はステップゾーンに現在ビートが重なるよう合わせる。
+          // scrollTopは整数pxに量子化されてサブピクセルの滑らかさが出ないため、
+          // GPU合成されるtransformで小数px単位の追従をする (目の疲れ対策)
+          const offset = beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y;
+          inner.style.transform = `translate3d(0, ${-offset}px, 0)`;
+          if (el.scrollTop !== 0) el.scrollTop = 0;
+          // transformではscrollイベントが出ないので、仮想化の範囲もここで更新
+          const a = offset / pxPerBeat - 8;
+          const b2 = (offset + el.clientHeight) / pxPerBeat + 8;
+          setViewBeats((v) =>
+            Math.abs(v.a - a) > 2 || Math.abs(v.b - b2) > 2 ? { a, b: b2 } : v
+          );
+        } else {
+          el.scrollTop = beatRef.current * pxPerBeat - el.clientHeight * 0.4;
+        }
       }
       raf = requestAnimationFrame(tick);
     };
@@ -622,6 +637,17 @@ export default function Viewer({
     return () => {
       cancelAnimationFrame(raf);
       if (track) track.pause();
+      // transformスクロールを解除し、通常のスクロール位置に引き継ぐ
+      const inner = chartInnerRef.current;
+      if (inner && inner.style.transform) {
+        inner.style.transform = "";
+        const el = scrollRef.current;
+        if (el)
+          el.scrollTop = Math.max(
+            0,
+            beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y
+          );
+      }
     };
   }, [playing, chart, timeline, speed, pxPerBeat, fs, noteSize, muted, prepareClapTrack]);
 
@@ -1493,7 +1519,11 @@ export default function Viewer({
             </>
           )}
           <div className="chart-scroll" ref={scrollRef}>
-            <div className="chart-inner" style={{ width: laneW * 4, height: totalH }}>
+            <div
+              className="chart-inner"
+              ref={chartInnerRef}
+              style={{ width: laneW * 4, height: totalH }}
+            >
               {/* 体の向きの背景バンド: ノーツi-1→ノーツi の領域を
                   「ノーツiを踏んだときの向き」の色で塗る (これから来る捻りの予告)。
                   1ノーツ目は譜面先頭 (初期位置=正面) から塗る */}
