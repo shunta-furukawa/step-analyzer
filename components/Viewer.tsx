@@ -211,6 +211,9 @@ export default function Viewer({
   // 移動トランジション (FOOT_TRAVEL_SEC) ぶん早く動き出すことで、
   // 足がジャストのタイミングでパネルに「到着」して見えるようにする。
   const [footIdx, setFootIdx] = useState(0);
+  // fs再生でジャスト済みノーツを即非表示にするための「通過済み」インデックス。
+  // currentは再生前も先頭ノーツを指すため、通過判定は別に持つ (-1=未通過)
+  const [playedIdx, setPlayedIdx] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(() => parseChoice(initialSpeed, SPEED_OPTIONS, 1));
   const [hispeed, setHispeed] = useState(() =>
@@ -600,6 +603,7 @@ export default function Viewer({
         else break;
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
+      setPlayedIdx((c) => (c !== idx ? idx : c));
 
       // 足の位置は移動時間ぶん先読み: ジャストの瞬間に次のパネルへ到着させる。
       // timeRefは譜面内時刻なので、実時間の先読みはspeed倍して換算する
@@ -1520,7 +1524,13 @@ export default function Viewer({
               </button>
             </>
           )}
-          <div className="chart-scroll" ref={scrollRef}>
+          <div
+            className="chart-scroll"
+            ref={scrollRef}
+            // fs時は受け皿の上端から上を切り落とし、通過した要素が
+            // ステップゾーンの上に突き抜けて見えないようにする
+            style={fs ? { clipPath: `inset(${RECEPTOR_Y - noteSize / 2}px 0 0 0)` } : undefined}
+          >
             <div
               className="chart-inner"
               ref={chartInnerRef}
@@ -1814,6 +1824,8 @@ export default function Viewer({
 
               {chart.events.map((ev, i) => {
                 if (ev.row.beat < viewBeats.a || ev.row.beat > viewBeats.b) return null;
+                // fs再生中: 受け皿でジャスト表示が出たノーツは実機同様に消す
+                if (fs && playing && i <= playedIdx) return null;
                 const step = footsteps[i];
                 return ev.panels.map((p) => {
                   const foot = step.feet[p];
