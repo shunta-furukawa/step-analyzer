@@ -225,7 +225,8 @@ select,
   color: #cdd3da;
 }
 
-.clip-range input[type="number"] {
+.clip-range input[type="number"],
+.modal-card input[type="number"] {
   width: 100%;
   background: var(--paper);
   border: 2px solid var(--line);
