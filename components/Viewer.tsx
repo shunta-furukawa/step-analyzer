@@ -267,8 +267,9 @@ export default function Viewer({
     typeof window !== "undefined"
       ? Math.min(96, Math.floor((window.innerWidth - 16) / 4))
       : 80;
-  const pxPerBeat = (fs ? fsLane * 1.4 : narrow ? 52 : 72) * hispeed;
   const noteSize = fs ? fsLane - 10 : narrow ? 28 : 40;
+  // 1拍の高さは矢印サイズの1.8倍 (通常表示・フルスクリーン・画像書き出しで統一)
+  const pxPerBeat = (fs ? noteSize * 1.8 : narrow ? 52 : 72) * hispeed;
   const laneW = fs ? fsLane : narrow ? 36 : 52;
 
   // 変形オプション適用後の譜面 (表示・解析はすべてこちらを使う)。
