@@ -527,14 +527,14 @@ export const FOOT_COLORS: Record<Foot, string> = {
 };
 
 /**
- * 体の向きに対応する背景色。
+ * 体の向きに対応する背景色。捻りの強調用なので、
+ * 90度まで (通常の踏み) は無色にして135度以上から色をつける。
  * 左向き=ピンク・右向き=水色で、角度が大きいほど濃い。
  * 225〜270度 (イレギュラー) は紫の警告色、315度以上 (一回転級) は真っ暗。
- * 正面 (±22度未満) は無色 (null)。
  */
 export function facingColor(facing: number): string | null {
   const a = Math.abs(facing);
-  if (a < 22) return null;
+  if (a < 112) return null;
   if (a >= 315) return "rgba(4, 4, 12, 0.88)";
   if (a > 200) return "rgba(168, 85, 247, 0.45)";
   if (a > 157) {
