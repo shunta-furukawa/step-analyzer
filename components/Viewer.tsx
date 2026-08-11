@@ -1469,7 +1469,9 @@ export default function Viewer({
                   width: `${chart.totalBeats > 0 ? Math.min(100, (100 * (chart.events[current]?.row.beat ?? 0)) / chart.totalBeats) : 0}%`,
                 }}
               />
-              <div className="fs-cover" style={{ height: RECEPTOR_Y + noteSize / 2 }}>
+              {/* 通過済みノーツを隠す覆い。受け皿の上端より上だけを覆い、
+                  判定位置 (受け皿と重なる瞬間) には一切掛からないようにする */}
+              <div className="fs-cover" style={{ height: RECEPTOR_Y - noteSize / 2 }}>
                 <div className="fs-title">
                   <span className="fs-title-name">{title || "Step Analyzer"}</span>
                   {bpm && <span> · BPM {bpm}</span>}

@@ -1525,7 +1525,8 @@ input[type="range"]:focus {
   top: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(to bottom, #0d0f14 78%, rgba(13, 15, 20, 0));
+  /* 受け皿の上端で覆いが終わるので、フェードは覆いの内側で完結させる */
+  background: linear-gradient(to bottom, #0d0f14 45%, rgba(13, 15, 20, 0));
   z-index: 4;
   pointer-events: none;
 }
