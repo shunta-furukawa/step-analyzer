@@ -30,6 +30,7 @@ export interface ChartImageOptions {
   title: string;
   bgColor: string; // 6桁hex ('#'なし)
   measuresPerColumn?: number;
+  hispeed?: number; // 縦の縮尺 (アプリのハイスピ設定に追従)
 }
 
 const INK = "#17181c";
@@ -177,18 +178,20 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   const total = chart.measures.length;
   const start = Math.max(1, Math.min(o.startMeasure, total));
   const end = Math.max(start, Math.min(o.endMeasure, total));
-  const perCol = o.measuresPerColumn ?? 4;
+  const perCol = Math.max(1, Math.floor(o.measuresPerColumn ?? 32));
+  const pxPerBeat = PX_PER_BEAT * Math.max(0.25, o.hispeed ?? 1);
   const count = end - start + 1;
   const cols = Math.ceil(count / perCol);
 
   const colInnerW = LANE_W * 4;
   // 小節境界ちょうどのノーツが矢印半分だけレーン外にはみ出すぶんの余白
   const noteMargin = NOTE / 2 + 3;
-  const colH = Math.min(count, perCol) * 4 * PX_PER_BEAT;
+  const colH = Math.min(count, perCol) * 4 * pxPerBeat;
   const width = PAD * 2 + cols * (colInnerW + COL_GAP) - COL_GAP;
   const height = PAD * 2 + HEADER + noteMargin + colH + noteMargin;
 
-  const scale = 2;
+  // 長い縦一列でもブラウザのcanvasサイズ上限に収まるよう解像度を調整
+  const scale = Math.min(2, 16000 / Math.max(width, height));
   const canvas = document.createElement("canvas");
   canvas.width = width * scale;
   canvas.height = height * scale;
@@ -227,11 +230,11 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
     const colMeasures = Math.min(perCol, end - (colStartMeasure + 1) + 1);
     const colStartBeat = colStartMeasure * 4;
     const colEndBeat = colStartBeat + colMeasures * 4;
-    const yOf = (beat: number) => topY + (beat - colStartBeat) * PX_PER_BEAT;
+    const yOf = (beat: number) => topY + (beat - colStartBeat) * pxPerBeat;
 
     // レーン背景
     ctx.fillStyle = INK;
-    ctx.fillRect(colX, topY, colInnerW, colMeasures * 4 * PX_PER_BEAT);
+    ctx.fillRect(colX, topY, colInnerW, colMeasures * 4 * pxPerBeat);
 
     // 体の向きバンド (ノーツi-1→i をiの色で)
     chart.events.forEach((ev, i) => {
@@ -247,7 +250,7 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
 
     // 小節線 + 小節番号
     for (let m = 0; m <= colMeasures; m++) {
-      const y = topY + m * 4 * PX_PER_BEAT;
+      const y = topY + m * 4 * pxPerBeat;
       ctx.strokeStyle = "rgba(255,255,255,0.28)";
       ctx.lineWidth = 1;
       ctx.beginPath();

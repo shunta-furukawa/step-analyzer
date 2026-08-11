@@ -157,6 +157,8 @@ export default function Viewer({
   const [showImage, setShowImage] = useState(false);
   const [imgStart, setImgStart] = useState("1");
   const [imgEnd, setImgEnd] = useState("1");
+  // 1列に描く小節数 (長すぎる値は書き出し時にクランプ)
+  const [imgPerCol, setImgPerCol] = useState("32");
   const [imgBusy, setImgBusy] = useState(false);
   const [imgDone, setImgDone] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -1191,6 +1193,19 @@ export default function Viewer({
               )}
             </div>
             {imgError && <p className="error">{S.clipRangeError(chart.measures.length)}</p>}
+            <div className="opt-row">
+              <span className="opt-label">{S.imagePerCol}</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={imgPerCol}
+                onChange={(e) => {
+                  setImgPerCol(e.target.value);
+                  setImgDone(false);
+                }}
+              />
+            </div>
             <button
               disabled={imgBusy}
               onClick={async () => {
@@ -1202,6 +1217,8 @@ export default function Viewer({
                 setImgError(false);
                 setImgBusy(true);
                 try {
+                  // 空欄や0以下は既定の32列に倒す
+                  const perColNum = Math.floor(Number(imgPerCol));
                   const canvas = renderChartImage({
                     chart,
                     footsteps,
@@ -1210,6 +1227,9 @@ export default function Viewer({
                     endMeasure: range.end,
                     title: title || S.untitled,
                     bgColor,
+                    measuresPerColumn:
+                      Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 32,
+                    hispeed,
                   });
                   const blob = await new Promise<Blob | null>((resolve) =>
                     canvas.toBlob(resolve, "image/png")

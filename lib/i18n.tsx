@@ -98,6 +98,7 @@ export interface Strings {
   imageSave: string;
   imageSaving: string;
   imageSaved: string;
+  imagePerCol: string;
   // コントロール
   toStartTitle: string;
   playTitle: string;
@@ -244,6 +245,7 @@ const ja: Strings = {
   imageSave: "画像を保存・共有",
   imageSaving: "生成中…",
   imageSaved: "✓ 書き出しました",
+  imagePerCol: "1列の小節数",
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
   clapTitle: "クラップ音",
@@ -392,6 +394,7 @@ const en: Strings = {
   imageSave: "Save / share image",
   imageSaving: "Rendering…",
   imageSaved: "✓ Exported",
+  imagePerCol: "Measures per column",
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
   clapTitle: "Clap sound",
@@ -539,6 +542,7 @@ const ko: Strings = {
   imageSave: "이미지 저장·공유",
   imageSaving: "생성 중…",
   imageSaved: "✓ 내보냈습니다",
+  imagePerCol: "한 열의 마디 수",
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",
   clapTitle: "클랩 사운드",
