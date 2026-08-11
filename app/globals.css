@@ -1258,6 +1258,39 @@ input[type="range"]:focus {
   font-family: ui-monospace, monospace;
 }
 
+/* ヘッダのBPMチップ: タップで変速・停止パネルを開閉 */
+.bpm-chip {
+  background: var(--ink-2);
+  color: var(--mint);
+  border: none;
+  box-shadow: none;
+  padding: 4px 9px;
+  font-size: 12px;
+  font-weight: 800;
+  font-family: ui-monospace, monospace;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bpm-chip.sofran {
+  outline: 2px solid var(--mint);
+}
+
+.bpm-chip.open {
+  background: var(--mint);
+  color: var(--ink);
+}
+
+.bpm-chip .bpm-caret {
+  margin-left: 4px;
+  font-size: 10px;
+  color: var(--muted-dark);
+}
+
+.bpm-chip.open .bpm-caret {
+  color: var(--ink);
+}
+
 .sofran-chip {
   background: var(--mint);
   color: var(--ink);

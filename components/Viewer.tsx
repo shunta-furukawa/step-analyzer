@@ -817,22 +817,23 @@ export default function Viewer({
                   {title || S.untitled} <span className="edit-pen">✎</span>
                 </button>
               )}
-              <span className="bpm">
-                BPM{" "}
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  className="bpm-input"
-                  style={hasSofran ? { width: 116 } : undefined}
-                  value={bpm}
-                  placeholder="120"
-                  onChange={(e) => {
-                    setBpm(sanitizeTimingInput(e.target.value));
-                    setDirty(true);
-                  }}
-                />
-                {hasSofran && <span className="sofran-chip">{S.timingBtn}</span>}
-              </span>
+              {/* BPMチップ: タップで変速・停止パネルを開閉 (旧・変速ボタンを統合) */}
+              <button
+                className={`bpm-chip${hasSofran ? " sofran" : ""}${
+                  showTiming ? " open" : ""
+                }`}
+                onClick={() => setShowTiming(!showTiming)}
+                title={S.timingPanelTitle}
+              >
+                ♩=
+                {bpms.length > 1
+                  ? `${+Math.min(...bpms.map((x) => x.bpm)).toFixed(1)}-${+Math.max(
+                      ...bpms.map((x) => x.bpm)
+                    ).toFixed(1)}`
+                  : `${+bpms[0].bpm.toFixed(1)}`}
+                {stopList.length > 0 && " ⏸"}
+                <span className="bpm-caret">▾</span>
+              </button>
             </div>
             <div className="legend">
               <span className="chip">
@@ -913,12 +914,6 @@ export default function Viewer({
         </button>
         <button className="secondary" onClick={() => setShowText(!showText)}>
           {narrow ? S.textBtnShort : S.textBtn}
-        </button>
-        <button
-          className={hasSofran && !showTiming ? "" : "secondary"}
-          onClick={() => setShowTiming(!showTiming)}
-        >
-          {S.timingBtn}
         </button>
         <button
           className={transform ? "" : "secondary"}
