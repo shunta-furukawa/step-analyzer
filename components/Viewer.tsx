@@ -1322,7 +1322,7 @@ export default function Viewer({
       )}
 
       {rangeSel && chart && (
-        <p className="hint range-hint">
+        <p className="range-hint">
           <span>
             {rangeSel.b === null
               ? S.rangePending(rangeSel.a + 1)

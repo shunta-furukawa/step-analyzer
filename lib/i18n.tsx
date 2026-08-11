@@ -250,10 +250,8 @@ const ja: Strings = {
   imageSaving: "生成中…",
   imageSaved: "✓ 書き出しました",
   imagePerCol: "1列の小節数",
-  rangePending: (m) =>
-    `${m}小節目を始点に選択中 — 終点にする小節番号をタップ (同じ番号タップで解除)`,
-  rangeActive: (a, b) =>
-    `共有・画像の範囲: ${a}〜${b}小節 (番号タップで選び直し)`,
+  rangePending: (m) => `始点: ${m}小節目 — 終点の番号をタップ`,
+  rangeActive: (a, b) => `共有・画像の範囲: ${a}〜${b}小節`,
   rangeClear: "解除",
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
@@ -404,10 +402,8 @@ const en: Strings = {
   imageSaving: "Rendering…",
   imageSaved: "✓ Exported",
   imagePerCol: "Measures per column",
-  rangePending: (m) =>
-    `Measure ${m} set as start — tap another measure number to set the end (tap it again to cancel)`,
-  rangeActive: (a, b) =>
-    `Share / image range: measures ${a}–${b} (tap a number to reselect)`,
+  rangePending: (m) => `Start: measure ${m} — tap the end measure number`,
+  rangeActive: (a, b) => `Share / image range: ${a}–${b}`,
   rangeClear: "Clear",
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
@@ -557,10 +553,8 @@ const ko: Strings = {
   imageSaving: "생성 중…",
   imageSaved: "✓ 내보냈습니다",
   imagePerCol: "한 열의 마디 수",
-  rangePending: (m) =>
-    `${m}번째 마디를 시작으로 선택 중 — 끝으로 할 마디 번호를 탭하세요 (같은 번호를 탭하면 해제)`,
-  rangeActive: (a, b) =>
-    `공유·이미지 범위: ${a}〜${b}마디 (번호를 탭해 다시 선택)`,
+  rangePending: (m) => `시작: ${m}마디 — 끝 마디 번호를 탭`,
+  rangeActive: (a, b) => `공유·이미지 범위: ${a}〜${b}마디`,
   rangeClear: "해제",
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",

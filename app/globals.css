@@ -720,17 +720,28 @@ select {
   opacity: 0.45;
 }
 
+/* 範囲選択中のバナー: 譜面に密着しないよう下マージンを取り、
+   緑背景でも読めるように暗色カード+白文字にする */
 .range-hint {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  background: var(--ink);
+  color: #f2f5ff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.5;
+  padding: 8px 10px;
+  margin: 0 0 10px;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
 }
 
 .range-hint .range-clear {
-  padding: 4px 10px;
+  padding: 5px 10px;
   font-size: 12px;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .note {
