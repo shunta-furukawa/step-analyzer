@@ -31,6 +31,7 @@ export interface ChartImageOptions {
   bgColor: string; // 6桁hex ('#'なし)
   measuresPerColumn?: number;
   hispeed?: number; // 縦の縮尺 (アプリのハイスピ設定に追従)
+  highlights?: Set<number>; // 注目ノーツのtick集合 (黄色い枠で強調)
 }
 
 const INK = "#17181c";
@@ -181,6 +182,47 @@ function drawFootBadge(
   ctx.restore();
 }
 
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+) {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+/** 注目ノーツを連続グループにまとめる (Viewerの表示と同じ規則) */
+function highlightBoxesOf(chart: ParsedChart, highlights: Set<number>) {
+  const boxes: { start: number; end: number; pMin: number; pMax: number }[] = [];
+  let lastMarkedIdx = -2;
+  chart.events.forEach((ev, i) => {
+    const marked =
+      !ev.shock && ev.panels.length > 0 && highlights.has(tickOf(ev.row.beat));
+    if (!marked) return;
+    const pMin = Math.min(...ev.panels);
+    const pMax = Math.max(...ev.panels);
+    if (lastMarkedIdx === i - 1 && boxes.length > 0) {
+      const b = boxes[boxes.length - 1];
+      b.end = ev.row.beat;
+      b.pMin = Math.min(b.pMin, pMin);
+      b.pMax = Math.max(b.pMax, pMax);
+    } else {
+      boxes.push({ start: ev.row.beat, end: ev.row.beat, pMin, pMax });
+    }
+    lastMarkedIdx = i;
+  });
+  return boxes;
+}
+
 /** フリーズを保持足ごとの区間に分割 (Viewerの表示と同じ規則) */
 function holdSegments(chart: ParsedChart, footsteps: FootStep[]) {
   const segs: {
@@ -257,6 +299,7 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   ctx.globalAlpha = 1;
 
   const segs = holdSegments(chart, footsteps);
+  const hlBoxes = o.highlights ? highlightBoxesOf(chart, o.highlights) : [];
   const topY = PAD + HEADER + noteMargin;
 
   for (let ci = 0; ci < cols; ci++) {
@@ -387,6 +430,23 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
         }
       }
     });
+
+    // 注目ノーツの黄色い枠 (ノーツの上に描く)
+    for (const b of hlBoxes) {
+      if (b.end < colStartBeat || b.start >= colEndBeat) continue;
+      const pad = 7;
+      const x = colX + b.pMin * LANE_W + (LANE_W - NOTE) / 2 - pad;
+      const w = (b.pMax - b.pMin) * LANE_W + NOTE + pad * 2;
+      const yTop = yOf(Math.max(b.start, colStartBeat)) - NOTE / 2 - pad;
+      const yBottom = yOf(Math.min(b.end, colEndBeat)) + NOTE / 2 + pad;
+      roundRectPath(ctx, x, yTop, w, yBottom - yTop, 12);
+      ctx.strokeStyle = "rgba(255, 217, 59, 0.5)";
+      ctx.lineWidth = 8;
+      ctx.stroke();
+      ctx.strokeStyle = "#ffd93b";
+      ctx.lineWidth = 3.5;
+      ctx.stroke();
+    }
   }
 
   return canvas;

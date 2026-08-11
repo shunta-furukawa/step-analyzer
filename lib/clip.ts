@@ -15,6 +15,7 @@ export interface ClipResult {
   b?: string;
   s?: string;
   f?: string;
+  hl?: string;
 }
 
 function setChar(row: string, i: number, ch: string): string {
@@ -32,7 +33,8 @@ export function buildClipData(
   stops: Stop[],
   overrides: Map<number, FootOverride>,
   startMeasure: number,
-  endMeasure: number
+  endMeasure: number,
+  highlights: Set<number> = new Set()
 ): ClipResult {
   const measures = compact.split("-");
   const start = Math.max(1, Math.min(startMeasure, measures.length));
@@ -89,5 +91,12 @@ export function buildClipData(
   }
   const f = parts.length > 0 ? parts.join("-") : undefined;
 
-  return { compact: clipped.join("-"), b, s, f };
+  // 注目ノーツ: 範囲内のtickをシフト
+  const hlParts = [...highlights]
+    .filter((tick) => tick >= tickStart && tick < tickEnd)
+    .sort((a, b2) => a - b2)
+    .map((tick) => String(tick - tickStart));
+  const hl = hlParts.length > 0 ? hlParts.join("-") : undefined;
+
+  return { compact: clipped.join("-"), b, s, f, hl };
 }

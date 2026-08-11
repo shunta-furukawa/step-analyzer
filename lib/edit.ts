@@ -220,3 +220,20 @@ export function serializeOverrides(map: Map<number, FootOverride>): string {
     .map(([tick, foot]) => `${tick}${foot}`)
     .join("-");
 }
+
+// ===== 注目ノーツ (hlパラメータ) のシリアライズ =====
+// 「この踏み方を見て!」と共有したいノーツのtickを - 区切りで持つ
+
+export function parseHighlights(h: string | undefined): Set<number> {
+  const out = new Set<number>();
+  if (!h) return out;
+  for (const part of h.split("-")) {
+    const n = Number(part);
+    if (Number.isInteger(n) && n >= 0) out.add(n);
+  }
+  return out;
+}
+
+export function serializeHighlights(hl: Set<number>): string {
+  return [...hl].sort((a, b) => a - b).join("-");
+}

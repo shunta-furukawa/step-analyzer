@@ -1258,6 +1258,34 @@ input[type="range"]:focus {
   font-family: ui-monospace, monospace;
 }
 
+/* 注目ノーツ: 黄色い角丸枠で「ここを見て!」を示す */
+.hl-box {
+  position: absolute;
+  border: 3px solid #ffd93b;
+  border-radius: 12px;
+  box-shadow: 0 0 0 3px rgba(255, 217, 59, 0.28), 0 0 14px rgba(255, 217, 59, 0.35);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.hl-btn {
+  background: none;
+  border: 2px solid var(--muted-dark);
+  box-shadow: none;
+  color: var(--muted-dark);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.hl-btn.active {
+  border-color: #ffd93b;
+  color: #ffd93b;
+  background: rgba(255, 217, 59, 0.12);
+}
+
 /* ヘッダのBPMチップ: タップで変速・停止パネルを開閉 */
 .bpm-chip {
   background: var(--ink-2);

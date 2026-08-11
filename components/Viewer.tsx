@@ -18,8 +18,10 @@ import { computeChartImageLayout, renderChartImage } from "@/lib/chartImage";
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
+  parseHighlights,
   parseOverrides,
   placeHoldRange,
+  serializeHighlights,
   serializeOverrides,
   toggleNote,
   toggleShock,
@@ -89,6 +91,7 @@ export default function Viewer({
   bpm: initialBpm,
   stops: initialStops,
   overrides: initialOverrides,
+  highlights: initialHighlights,
   hispeed: initialHispeed,
   speed: initialSpeed,
   bg: initialBg,
@@ -100,6 +103,7 @@ export default function Viewer({
   bpm?: string;
   stops?: string;
   overrides?: string;
+  highlights?: string;
   hispeed?: string;
   speed?: string;
   bg?: string;
@@ -204,6 +208,10 @@ export default function Viewer({
   const [showTiming, setShowTiming] = useState(false);
   const [overrides, setOverrides] = useState<Map<number, FootOverride>>(() =>
     parseOverrides(initialOverrides)
+  );
+  // 注目ノーツ (hl=)。「ここを見て!」と共有したいノーツのtick集合
+  const [highlights, setHighlights] = useState<Set<number>>(() =>
+    parseHighlights(initialHighlights)
   );
   const [dirty, setDirty] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -340,6 +348,30 @@ export default function Viewer({
     return segs;
   }, [chart, footsteps]);
 
+  // 注目ノーツの枠: 連続する注目ノーツは1つの角丸枠にまとめる
+  const highlightBoxes = useMemo(() => {
+    if (!chart || highlights.size === 0) return [];
+    const boxes: { start: number; end: number; pMin: number; pMax: number }[] = [];
+    let lastMarkedIdx = -2;
+    chart.events.forEach((ev, i) => {
+      const marked =
+        !ev.shock && ev.panels.length > 0 && highlights.has(tickOf(ev.row.beat));
+      if (!marked) return;
+      const pMin = Math.min(...ev.panels);
+      const pMax = Math.max(...ev.panels);
+      if (lastMarkedIdx === i - 1 && boxes.length > 0) {
+        const b = boxes[boxes.length - 1];
+        b.end = ev.row.beat;
+        b.pMin = Math.min(b.pMin, pMin);
+        b.pMax = Math.max(b.pMax, pMax);
+      } else {
+        boxes.push({ start: ev.row.beat, end: ev.row.beat, pMin, pMax });
+      }
+      lastMarkedIdx = i;
+    });
+    return boxes;
+  }, [chart, highlights]);
+
   // ソフラン・停止のタイミングデータ
   const bpms = useMemo(() => parseBpmParam(bpm), [bpm]);
   const stopList = useMemo(() => parseStopsParam(stops), [stops]);
@@ -363,13 +395,14 @@ export default function Viewer({
     if (bpm) parts.push(`b=${enc(bpm)}`);
     if (stops) parts.push(`s=${enc(stops)}`);
     if (overrides.size > 0) parts.push(`f=${serializeOverrides(overrides)}`);
+    if (highlights.size > 0) parts.push(`hl=${serializeHighlights(highlights)}`);
     if (hispeed !== 1) parts.push(`hs=${hispeed}`);
     if (speed !== 1) parts.push(`sp=${speed}`);
     if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
     if (lang !== "ja") parts.push(`l=${lang}`);
     if (transform) parts.push(`tr=${transform}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, bpm, stops, overrides, hispeed, speed, bgColor, lang, transform]);
+  }, [compact, title, bpm, stops, overrides, highlights, hispeed, speed, bgColor, lang, transform]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -1184,7 +1217,8 @@ export default function Viewer({
                   stopList,
                   overrides,
                   range.start,
-                  range.end
+                  range.end,
+                  highlights
                 );
                 const enc = (v: string) =>
                   encodeURIComponent(v).replace(/%2C/gi, ",").replace(/%3A/gi, ":");
@@ -1197,6 +1231,7 @@ export default function Viewer({
                 if (clip.b) parts.push(`b=${enc(clip.b)}`);
                 if (clip.s) parts.push(`s=${enc(clip.s)}`);
                 if (clip.f) parts.push(`f=${clip.f}`);
+                if (clip.hl) parts.push(`hl=${clip.hl}`);
                 if (hispeed !== 1) parts.push(`hs=${hispeed}`);
                 if (speed !== 1) parts.push(`sp=${speed}`);
                 if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
@@ -1346,6 +1381,7 @@ export default function Viewer({
                     measuresPerColumn:
                       Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 16,
                     hispeed,
+                    highlights,
                   });
                   const blob = await new Promise<Blob | null>((resolve) =>
                     canvas.toBlob(resolve, "image/png")
@@ -1832,6 +1868,24 @@ export default function Viewer({
                 </div>
               ))}
 
+              {/* 注目ノーツの黄色い枠 (連続選択は1つの枠にまとまる) */}
+              {highlightBoxes.map((b, i) => {
+                if (b.end < viewBeats.a || b.start > viewBeats.b) return null;
+                const pad = 7;
+                return (
+                  <div
+                    key={`hl${i}`}
+                    className="hl-box"
+                    style={{
+                      left: b.pMin * laneW + (laneW - noteSize) / 2 - pad,
+                      top: b.start * pxPerBeat - pad,
+                      width: (b.pMax - b.pMin) * laneW + noteSize + pad * 2,
+                      height: (b.end - b.start) * pxPerBeat + noteSize + pad * 2,
+                    }}
+                  />
+                );
+              })}
+
               {chart.events.map((ev, i) => {
                 if (ev.row.beat < viewBeats.a || ev.row.beat > viewBeats.b) return null;
                 // fs再生中: 受け皿でジャスト表示が出たノーツは実機同様に消す
@@ -2064,6 +2118,26 @@ export default function Viewer({
                   )}
                   {hasSofran && (
                     <span className="cur-bpm"> ♩={+bpmAtBeat(bpms, curEvent.row.beat).toFixed(1)}</span>
+                  )}
+                  {!curEvent.shock && curEvent.panels.length > 0 && (
+                    <button
+                      className={`hl-btn${
+                        highlights.has(tickOf(curEvent.row.beat)) ? " active" : ""
+                      }`}
+                      title={S.spotlightTitle}
+                      onClick={() => {
+                        const tick = tickOf(curEvent.row.beat);
+                        setHighlights((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(tick)) next.delete(tick);
+                          else next.add(tick);
+                          return next;
+                        });
+                        setDirty(true);
+                      }}
+                    >
+                      ★ {S.spotlightBtn}
+                    </button>
                   )}
                 </div>
                 {curEvent.panels.length === 2 && (

@@ -102,6 +102,7 @@ export default async function Page({
   const b = pick(sp.b);
   const s = pick(sp.s);
   const f = pick(sp.f);
+  const hl = pick(sp.hl);
   const hs = pick(sp.hs);
   const spd = pick(sp.sp);
   const c = pick(sp.c);
@@ -126,6 +127,7 @@ export default async function Page({
         bpm={isDefault ? SAMPLE_BPM : b}
         stops={isDefault ? undefined : s}
         overrides={f}
+        highlights={hl}
         hispeed={hs}
         speed={spd}
         bg={bg}

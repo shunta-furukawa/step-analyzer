@@ -103,6 +103,8 @@ export interface Strings {
   rangePending: (m: number) => string;
   rangeActive: (a: number, b: number) => string;
   rangeClear: string;
+  spotlightBtn: string;
+  spotlightTitle: string;
   // コントロール
   toStartTitle: string;
   playTitle: string;
@@ -253,6 +255,8 @@ const ja: Strings = {
   rangePending: (m) => `始点: ${m}小節目 — 終点の番号をタップ`,
   rangeActive: (a, b) => `共有・画像の範囲: ${a}〜${b}小節`,
   rangeClear: "解除",
+  spotlightBtn: "注目",
+  spotlightTitle: "注目ノーツにする (黄色い枠で強調され、URLや画像に反映)",
   toStartTitle: "最初に戻る",
   playTitle: "再生 / 停止 (スペースキー)",
   clapTitle: "クラップ音",
@@ -405,6 +409,8 @@ const en: Strings = {
   rangePending: (m) => `Start: measure ${m} — tap the end measure number`,
   rangeActive: (a, b) => `Share / image range: ${a}–${b}`,
   rangeClear: "Clear",
+  spotlightBtn: "Spotlight",
+  spotlightTitle: "Mark as a spotlight note (yellow frame, saved to URL and images)",
   toStartTitle: "Back to start",
   playTitle: "Play / pause (Space)",
   clapTitle: "Clap sound",
@@ -556,6 +562,8 @@ const ko: Strings = {
   rangePending: (m) => `시작: ${m}마디 — 끝 마디 번호를 탭`,
   rangeActive: (a, b) => `공유·이미지 범위: ${a}〜${b}마디`,
   rangeClear: "해제",
+  spotlightBtn: "주목",
+  spotlightTitle: "주목 노트로 표시 (노란 테두리로 강조, URL·이미지에 반영)",
   toStartTitle: "처음으로",
   playTitle: "재생 / 정지 (스페이스)",
   clapTitle: "클랩 사운드",
