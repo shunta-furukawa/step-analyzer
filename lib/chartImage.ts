@@ -41,6 +41,41 @@ const COL_GAP = 18;
 const PAD = 18;
 const HEADER = 46;
 
+/** 書き出し画像のレイアウト (寸法と各列の枠)。モーダルのプレビューと共用 */
+export interface ChartImageLayout {
+  width: number;
+  height: number;
+  cols: { x: number; y: number; w: number; h: number }[];
+}
+
+export function computeChartImageLayout(
+  measureCount: number,
+  measuresPerColumn: number,
+  hispeed: number
+): ChartImageLayout {
+  const perCol = Math.max(1, Math.floor(measuresPerColumn));
+  const pxPerBeat = PX_PER_BEAT * Math.max(0.25, hispeed);
+  const count = Math.max(1, measureCount);
+  const cols = Math.ceil(count / perCol);
+  const colInnerW = LANE_W * 4;
+  const noteMargin = NOTE / 2 + 3;
+  const colH = Math.min(count, perCol) * 4 * pxPerBeat;
+  const width = PAD * 2 + cols * (colInnerW + COL_GAP) - COL_GAP;
+  const height = PAD * 2 + HEADER + noteMargin + colH + noteMargin;
+  const topY = PAD + HEADER + noteMargin;
+  const colRects = [];
+  for (let ci = 0; ci < cols; ci++) {
+    const colMeasures = Math.min(perCol, count - ci * perCol);
+    colRects.push({
+      x: PAD + ci * (colInnerW + COL_GAP),
+      y: topY,
+      w: colInnerW,
+      h: colMeasures * 4 * pxPerBeat,
+    });
+  }
+  return { width, height, cols: colRects };
+}
+
 function fgFor(bgHex: string): string {
   const r = parseInt(bgHex.slice(0, 2), 16);
   const g = parseInt(bgHex.slice(2, 4), 16);
@@ -178,7 +213,7 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   const total = chart.measures.length;
   const start = Math.max(1, Math.min(o.startMeasure, total));
   const end = Math.max(start, Math.min(o.endMeasure, total));
-  const perCol = Math.max(1, Math.floor(o.measuresPerColumn ?? 32));
+  const perCol = Math.max(1, Math.floor(o.measuresPerColumn ?? 16));
   const pxPerBeat = PX_PER_BEAT * Math.max(0.25, o.hispeed ?? 1);
   const count = end - start + 1;
   const cols = Math.ceil(count / perCol);
@@ -186,9 +221,7 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   const colInnerW = LANE_W * 4;
   // 小節境界ちょうどのノーツが矢印半分だけレーン外にはみ出すぶんの余白
   const noteMargin = NOTE / 2 + 3;
-  const colH = Math.min(count, perCol) * 4 * pxPerBeat;
-  const width = PAD * 2 + cols * (colInnerW + COL_GAP) - COL_GAP;
-  const height = PAD * 2 + HEADER + noteMargin + colH + noteMargin;
+  const { width, height } = computeChartImageLayout(count, perCol, o.hispeed ?? 1);
 
   // 長い縦一列でもブラウザのcanvasサイズ上限に収まるよう解像度を調整
   const scale = Math.min(2, 16000 / Math.max(width, height));

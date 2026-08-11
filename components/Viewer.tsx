@@ -14,7 +14,7 @@ import {
   type FootOverride,
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
-import { renderChartImage } from "@/lib/chartImage";
+import { computeChartImageLayout, renderChartImage } from "@/lib/chartImage";
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
@@ -183,7 +183,7 @@ export default function Viewer({
   const [imgStart, setImgStart] = useState("1");
   const [imgEnd, setImgEnd] = useState("1");
   // 1列に描く小節数 (長すぎる値は書き出し時にクランプ)
-  const [imgPerCol, setImgPerCol] = useState("32");
+  const [imgPerCol, setImgPerCol] = useState("16");
   const [imgBusy, setImgBusy] = useState(false);
   const [imgDone, setImgDone] = useState(false);
   const [imgError, setImgError] = useState(false);
@@ -1243,6 +1243,53 @@ export default function Viewer({
                 }}
               />
             </div>
+            {(() => {
+              // 書き出しレイアウトのワイヤーフレームプレビュー。
+              // 実際の描画と同じ計算式なので縦横比と段組みがそのままわかる
+              const range = parseImgRange();
+              if (!range) return null;
+              const perColNum = Math.floor(Number(imgPerCol));
+              const layout = computeChartImageLayout(
+                range.end - range.start + 1,
+                Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 16,
+                hispeed
+              );
+              const sc = Math.min(200 / layout.width, 150 / layout.height, 1);
+              const ratio =
+                layout.height >= layout.width
+                  ? `1 : ${(layout.height / layout.width).toFixed(1)}`
+                  : `${(layout.width / layout.height).toFixed(1)} : 1`;
+              return (
+                <div className="img-preview">
+                  <div
+                    className="img-preview-frame"
+                    style={{
+                      width: Math.max(6, layout.width * sc),
+                      height: Math.max(6, layout.height * sc),
+                      background: `#${bgColor}`,
+                    }}
+                  >
+                    {layout.cols.map((c, i) => (
+                      <div
+                        key={i}
+                        className="img-preview-col"
+                        style={{
+                          left: c.x * sc,
+                          top: c.y * sc,
+                          width: c.w * sc,
+                          height: c.h * sc,
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="img-preview-meta">
+                    {Math.round(layout.width)}×{Math.round(layout.height)}px
+                    <br />
+                    {ratio}
+                  </span>
+                </div>
+              );
+            })()}
             <button
               disabled={imgBusy}
               onClick={async () => {
@@ -1254,7 +1301,7 @@ export default function Viewer({
                 setImgError(false);
                 setImgBusy(true);
                 try {
-                  // 空欄や0以下は既定の32列に倒す
+                  // 空欄や0以下は既定の16小節/列に倒す
                   const perColNum = Math.floor(Number(imgPerCol));
                   const canvas = renderChartImage({
                     chart,
@@ -1265,7 +1312,7 @@ export default function Viewer({
                     title: title || S.untitled,
                     bgColor,
                     measuresPerColumn:
-                      Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 32,
+                      Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 16,
                     hispeed,
                   });
                   const blob = await new Promise<Blob | null>((resolve) =>

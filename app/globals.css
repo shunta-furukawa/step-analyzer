@@ -720,6 +720,35 @@ select {
   opacity: 0.45;
 }
 
+/* 画像書き出しモーダルのレイアウトプレビュー (枠だけのワイヤーフレーム) */
+.img-preview {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 12px 0 14px;
+}
+
+.img-preview-frame {
+  position: relative;
+  border: 1.5px solid rgba(255, 255, 255, 0.45);
+  flex-shrink: 0;
+}
+
+.img-preview-col {
+  position: absolute;
+  background: rgba(23, 24, 28, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-sizing: border-box;
+}
+
+.img-preview-meta {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted-dark);
+  font-family: ui-monospace, monospace;
+  line-height: 1.6;
+}
+
 /* 範囲選択中のバナー: 譜面に密着しないよう下マージンを取り、
    緑背景でも読めるように暗色カード+白文字にする */
 .range-hint {
