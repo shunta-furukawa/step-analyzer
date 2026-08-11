@@ -2500,6 +2500,15 @@ function FootStage({
   const same = leftPos === rightPos && !liftedFoot;
   // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
   const rot = facing;
+  // 足の表示角はプレゼン専用に圧縮する。内部のfacingは「両足を結ぶ線」由来の
+  // 解析角で、135°の捻りでも実際の人間の足はそこまで後ろを向かない。
+  // 45°までは等倍、以降は0.4倍で圧縮し、上限は真横 (90°)。
+  // 一回転級 (360°〜) が真横で止まらないよう±180°に正規化してから圧縮する
+  let norm = facing % 360;
+  if (norm > 180) norm -= 360;
+  if (norm < -180) norm += 360;
+  const a = Math.abs(norm);
+  const footRot = Math.sign(norm) * Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4);
   const lc = STAGE_CENTERS[leftPos];
   const rc = STAGE_CENTERS[rightPos];
   let lx = lc.x + (same ? -0.22 : 0);
@@ -2509,8 +2518,8 @@ function FootStage({
   // 2枚抜き: 踏んでいる足は2パネルの中間 (角) に置き、
   // 2パネルを結ぶ対角線に沿った絶対角度 (±45°) で表示する。
   // パネルの組み合わせで足の向きは物理的に決まるため、体の向きは合成しない
-  let lRot = rot;
-  let rRot = rot;
+  let lRot = footRot;
+  let rRot = footRot;
   if (oneFoot) {
     const c1 = STAGE_CENTERS[oneFoot.panels[0]];
     const c2 = STAGE_CENTERS[oneFoot.panels[1]];
