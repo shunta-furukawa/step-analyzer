@@ -36,7 +36,9 @@ export interface ChartImageOptions {
 const INK = "#17181c";
 const LANE_W = 40;
 const NOTE = 34;
-const PX_PER_BEAT = 30;
+// アプリの譜面表示 (72px/拍・矢印40px = 1.8倍) と同じ詰まり具合になる比率。
+// ハイスピはこの値に乗算されるので、編集時と同じHSなら同じ間隔で書き出される
+const PX_PER_BEAT = Math.round(NOTE * 1.8);
 const COL_GAP = 18;
 const PAD = 18;
 const HEADER = 46;
