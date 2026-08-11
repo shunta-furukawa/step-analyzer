@@ -687,6 +687,52 @@ select {
   font-family: ui-monospace, monospace;
 }
 
+/* 小節番号タップの範囲選択 (共有・画像のデフォルト範囲になる) */
+.measure-num.range-anchor,
+.measure-num.in-range {
+  color: var(--mint);
+}
+
+.measure-num.range-anchor {
+  text-decoration: underline;
+}
+
+.measure-tap {
+  position: absolute;
+  left: -26px;
+  width: 25px;
+  cursor: pointer;
+  z-index: 3;
+  touch-action: manipulation;
+}
+
+.range-bar {
+  position: absolute;
+  left: -12px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--mint);
+  opacity: 0.9;
+  pointer-events: none;
+}
+
+.range-bar.pending {
+  opacity: 0.45;
+}
+
+.range-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.range-hint .range-clear {
+  padding: 4px 10px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
 .note {
   position: absolute;
   cursor: pointer;
@@ -1386,7 +1432,9 @@ input[type="range"]:focus {
   box-shadow: none;
 }
 
-.viewer-fs .measure-num {
+.viewer-fs .measure-num,
+.viewer-fs .measure-tap,
+.viewer-fs .range-bar {
   display: none;
 }
 
@@ -1580,6 +1628,15 @@ input[type="range"]:focus {
   .measure-num {
     left: -34px;
     font-size: 11px;
+  }
+
+  .measure-tap {
+    left: -40px;
+    width: 38px;
+  }
+
+  .range-bar {
+    left: -14px;
   }
 
   .foot-badge {

@@ -153,6 +153,31 @@ export default function Viewer({
     return { start, end };
   };
 
+  // 小節番号タップによる範囲選択。共有・画像書き出しのデフォルト範囲になる。
+  // aだけの状態=始点選択中、bが入ると確定 (上下逆でも正規化する)
+  const [rangeSel, setRangeSel] = useState<{ a: number; b: number | null } | null>(
+    null
+  );
+  const selRange =
+    rangeSel && rangeSel.b !== null
+      ? {
+          start: Math.min(rangeSel.a, rangeSel.b) + 1,
+          end: Math.max(rangeSel.a, rangeSel.b) + 1,
+        }
+      : null;
+  const tapMeasureNum = (mi: number) => {
+    if (!rangeSel || rangeSel.b !== null) {
+      // 未選択、または確定済み → その小節を新しい始点に
+      setRangeSel({ a: mi, b: null });
+      return;
+    }
+    if (rangeSel.a === mi) {
+      setRangeSel(null);
+      return;
+    }
+    setRangeSel({ a: rangeSel.a, b: mi });
+  };
+
   // 画像書き出しモーダル (クリップと同じ「検証はblur/実行時のみ」方式)
   const [showImage, setShowImage] = useState(false);
   const [imgStart, setImgStart] = useState("1");
@@ -263,6 +288,12 @@ export default function Viewer({
   }, [viewCompact]);
 
   const chart = parsed.chart;
+
+  // 譜面の編集や読み込みで小節数が変わったら範囲選択をリセット
+  useEffect(() => {
+    setRangeSel(null);
+  }, [compact]);
+
   const footsteps = useMemo(
     () => (chart ? assignFeet(chart.events, overrides, chart.holds) : []),
     [chart, overrides]
@@ -865,9 +896,15 @@ export default function Viewer({
           className="secondary"
           onClick={() => {
             if (!chart) return;
-            setClipStart("1");
-            setClipEnd(String(chart.measures.length));
-            setClipName(title || S.untitled);
+            // 小節番号タップで選択済みの範囲があればそれをデフォルトに
+            const st = selRange ? selRange.start : 1;
+            const en = selRange ? selRange.end : chart.measures.length;
+            const base = title || S.untitled;
+            setClipStart(String(st));
+            setClipEnd(String(en));
+            setClipName(
+              st === 1 && en === chart.measures.length ? base : `${base} (${st}-${en})`
+            );
             setClipNameDirty(false);
             setClipCopied(false);
             setClipError(false);
@@ -880,8 +917,8 @@ export default function Viewer({
           className="secondary"
           onClick={() => {
             if (!chart) return;
-            setImgStart("1");
-            setImgEnd(String(chart.measures.length));
+            setImgStart(String(selRange ? selRange.start : 1));
+            setImgEnd(String(selRange ? selRange.end : chart.measures.length));
             setImgDone(false);
             setImgError(false);
             setShowImage(true);
@@ -1284,6 +1321,22 @@ export default function Viewer({
         </p>
       )}
 
+      {rangeSel && chart && (
+        <p className="hint range-hint">
+          <span>
+            {rangeSel.b === null
+              ? S.rangePending(rangeSel.a + 1)
+              : S.rangeActive(
+                  Math.min(rangeSel.a, rangeSel.b) + 1,
+                  Math.max(rangeSel.a, rangeSel.b) + 1
+                )}
+          </span>
+          <button className="secondary range-clear" onClick={() => setRangeSel(null)}>
+            ✕ {S.rangeClear}
+          </button>
+        </p>
+      )}
+
       {showTiming && (
         <div className="card text-import">
           <PanelHead title={S.timingPanelTitle} helpTitle={S.helpTitle}>{S.timingPanelDesc}</PanelHead>
@@ -1424,11 +1477,28 @@ export default function Viewer({
                   />
                   {m < chart.measures.length && (
                     <span
-                      className="measure-num"
+                      className={`measure-num${
+                        rangeSel && rangeSel.b === null && rangeSel.a === m
+                          ? " range-anchor"
+                          : selRange && m + 1 >= selRange.start && m + 1 <= selRange.end
+                          ? " in-range"
+                          : ""
+                      }`}
                       style={{ top: m * 4 * pxPerBeat + noteSize / 2 + 4 }}
                     >
                       {m + 1}
                     </span>
+                  )}
+                  {m < chart.measures.length && (
+                    // 左端の小節番号ゾーン: タップで範囲選択 (譜面レーンは邪魔しない)
+                    <div
+                      className="measure-tap"
+                      style={{
+                        top: m * 4 * pxPerBeat + noteSize / 2,
+                        height: 4 * pxPerBeat,
+                      }}
+                      onClick={() => tapMeasureNum(m)}
+                    />
                   )}
                   {m < chart.measures.length &&
                     [1, 2, 3].map((b) => (
@@ -1441,6 +1511,22 @@ export default function Viewer({
                 </div>
                 );
               })}
+
+              {/* 範囲選択のインジケータ: 左端の縦バー (選択中は薄く表示) */}
+              {rangeSel && (
+                <div
+                  className={`range-bar${rangeSel.b === null ? " pending" : ""}`}
+                  style={{
+                    top:
+                      Math.min(rangeSel.a, rangeSel.b ?? rangeSel.a) * 4 * pxPerBeat +
+                      noteSize / 2,
+                    height:
+                      (Math.abs((rangeSel.b ?? rangeSel.a) - rangeSel.a) + 1) *
+                      4 *
+                      pxPerBeat,
+                  }}
+                />
+              )}
 
               {editMode &&
                 chart.measures.map((_, mi) => {
