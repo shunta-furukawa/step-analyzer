@@ -673,11 +673,13 @@ export default function Viewer({
           );
         } else {
           el.scrollTop = beatRef.current * pxPerBeat - el.clientHeight * 0.4;
-          // 現在位置の横線 (通常表示にはステップゾーンがないため)
+          // 現在位置の横線 (通常表示にはステップゾーンがないため)。
+          // topではなくtransformで動かす: topの毎フレーム変更は
+          // 巨大な譜面DOMのレイアウト再計算を誘発してカクつく
           if (playheadRef.current) {
-            playheadRef.current.style.top = `${
+            playheadRef.current.style.transform = `translate3d(0, ${
               beatRef.current * pxPerBeat + noteSize / 2
-            }px`;
+            }px, 0)`;
           }
         }
       }

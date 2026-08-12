@@ -1260,9 +1260,11 @@ input[type="range"]:focus {
   font-family: ui-monospace, monospace;
 }
 
-/* 通常表示の再生中に現在位置を示すプレイヘッド線 */
+/* 通常表示の再生中に現在位置を示すプレイヘッド線。
+   transformで動かすため合成レイヤーを事前確保する */
 .playhead {
   position: absolute;
+  top: 0;
   left: -6px;
   right: -6px;
   height: 0;
@@ -1270,6 +1272,7 @@ input[type="range"]:focus {
   box-shadow: 0 0 8px rgba(0, 224, 160, 0.55);
   z-index: 6;
   pointer-events: none;
+  will-change: transform;
 }
 
 /* 注目ノーツ: 黄色い角丸枠で「ここを見て!」を示す */
