@@ -288,6 +288,9 @@ export function assignFeet(
   let active: { panel: number; endBeat: number; foot: Foot }[] = [];
   // 持ち替えで解放され、まだ次を踏んでいない足
   let lifted: Foot | null = null;
+  // 直前のイベントで2枚抜き (またぎ) をしていた足。次のノーツが
+  // その足の残り位置に来たら、もう片方のパネルへ退避させる
+  let prevStretch: { foot: Foot; panels: number[] } | null = null;
   // 譜面開始からの連続回転角 (±180を超える回転は禁止)
   let contFacing = 0;
 
@@ -296,6 +299,22 @@ export function assignFeet(
     active = active.filter((a) => beat <= a.endBeat + 1e-6);
     const lockedL = active.some((a) => a.foot === "L");
     const lockedR = active.some((a) => a.foot === "R");
+
+    // 直前に2枚抜きした足の残り位置に次のノーツが来た場合、
+    // その足はもう保持していなければ「またいでいたもう片方」へ退避する。
+    // (逆足がそのパネルを踏みに来て両足が重なるのを防ぐ)
+    if (prevStretch && ev.panels.length > 0) {
+      const sf = prevStretch.foot;
+      const curPos = sf === "L" ? leftPos : rightPos;
+      const stillHeld = active.some((x) => x.foot === sf);
+      if (!stillHeld && ev.panels.includes(curPos)) {
+        const other = prevStretch.panels.find((pp) => pp !== curPos);
+        if (other !== undefined) {
+          if (sf === "L") leftPos = other;
+          else rightPos = other;
+        }
+      }
+    }
 
     const feet: (Foot | null)[] = [null, null, null, null];
     let jump = false;
@@ -341,6 +360,7 @@ export function assignFeet(
         heldFeet: Array.from(new Set(active.map((a) => a.foot))),
         facing: contFacing,
       });
+      prevStretch = null;
       continue;
     }
 
@@ -367,19 +387,9 @@ export function assignFeet(
         feet[a] = foot;
         feet[b] = foot;
         const holdPanel = ps.find((p) => holdByStart.has(`${tickOf(beat)}:${p}`));
-        // 残る位置: フリーズの頭を含むならその保持パネル (足はそこに残る)。
-        // それ以外は「次のノーツで踏まないパネル」を優先する。次のノーツと
-        // 同じパネルに残ると、逆足がそこに来て両足が重なってしまうため。
-        // 次のノーツが関係しなければ従来通り横パネル (←/→) を優先
-        const nextEv = events[ev.eventIdx + 1];
-        const nextPanels = nextEv && !nextEv.shock ? nextEv.panels : [];
         const pos =
           holdPanel !== undefined
             ? holdPanel
-            : nextPanels.includes(a) && !nextPanels.includes(b)
-            ? b
-            : nextPanels.includes(b) && !nextPanels.includes(a)
-            ? a
             : a === 0 || a === 3
             ? a
             : b === 0 || b === 3
@@ -513,6 +523,7 @@ export function assignFeet(
       heldFeet: Array.from(new Set(active.map((a) => a.foot))),
       facing: contFacing,
     });
+    prevStretch = stretch;
   }
   return out;
 }
