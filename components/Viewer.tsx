@@ -2518,12 +2518,14 @@ function FootStage({
   // 足の表示角はプレゼン専用に圧縮する。内部のfacingは「両足を結ぶ線」由来の
   // 解析角で、135°の捻りでも実際の人間の足はそこまで後ろを向かない。
   // 45°までは等倍、以降は0.4倍で圧縮し、上限は真横 (90°)。
-  // 一回転級 (360°〜) が真横で止まらないよう±180°に正規化してから圧縮する
-  let norm = facing % 360;
-  if (norm > 180) norm -= 360;
-  if (norm < -180) norm += 360;
-  const a = Math.abs(norm);
-  const footRot = Math.sign(norm) * Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4);
+  const norm = facing % 360;
+  let a = Math.abs(norm);
+  const sign = Math.sign(norm);
+  // 180°超のイレギュラー帯は「かかとを正面に向けて捻りを受ける」解釈で、
+  // 反対側へ折り返さず180°引いた角度を同じ側に表示する。
+  // (±180°で左右に折り返すと、135°⇔225°の交互踏みで足が毎回反転してしまう)
+  if (a > 180) a -= 180;
+  const footRot = sign * Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4);
   const lc = STAGE_CENTERS[leftPos];
   const rc = STAGE_CENTERS[rightPos];
   let lx = lc.x + (same ? -0.22 : 0);
