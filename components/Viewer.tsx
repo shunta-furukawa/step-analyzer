@@ -2522,12 +2522,12 @@ function FootStage({
   let a = Math.abs(norm);
   const sign = Math.sign(norm);
   // 180°超のイレギュラー帯は「かかとを正面に向けて捻りを受ける」解釈。
-  // 足を180°ひっくり返し (つま先が後ろ・かかとが前)、超過分だけ同じ側に開く。
-  // (±180°で左右に折り返すと、135°⇔225°の交互踏みで足が毎回反転してしまう)
+  // 左225°ならつま先を左後ろ (-135°) に向け、かかとが右前を向く。
+  // 直前の135° (=表示-81°) からの回転変化が最小になる連続的な表現
   const heelFlip = a > 180;
   if (heelFlip) a -= 180;
-  const footRot =
-    sign * Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4) + (heelFlip ? 180 : 0);
+  const compressed = Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4);
+  const footRot = heelFlip ? sign * (180 - compressed) : sign * compressed;
   const lc = STAGE_CENTERS[leftPos];
   const rc = STAGE_CENTERS[rightPos];
   let lx = lc.x + (same ? -0.22 : 0);
