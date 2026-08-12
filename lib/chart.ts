@@ -125,6 +125,14 @@ function unwrapDeg(target: number, prev: number): number {
   return f;
 }
 
+// 270度まで捻ったら巻き数をリセットし、反対回りとして扱う (左270°=右90°)。
+// そこまで回ったら体は実質逆向きで、以降の累積に意味がないため
+function resetWinding(f: number): number {
+  while (f >= 270) f -= 360;
+  while (f <= -270) f += 360;
+  return f;
+}
+
 // 累積回転の上限。±180 (完全に後ろ向き) までは正解、それを超える回転は
 // 物理的に無理な足順とみなして踏み替えで解消する
 const MAX_ROTATION = 180.5;
@@ -316,7 +324,7 @@ export function assignFeet(
         lastFoot = ovS === "CL" ? "L" : ovS === "CR" ? "R" : null;
         lastPanel = null;
       }
-      contFacing = unwrapDeg(facingDeg(leftPos, rightPos), contFacing);
+      contFacing = resetWinding(unwrapDeg(facingDeg(leftPos, rightPos), contFacing));
       out.push({
         feet,
         leftPos,
@@ -454,7 +462,7 @@ export function assignFeet(
       lastFoot = foot;
       lastPanel = p;
     }
-    contFacing = unwrapDeg(facingDeg(leftPos, rightPos), contFacing);
+    contFacing = resetWinding(unwrapDeg(facingDeg(leftPos, rightPos), contFacing));
 
     // このイベントで踏んだ足は「浮き」状態を解除
     if (lifted && feet.includes(lifted)) lifted = null;
