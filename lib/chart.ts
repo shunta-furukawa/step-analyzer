@@ -367,9 +367,19 @@ export function assignFeet(
         feet[a] = foot;
         feet[b] = foot;
         const holdPanel = ps.find((p) => holdByStart.has(`${tickOf(beat)}:${p}`));
+        // 残る位置: フリーズの頭を含むならその保持パネル (足はそこに残る)。
+        // それ以外は「次のノーツで踏まないパネル」を優先する。次のノーツと
+        // 同じパネルに残ると、逆足がそこに来て両足が重なってしまうため。
+        // 次のノーツが関係しなければ従来通り横パネル (←/→) を優先
+        const nextEv = events[ev.eventIdx + 1];
+        const nextPanels = nextEv && !nextEv.shock ? nextEv.panels : [];
         const pos =
           holdPanel !== undefined
             ? holdPanel
+            : nextPanels.includes(a) && !nextPanels.includes(b)
+            ? b
+            : nextPanels.includes(b) && !nextPanels.includes(a)
+            ? a
             : a === 0 || a === 3
             ? a
             : b === 0 || b === 3
