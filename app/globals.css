@@ -831,7 +831,9 @@ select {
 .hold-body {
   position: absolute;
   border-radius: 3px;
-  opacity: 0.35;
+  /* 薄すぎて見づらいというフィードバックを受けて濃く。縁取りで輪郭も出す */
+  opacity: 0.8;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 }
 
 .mine {
@@ -1258,6 +1260,18 @@ input[type="range"]:focus {
   font-family: ui-monospace, monospace;
 }
 
+/* 通常表示の再生中に現在位置を示すプレイヘッド線 */
+.playhead {
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  height: 0;
+  border-top: 2px solid rgba(0, 224, 160, 0.9);
+  box-shadow: 0 0 8px rgba(0, 224, 160, 0.55);
+  z-index: 6;
+  pointer-events: none;
+}
+
 /* 注目ノーツ: 黄色い角丸枠で「ここを見て!」を示す */
 .hl-box {
   position: absolute;
@@ -1276,8 +1290,29 @@ input[type="range"]:focus {
   font-size: 11px;
   font-weight: 800;
   padding: 2px 8px;
-  margin-left: 8px;
   vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* 現在ノーツ情報の1行目: ♩=と★注目は右端に固定して
+   本文の長さで左右に動かないようにする */
+.event-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.event-head-main {
+  min-width: 0;
+}
+
+.event-head-side {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .hl-btn.active {
@@ -1343,24 +1378,33 @@ input[type="range"]:focus {
   position: absolute;
   left: -4px;
   right: -4px;
+  height: 0;
   font-size: 10px;
   font-weight: 700;
   font-family: ui-monospace, monospace;
-  text-align: right;
-  padding-right: 2px;
   pointer-events: none;
   z-index: 4;
+}
+
+/* ラベルは→レーンのノーツと被らないよう左ガター (小節番号側) に出す。
+   小節番号は線の下側なので、ラベルは線の上側に置けば衝突しない */
+.timing-marker-label {
+  position: absolute;
+  right: 100%;
+  top: 0;
   transform: translateY(-100%);
+  padding-right: 3px;
+  white-space: nowrap;
 }
 
 .bpm-marker {
   color: #7db9ff;
-  border-bottom: 1px dashed rgba(125, 185, 255, 0.6);
+  border-top: 1px dashed rgba(125, 185, 255, 0.6);
 }
 
 .stop-marker {
   color: #ff8f8f;
-  border-bottom: 1px dashed rgba(255, 143, 143, 0.7);
+  border-top: 1px dashed rgba(255, 143, 143, 0.7);
 }
 
 .text-import textarea {

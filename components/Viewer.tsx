@@ -251,6 +251,8 @@ export default function Viewer({
   const scrollRef = useRef<HTMLDivElement>(null);
   // fs再生時のサブピクセルスクロール用 (scrollTopは整数に量子化されるため)
   const chartInnerRef = useRef<HTMLDivElement>(null);
+  // 通常表示の再生中に現在位置を示すプレイヘッド線
+  const playheadRef = useRef<HTMLDivElement>(null);
   const beatRef = useRef(0);
   const timeRef = useRef(0);
   // 仮想化: 描画するビート範囲 (画面内 + バッファ)
@@ -671,6 +673,12 @@ export default function Viewer({
           );
         } else {
           el.scrollTop = beatRef.current * pxPerBeat - el.clientHeight * 0.4;
+          // 現在位置の横線 (通常表示にはステップゾーンがないため)
+          if (playheadRef.current) {
+            playheadRef.current.style.top = `${
+              beatRef.current * pxPerBeat + noteSize / 2
+            }px`;
+          }
         }
       }
       raf = requestAnimationFrame(tick);
@@ -1573,6 +1581,7 @@ export default function Viewer({
               ref={chartInnerRef}
               style={{ width: laneW * 4, height: totalH }}
             >
+              {playing && !fs && <div className="playhead" ref={playheadRef} />}
               {/* 体の向きの背景バンド: ノーツi-1→ノーツi の領域を
                   「ノーツiを踏んだときの向き」の色で塗る (これから来る捻りの予告)。
                   1ノーツ目は譜面先頭 (初期位置=正面) から塗る */}
@@ -1742,7 +1751,7 @@ export default function Viewer({
                     className="timing-marker bpm-marker"
                     style={{ top: e.beat * pxPerBeat + noteSize / 2 }}
                   >
-                    BPM {+e.bpm.toFixed(1)}
+                    <span className="timing-marker-label">♩{+e.bpm.toFixed(1)}</span>
                   </div>
                 ) : null
               )}
@@ -1753,7 +1762,9 @@ export default function Viewer({
                     className="timing-marker stop-marker"
                     style={{ top: e.beat * pxPerBeat + noteSize / 2 }}
                   >
-                    STOP {+e.sec.toFixed(2)}s
+                    <span className="timing-marker-label">
+                      ⏸{String(+e.sec.toFixed(2)).replace(/^0\./, ".")}
+                    </span>
                   </div>
                 ) : null
               )}
@@ -2098,7 +2109,8 @@ export default function Viewer({
             />
             {curEvent && curStep && (
               <div className="event-info">
-                <div>
+                <div className="event-head">
+                  <span className="event-head-main">
                   {S.measureLabel(curEvent.row.measure + 1)} —{" "}
                   {curEvent.shock
                     ? S.shockArrow
@@ -2116,8 +2128,10 @@ export default function Viewer({
                       {S.facingLabel(facing > 0 ? "R" : "L", Math.abs(facing))}
                     </span>
                   )}
+                  </span>
+                  <span className="event-head-side">
                   {hasSofran && (
-                    <span className="cur-bpm"> ♩={+bpmAtBeat(bpms, curEvent.row.beat).toFixed(1)}</span>
+                    <span className="cur-bpm">♩={+bpmAtBeat(bpms, curEvent.row.beat).toFixed(1)}</span>
                   )}
                   {!curEvent.shock && curEvent.panels.length > 0 && (
                     <button
@@ -2139,6 +2153,7 @@ export default function Viewer({
                       ★ {S.spotlightBtn}
                     </button>
                   )}
+                  </span>
                 </div>
                 {curEvent.panels.length === 2 && (
                   <div className="override-row">

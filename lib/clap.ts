@@ -51,6 +51,22 @@ function renderStompSamples(gain: number, sr: number): Float32Array {
   return out;
 }
 
+// ジャンプ (同時踏み) 用のクラップ。音量を2倍にする代わりに、
+// 少し低く太い音色にして「同時だ」と耳で分かるようにする
+function renderJumpClapSamples(gain: number, sr: number): Float32Array {
+  const base = renderClapSamples(gain, sr);
+  const stretch = 1.35; // 引き伸ばして低いピッチに
+  const len = Math.floor(base.length * stretch);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const x = i / stretch;
+    const i0 = Math.floor(x);
+    const fr = x - i0;
+    out[i] = (base[i0] ?? 0) * (1 - fr) + (base[i0 + 1] ?? 0) * fr;
+  }
+  return out;
+}
+
 /**
  * 譜面全体のクラップトラックをWAVにレンダリングし、Blob URLを返す。
  * eventTimes は各ノーツの発音時刻 (秒、ソフラン・停止込み)。
@@ -67,7 +83,7 @@ export function buildClapTrackUrl(
   const len = Math.max(sr, Math.ceil((durationSec + 0.6) * sr));
   const mix = new Float32Array(len);
   const normal = renderClapSamples(0.6, sr);
-  const accent = renderClapSamples(1.0, sr);
+  const accent = renderJumpClapSamples(0.75, sr);
   const stomp = renderStompSamples(0.9, sr);
 
   for (let i = 0; i < eventTimes.length; i++) {
