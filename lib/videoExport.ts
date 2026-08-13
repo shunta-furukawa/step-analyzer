@@ -250,18 +250,37 @@ export async function recordChartVideo(
     ctx.textBaseline = "middle";
     ctx.fillText(bpmText, chipX + 14, chipY + 21);
 
-    // タイトル+サブキャプションのブロックをジャケットの縦中央に揃える
+    // タイトル+サブキャプションのブロックをジャケットの縦中央に揃える。
+    // textBaseline="top"はブラウザごとに解釈が異なりiOSで下にずれるため、
+    // 実際のグリフ高さを測ってalphabeticベースラインで配置する
     const textX = jx + jSize + 22;
     const textMaxW = chipX - textX - 16;
     const jMid = jy + jSize / 2;
+    const titleFontDecl = `400 44px ${titleFont}`;
+    const subFontDecl = `400 28px ${titleFont}`;
+    ctx.textBaseline = "alphabetic";
+    ctx.font = titleFontDecl;
+    const tMet = ctx.measureText(o.title);
+    const tAsc = tMet.actualBoundingBoxAscent || 32;
+    const tDesc = tMet.actualBoundingBoxDescent || 6;
+    let sAsc = 0;
+    let sDesc = 0;
+    if (o.subtitle) {
+      ctx.font = subFontDecl;
+      const sMet = ctx.measureText(o.subtitle);
+      sAsc = sMet.actualBoundingBoxAscent || 20;
+      sDesc = sMet.actualBoundingBoxDescent || 4;
+    }
+    const lineGap = o.subtitle ? 22 : 0;
+    const blockH = tAsc + tDesc + lineGap + sAsc + sDesc;
+    const blockTop = jMid + 4 - blockH / 2; // +4は光学的な微調整
     ctx.fillStyle = fg;
-    ctx.font = `400 44px ${titleFont}`;
-    ctx.textBaseline = "top";
-    ctx.fillText(o.title, textX, o.subtitle ? jMid - 36 : jMid - 14, textMaxW);
+    ctx.font = titleFontDecl;
+    ctx.fillText(o.title, textX, blockTop + tAsc, textMaxW);
     if (o.subtitle) {
       ctx.globalAlpha = 0.72;
-      ctx.font = `400 28px ${titleFont}`;
-      ctx.fillText(o.subtitle, textX, jMid + 24, textMaxW);
+      ctx.font = subFontDecl;
+      ctx.fillText(o.subtitle, textX, blockTop + tAsc + tDesc + lineGap + sAsc, textMaxW);
       ctx.globalAlpha = 1;
     }
 
