@@ -236,30 +236,32 @@ export async function recordChartVideo(
     } else {
       drawAppIcon(ctx, jx, jy, jSize);
     }
-    // BPMチップ (右寄せ)。タイトル・サブキャプションはチップ手前まで
+    // BPMチップ (右寄せ・控えめサイズ)。タイトル・サブキャプションはチップ手前まで
     const bpmText = `♩=${o.bpmLabel}`;
-    ctx.font = "700 30px ui-monospace, monospace";
-    const chipW = ctx.measureText(bpmText).width + 36;
+    ctx.font = "700 24px ui-monospace, monospace";
+    const chipW = ctx.measureText(bpmText).width + 28;
     const chipX = W - 10 - chipW;
-    const chipY = jy + (jSize - 48) / 2;
-    roundRectPath(ctx, chipX, chipY, chipW, 48, 8);
+    const chipY = jy + (jSize - 40) / 2;
+    roundRectPath(ctx, chipX, chipY, chipW, 40, 8);
     ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
     ctx.fill();
     ctx.fillStyle = "#00e0a0";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(bpmText, chipX + 18, chipY + 25);
+    ctx.fillText(bpmText, chipX + 14, chipY + 21);
 
+    // タイトル+サブキャプションのブロックをジャケットの縦中央に揃える
     const textX = jx + jSize + 22;
     const textMaxW = chipX - textX - 16;
+    const jMid = jy + jSize / 2;
     ctx.fillStyle = fg;
     ctx.font = `400 44px ${titleFont}`;
     ctx.textBaseline = "top";
-    ctx.fillText(o.title, textX, o.subtitle ? 26 : 52, textMaxW);
+    ctx.fillText(o.title, textX, o.subtitle ? jMid - 44 : jMid - 22, textMaxW);
     if (o.subtitle) {
       ctx.globalAlpha = 0.72;
       ctx.font = `400 28px ${titleFont}`;
-      ctx.fillText(o.subtitle, textX, 88, textMaxW);
+      ctx.fillText(o.subtitle, textX, jMid + 16, textMaxW);
       ctx.globalAlpha = 1;
     }
 
