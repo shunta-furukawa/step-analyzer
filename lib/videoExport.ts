@@ -24,6 +24,7 @@ export interface VideoExportOptions {
   footsteps: FootStep[];
   timeline: TimingSeg[];
   title: string;
+  subtitle: string; // サブキャプション (アーティスト名など。空なら非表示)
   bpmLabel: string; // "175" や "154-308" など表示用
   bgColor: string; // 6桁hex ('#'なし)
   hispeed: number;
@@ -229,22 +230,32 @@ export async function recordChartVideo(
     } else {
       drawAppIcon(ctx, jx, jy, jSize);
     }
-    const textX = jx + jSize + 26;
-    ctx.fillStyle = fg;
-    ctx.font = "800 42px system-ui, sans-serif";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillText(o.title, textX, 42, W - textX - 30);
-    // BPMチップ
+    // BPMチップ (右寄せ)。タイトル・サブキャプションはチップ手前まで
     const bpmText = `♩=${o.bpmLabel}`;
     ctx.font = "700 30px ui-monospace, monospace";
     const chipW = ctx.measureText(bpmText).width + 36;
-    roundRectPath(ctx, textX, 102, chipW, 48, 8);
+    const chipX = W - 24 - chipW;
+    const chipY = jy + (jSize - 48) / 2;
+    roundRectPath(ctx, chipX, chipY, chipW, 48, 8);
     ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
     ctx.fill();
     ctx.fillStyle = "#00e0a0";
+    ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(bpmText, textX + 18, 102 + 25);
+    ctx.fillText(bpmText, chipX + 18, chipY + 25);
+
+    const textX = jx + jSize + 26;
+    const textMaxW = chipX - textX - 20;
+    ctx.fillStyle = fg;
+    ctx.font = "800 42px system-ui, sans-serif";
+    ctx.textBaseline = "top";
+    ctx.fillText(o.title, textX, o.subtitle ? 40 : 62, textMaxW);
+    if (o.subtitle) {
+      ctx.globalAlpha = 0.72;
+      ctx.font = "700 27px system-ui, sans-serif";
+      ctx.fillText(o.subtitle, textX, 100, textMaxW);
+      ctx.globalAlpha = 1;
+    }
 
     // レーン背景
     ctx.fillStyle = "#17181c";

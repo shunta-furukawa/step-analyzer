@@ -538,6 +538,32 @@ select {
   max-width: 220px;
 }
 
+/* タイトル+サブキャプションの編集ペア */
+.title-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.subtitle-input {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.title-btn .title-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chart-subtitle {
+  color: var(--muted-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .chart-title .bpm {
   color: var(--muted-dark);
   font-size: 12px;

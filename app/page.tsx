@@ -37,6 +37,7 @@ export async function generateMetadata({
   const sp = await searchParams;
   const { n, ogParam } = resolveChart(sp);
   const t = pick(sp.t);
+  const st = pick(sp.st);
   const b = pick(sp.b);
   const f = pick(sp.f);
   const c = pick(sp.c);
@@ -61,7 +62,9 @@ export async function generateMetadata({
     };
   }
 
-  const title = t ? `${t} | Step Analyzer` : "DDR譜面の足割り解析 | Step Analyzer";
+  const title = t
+    ? `${t}${st ? ` — ${st}` : ""} | Step Analyzer`
+    : "DDR譜面の足割り解析 | Step Analyzer";
   const bpmLabel = b ? (/[,:]/.test(b) ? `BPM ${b.split(",")[0]}〜 変速` : `BPM ${b}`) : "";
   const description = `この譜面部分をどの足で踏むべきかを可視化${bpmLabel ? ` (${bpmLabel})` : ""}。矢印をタップして足運びを確認できます。`;
 
@@ -99,6 +102,7 @@ export default async function Page({
   const sp = await searchParams;
   const { n } = resolveChart(sp);
   const t = pick(sp.t);
+  const st = pick(sp.st);
   const b = pick(sp.b);
   const s = pick(sp.s);
   const f = pick(sp.f);
@@ -124,6 +128,7 @@ export default async function Page({
         key={n ?? "default"}
         compact={n ?? SAMPLE_COMPACT}
         title={isDefault ? SAMPLE_TITLE : t}
+        subtitle={isDefault ? undefined : st}
         bpm={isDefault ? SAMPLE_BPM : b}
         stops={isDefault ? undefined : s}
         overrides={f}

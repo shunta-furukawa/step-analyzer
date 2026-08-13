@@ -30,6 +30,7 @@ export interface Strings {
   ghosts: string;
   shocks: string;
   titlePlaceholder: string;
+  subtitlePlaceholder: string;
   bgPickerTitle: string;
   bgResetTitle: string;
   // ツールバー
@@ -184,6 +185,7 @@ const ja: Strings = {
   ghosts: "空打ち",
   shocks: "ショック",
   titlePlaceholder: "タイトルを入力",
+  subtitlePlaceholder: "アーティスト名など (任意)",
   bgPickerTitle: "背景色をカスタマイズ",
   bgResetTitle: "デフォルト色に戻す",
   edit: "編集",
@@ -350,6 +352,7 @@ const en: Strings = {
   ghosts: "GHOST",
   shocks: "SHOCK",
   titlePlaceholder: "Enter a title",
+  subtitlePlaceholder: "Artist name etc. (optional)",
   bgPickerTitle: "Customize background color",
   bgResetTitle: "Reset to default color",
   edit: "Edit",
@@ -515,6 +518,7 @@ const ko: Strings = {
   ghosts: "헛밟기",
   shocks: "쇼크",
   titlePlaceholder: "제목 입력",
+  subtitlePlaceholder: "아티스트명 등 (선택)",
   bgPickerTitle: "배경색 변경",
   bgResetTitle: "기본 색상으로 되돌리기",
   edit: "편집",

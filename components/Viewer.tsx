@@ -94,6 +94,7 @@ function transformShortLabel(tr: string): string {
 export default function Viewer({
   compact: initialCompact,
   title: initialTitle,
+  subtitle: initialSubtitle,
   bpm: initialBpm,
   stops: initialStops,
   overrides: initialOverrides,
@@ -106,6 +107,7 @@ export default function Viewer({
 }: {
   compact: string;
   title?: string;
+  subtitle?: string;
   bpm?: string;
   stops?: string;
   overrides?: string;
@@ -232,6 +234,8 @@ export default function Viewer({
   };
   const [compact, setCompact] = useState(initialCompact);
   const [title, setTitle] = useState(initialTitle ?? "");
+  // サブキャプション (アーティスト名など)。SM取り込みで#ARTISTから自動設定される
+  const [subtitle, setSubtitle] = useState(initialSubtitle ?? "");
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
   const [stops, setStops] = useState(() => normalizeParam(initialStops ?? ""));
   const [showTiming, setShowTiming] = useState(false);
@@ -423,6 +427,7 @@ export default function Viewer({
     if (encoded && encoded.length < compact.length) parts.push(`d=${encoded}`);
     else parts.push(`n=${compact}`);
     if (title) parts.push(`t=${encodeURIComponent(title)}`);
+    if (subtitle) parts.push(`st=${encodeURIComponent(subtitle)}`);
     if (bpm) parts.push(`b=${enc(bpm)}`);
     if (stops) parts.push(`s=${enc(stops)}`);
     if (overrides.size > 0) parts.push(`f=${serializeOverrides(overrides)}`);
@@ -433,7 +438,7 @@ export default function Viewer({
     if (lang !== "ja") parts.push(`l=${lang}`);
     if (transform) parts.push(`tr=${transform}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, bpm, stops, overrides, highlights, hispeed, speed, bgColor, lang, transform]);
+  }, [compact, title, subtitle, bpm, stops, overrides, highlights, hispeed, speed, bgColor, lang, transform]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -869,24 +874,50 @@ export default function Viewer({
           <div style={{ minWidth: 0 }}>
             <div className="chart-title">
               {editingTitle ? (
-                <input
-                  type="text"
-                  className="title-input"
-                  value={title}
-                  autoFocus
-                  placeholder={S.titlePlaceholder}
-                  onChange={(e) => {
-                    setTitle(e.target.value);
-                    setDirty(true);
+                // タイトルとサブキャプションをまとめて編集。
+                // 2つの入力間のフォーカス移動では閉じないようrelatedTargetを見る
+                <span
+                  className="title-edit"
+                  onBlur={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget)) setEditingTitle(false);
                   }}
-                  onBlur={() => setEditingTitle(false)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") setEditingTitle(false);
-                  }}
-                />
+                >
+                  <input
+                    type="text"
+                    className="title-input"
+                    value={title}
+                    autoFocus
+                    placeholder={S.titlePlaceholder}
+                    onChange={(e) => {
+                      setTitle(e.target.value);
+                      setDirty(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") setEditingTitle(false);
+                    }}
+                  />
+                  <input
+                    type="text"
+                    className="title-input subtitle-input"
+                    value={subtitle}
+                    placeholder={S.subtitlePlaceholder}
+                    onChange={(e) => {
+                      setSubtitle(e.target.value);
+                      setDirty(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") setEditingTitle(false);
+                    }}
+                  />
+                </span>
               ) : (
                 <button className="title-btn" onClick={() => setEditingTitle(true)}>
-                  {title || S.untitled} <span className="edit-pen">✎</span>
+                  <span className="title-lines">
+                    <span>
+                      {title || S.untitled} <span className="edit-pen">✎</span>
+                    </span>
+                    {subtitle && <span className="chart-subtitle">{subtitle}</span>}
+                  </span>
                 </button>
               )}
               {/* BPMチップ: タップで変速・停止パネルを開閉 (旧・変速ボタンを統合) */}
@@ -1557,6 +1588,7 @@ export default function Viewer({
                     footsteps,
                     timeline,
                     title: title || S.untitled,
+                    subtitle,
                     bpmLabel,
                     bgColor,
                     hispeed,
@@ -1678,12 +1710,13 @@ export default function Viewer({
         <TextImport
           compact={compact}
           S={S}
-          onApply={(next, timing, smTitle) => {
+          onApply={(next, timing, smTitle, smArtist) => {
             applyEdit(next);
             setOverrides(new Map());
             if (timing?.b) setBpm(timing.b);
             if (timing?.s !== undefined) setStops(timing.s);
             if (smTitle) setTitle(smTitle);
+            if (smArtist !== undefined) setSubtitle(smArtist);
             go(0);
             setShowText(false);
           }}
@@ -2537,7 +2570,12 @@ function TextImport({
 }: {
   compact: string;
   S: Strings;
-  onApply: (next: string, timing?: { b?: string; s?: string }, smTitle?: string) => void;
+  onApply: (
+    next: string,
+    timing?: { b?: string; s?: string },
+    smTitle?: string,
+    smArtist?: string
+  ) => void;
 }) {
   const [text, setText] = useState(() =>
     compact
@@ -2571,7 +2609,11 @@ function TextImport({
       };
       const tm = full.match(/#TITLE\s*:\s*([^;]*);/i);
       const smTitle = tm ? tm[1].trim() : undefined;
-      onApply(result.compact, timing, smTitle);
+      // アーティスト名はサブキャプションへ。ファイル全体の取り込み時は
+      // 曲が変わったとみなし、#ARTISTが無ければ空文字で前の曲の値をクリアする
+      const am = full.match(/#ARTIST\s*:\s*([^;]*);/i);
+      const smArtist = isFullFile ? am?.[1].trim() ?? "" : undefined;
+      onApply(result.compact, timing, smTitle, smArtist);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
