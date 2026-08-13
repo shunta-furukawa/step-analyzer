@@ -15,6 +15,7 @@ import {
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import { computeChartImageLayout, renderChartImage } from "@/lib/chartImage";
+import { loadAudioFromUrl, loadImageFromUrl, recordChartVideo } from "@/lib/videoExport";
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
@@ -191,6 +192,19 @@ export default function Viewer({
   const [imgBusy, setImgBusy] = useState(false);
   const [imgDone, setImgDone] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  // 動画書き出し (β): 表には出さず ?vx 付きURLでだけ出現する隠し機能
+  const [videoUnlocked] = useState(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("vx")
+  );
+  const [vOgg, setVOgg] = useState("");
+  const [vJacket, setVJacket] = useState("");
+  const [vOffset, setVOffset] = useState("0");
+  const [vBusy, setVBusy] = useState(false);
+  const [vProgress, setVProgress] = useState(0);
+  const [vError, setVError] = useState<string | null>(null);
+  const [vDone, setVDone] = useState(false);
+  const vSignal = useRef({ cancelled: false });
 
   const parseImgRange = (): { start: number; end: number } | null => {
     if (!chart) return null;
@@ -1428,6 +1442,112 @@ export default function Viewer({
             >
               {imgBusy ? S.imageSaving : imgDone ? S.imageSaved : S.imageSave}
             </button>
+            {videoUnlocked && (
+              <div className="video-beta">
+                <span className="opt-label">🎬 動画書き出し (β)</span>
+                <input
+                  type="url"
+                  placeholder="音源 (ogg/mp3) のURL"
+                  value={vOgg}
+                  onChange={(e) => setVOgg(e.target.value)}
+                />
+                <input
+                  type="url"
+                  placeholder="ジャケット画像のURL (任意)"
+                  value={vJacket}
+                  onChange={(e) => setVJacket(e.target.value)}
+                />
+                <div className="opt-row">
+                  <span className="opt-label">
+                    オフセット秒 (1小節目の頭が音源の何秒目か)
+                  </span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.05"
+                    value={vOffset}
+                    onChange={(e) => setVOffset(e.target.value)}
+                  />
+                </div>
+                {vError && <p className="error">{vError}</p>}
+                <button
+                  disabled={vBusy}
+                  onClick={async () => {
+                    if (!chart || vBusy) return;
+                    setVError(null);
+                    setVDone(false);
+                    setVBusy(true);
+                    setVProgress(0);
+                    vSignal.current = { cancelled: false };
+                    try {
+                      const audio = await loadAudioFromUrl(vOgg.trim());
+                      const jacket = vJacket.trim()
+                        ? await loadImageFromUrl(vJacket.trim())
+                        : null;
+                      const off = Number(vOffset);
+                      const bpmLabel =
+                        bpms.length > 1
+                          ? `${+Math.min(...bpms.map((x) => x.bpm)).toFixed(1)}-${+Math.max(
+                              ...bpms.map((x) => x.bpm)
+                            ).toFixed(1)}`
+                          : `${+bpms[0].bpm.toFixed(1)}`;
+                      const { blob, ext } = await recordChartVideo({
+                        chart,
+                        footsteps,
+                        timeline,
+                        title: title || S.untitled,
+                        bpmLabel,
+                        bgColor,
+                        hispeed,
+                        audio,
+                        jacket,
+                        offsetSec: Number.isFinite(off) ? off : 0,
+                        onProgress: setVProgress,
+                        signal: vSignal.current,
+                      });
+                      const base = (title || S.untitled).replace(/[\\/:*?"<>|]/g, "_");
+                      const file = new File([blob], `${base}.${ext}`, { type: blob.type });
+                      if (!vSignal.current.cancelled && navigator.canShare?.({ files: [file] })) {
+                        try {
+                          await navigator.share({ files: [file] });
+                          setVDone(true);
+                          return;
+                        } catch (err) {
+                          if ((err as DOMException)?.name === "AbortError") return;
+                        }
+                      }
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = file.name;
+                      a.click();
+                      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+                      setVDone(true);
+                    } catch (e) {
+                      setVError(e instanceof Error ? e.message : String(e));
+                    } finally {
+                      setVBusy(false);
+                    }
+                  }}
+                >
+                  {vBusy
+                    ? `録画中… ${Math.round(vProgress * 100)}% (等倍時間かかります)`
+                    : vDone
+                    ? "✓ 書き出しました"
+                    : "動画を書き出し"}
+                </button>
+                {vBusy && (
+                  <button
+                    className="secondary"
+                    onClick={() => {
+                      vSignal.current.cancelled = true;
+                    }}
+                  >
+                    中止
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
