@@ -16,6 +16,7 @@ import {
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import { computeChartImageLayout, renderChartImage } from "@/lib/chartImage";
+import { loadAudioFromUrl, loadImageFromUrl, recordChartVideo } from "@/lib/videoExport";
 
 // Three.js版の足ステージ (WebGL)。バンドルを分けるため遅延読み込みし、
 // ロード中と非対応環境はCSS版FootStageで表示する
@@ -196,6 +197,18 @@ export default function Viewer({
   const [imgBusy, setImgBusy] = useState(false);
   const [imgDone, setImgDone] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  // 動画書き出しモーダル
+  const [showVideo, setShowVideo] = useState(false);
+  const [vUseMedia, setVUseMedia] = useState(false);
+  const [vOgg, setVOgg] = useState("");
+  const [vJacket, setVJacket] = useState("");
+  const [vOffset, setVOffset] = useState("0");
+  const [vBusy, setVBusy] = useState(false);
+  const [vProgress, setVProgress] = useState(0);
+  const [vError, setVError] = useState<string | null>(null);
+  const [vDone, setVDone] = useState(false);
+  const vSignal = useRef({ cancelled: false });
 
   // WebGLが使えるかどうか (不可ならCSS版FootStageにフォールバック)
   const [webglOk] = useState(() => {
@@ -1018,6 +1031,18 @@ export default function Viewer({
         >
           📷
         </button>
+        <button
+          className="secondary"
+          onClick={() => {
+            if (!chart) return;
+            setVDone(false);
+            setVError(null);
+            setShowVideo(true);
+          }}
+          title={S.videoBtnTitle}
+        >
+          🎥
+        </button>
       </div>
 
       {editMode && (
@@ -1444,6 +1469,145 @@ export default function Viewer({
             >
               {imgBusy ? S.imageSaving : imgDone ? S.imageSaved : S.imageSave}
             </button>
+          </div>
+        </div>
+      )}
+
+      {showVideo && chart && (
+        <div
+          className="modal-backdrop"
+          onClick={() => {
+            if (!vBusy) setShowVideo(false);
+          }}
+        >
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h2>{S.videoTitle}</h2>
+              <button
+                className="secondary modal-close"
+                onClick={() => {
+                  if (vBusy) vSignal.current.cancelled = true;
+                  setShowVideo(false);
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <p className="hint opt-hint">{S.videoDesc}</p>
+            <label className="toggle-row">
+              <input
+                type="checkbox"
+                checked={vUseMedia}
+                onChange={(e) => setVUseMedia(e.target.checked)}
+              />
+              <span>{S.videoUseMedia}</span>
+            </label>
+            {vUseMedia && (
+              <>
+                <input
+                  type="url"
+                  placeholder={S.videoAudioUrl}
+                  value={vOgg}
+                  onChange={(e) => setVOgg(e.target.value)}
+                />
+                <input
+                  type="url"
+                  placeholder={S.videoJacketUrl}
+                  value={vJacket}
+                  onChange={(e) => setVJacket(e.target.value)}
+                />
+                <div className="opt-row">
+                  <span className="opt-label">{S.videoOffset}</span>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="0.05"
+                    value={vOffset}
+                    onChange={(e) => setVOffset(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+            {vError && <p className="error">{vError}</p>}
+            <button
+              disabled={vBusy}
+              onClick={async () => {
+                if (!chart || vBusy) return;
+                setVError(null);
+                setVDone(false);
+                setVBusy(true);
+                setVProgress(0);
+                vSignal.current = { cancelled: false };
+                try {
+                  const audio =
+                    vUseMedia && vOgg.trim() ? await loadAudioFromUrl(vOgg.trim()) : null;
+                  const jacket =
+                    vUseMedia && vJacket.trim()
+                      ? await loadImageFromUrl(vJacket.trim())
+                      : null;
+                  const off = Number(vOffset);
+                  const bpmLabel =
+                    bpms.length > 1
+                      ? `${+Math.min(...bpms.map((x) => x.bpm)).toFixed(1)}-${+Math.max(
+                          ...bpms.map((x) => x.bpm)
+                        ).toFixed(1)}`
+                      : `${+bpms[0].bpm.toFixed(1)}`;
+                  const { blob, ext } = await recordChartVideo({
+                    chart,
+                    footsteps,
+                    timeline,
+                    title: title || S.untitled,
+                    bpmLabel,
+                    bgColor,
+                    hispeed,
+                    audio,
+                    jacket,
+                    offsetSec: Number.isFinite(off) ? off : 0,
+                    onProgress: setVProgress,
+                    signal: vSignal.current,
+                  });
+                  if (vSignal.current.cancelled) return;
+                  const base = (title || S.untitled).replace(/[\\/:*?"<>|]/g, "_");
+                  const file = new File([blob], `${base}.${ext}`, { type: blob.type });
+                  if (navigator.canShare?.({ files: [file] })) {
+                    try {
+                      await navigator.share({ files: [file] });
+                      setVDone(true);
+                      return;
+                    } catch (err) {
+                      if ((err as DOMException)?.name === "AbortError") return;
+                    }
+                  }
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = file.name;
+                  a.click();
+                  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+                  setVDone(true);
+                } catch (e) {
+                  setVError(e instanceof Error ? e.message : String(e));
+                } finally {
+                  setVBusy(false);
+                }
+              }}
+            >
+              {vBusy
+                ? S.videoRecording(Math.round(vProgress * 100))
+                : vDone
+                ? S.videoDone
+                : S.videoExport}
+            </button>
+            {vBusy && (
+              <button
+                className="secondary"
+                onClick={() => {
+                  vSignal.current.cancelled = true;
+                }}
+              >
+                {S.videoCancel}
+              </button>
+            )}
           </div>
         </div>
       )}

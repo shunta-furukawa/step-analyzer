@@ -99,6 +99,18 @@ export interface Strings {
   imageSaving: string;
   imageSaved: string;
   imagePerCol: string;
+  // 動画書き出し
+  videoBtnTitle: string;
+  videoTitle: string;
+  videoDesc: string;
+  videoUseMedia: string;
+  videoAudioUrl: string;
+  videoJacketUrl: string;
+  videoOffset: string;
+  videoExport: string;
+  videoRecording: (pct: number) => string;
+  videoDone: string;
+  videoCancel: string;
   // 小節番号タップの範囲選択
   rangePending: (m: number) => string;
   rangeActive: (a: number, b: number) => string;
@@ -252,6 +264,18 @@ const ja: Strings = {
   imageSaving: "生成中…",
   imageSaved: "✓ 書き出しました",
   imagePerCol: "1列の小節数",
+  videoBtnTitle: "譜面再生をショート動画で書き出し",
+  videoTitle: "動画を書き出し (β)",
+  videoDesc:
+    "譜面の自動再生を縦型ショート動画 (720×1280) にします。ハンドクラップ入りで、再生時間ぶんの録画時間がかかります。",
+  videoUseMedia: "曲とジャケットを使う (Webにホストされたファイル)",
+  videoAudioUrl: "音源 (ogg/mp3) のURL",
+  videoJacketUrl: "ジャケット画像のURL (任意)",
+  videoOffset: "オフセット秒 (1小節目の頭が音源の何秒目か)",
+  videoExport: "動画を書き出し",
+  videoRecording: (pct) => `録画中… ${pct}%`,
+  videoDone: "✓ 書き出しました",
+  videoCancel: "中止",
   rangePending: (m) => `始点: ${m}小節目 — 終点の番号をタップ`,
   rangeActive: (a, b) => `共有・画像の範囲: ${a}〜${b}小節`,
   rangeClear: "解除",
@@ -406,6 +430,18 @@ const en: Strings = {
   imageSaving: "Rendering…",
   imageSaved: "✓ Exported",
   imagePerCol: "Measures per column",
+  videoBtnTitle: "Export playback as a short video",
+  videoTitle: "Export video (beta)",
+  videoDesc:
+    "Renders the auto-play as a vertical short video (720×1280) with handclaps. Recording takes as long as the playback itself.",
+  videoUseMedia: "Use song & jacket (web-hosted files)",
+  videoAudioUrl: "Audio URL (ogg/mp3)",
+  videoJacketUrl: "Jacket image URL (optional)",
+  videoOffset: "Offset seconds (where measure 1 starts in the audio)",
+  videoExport: "Export video",
+  videoRecording: (pct) => `Recording… ${pct}%`,
+  videoDone: "✓ Exported",
+  videoCancel: "Cancel",
   rangePending: (m) => `Start: measure ${m} — tap the end measure number`,
   rangeActive: (a, b) => `Share / image range: ${a}–${b}`,
   rangeClear: "Clear",
@@ -559,6 +595,18 @@ const ko: Strings = {
   imageSaving: "생성 중…",
   imageSaved: "✓ 내보냈습니다",
   imagePerCol: "한 열의 마디 수",
+  videoBtnTitle: "재생을 쇼트 동영상으로 내보내기",
+  videoTitle: "동영상 내보내기 (β)",
+  videoDesc:
+    "자동 재생을 세로형 쇼트 동영상 (720×1280) 으로 만듭니다. 핸드클랩 포함, 재생 시간만큼 녹화 시간이 걸립니다.",
+  videoUseMedia: "곡·재킷 사용 (웹에 호스팅된 파일)",
+  videoAudioUrl: "음원 (ogg/mp3) URL",
+  videoJacketUrl: "재킷 이미지 URL (선택)",
+  videoOffset: "오프셋 초 (1마디 시작이 음원의 몇 초인지)",
+  videoExport: "동영상 내보내기",
+  videoRecording: (pct) => `녹화 중… ${pct}%`,
+  videoDone: "✓ 내보냈습니다",
+  videoCancel: "중지",
   rangePending: (m) => `시작: ${m}마디 — 끝 마디 번호를 탭`,
   rangeActive: (a, b) => `공유·이미지 범위: ${a}〜${b}마디`,
   rangeClear: "해제",

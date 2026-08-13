@@ -749,6 +749,29 @@ select {
   line-height: 1.6;
 }
 
+/* 動画書き出しモーダルのトグル行 */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #e6e9f2;
+  cursor: pointer;
+}
+
+.toggle-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--mint);
+  flex-shrink: 0;
+}
+
+.modal-card input[type="url"] {
+  font-size: 16px;
+  width: 100%;
+}
+
 /* 範囲選択中のバナー: 譜面に密着しないよう下マージンを取り、
    緑背景でも読めるように暗色カード+白文字にする */
 .range-hint {
