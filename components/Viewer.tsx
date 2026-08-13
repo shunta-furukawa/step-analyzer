@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ARROW_ROTATIONS,
@@ -15,6 +16,10 @@ import {
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import { computeChartImageLayout, renderChartImage } from "@/lib/chartImage";
+
+// Three.js版の足ステージ (WebGL)。バンドルを分けるため遅延読み込みし、
+// ロード中と非対応環境はCSS版FootStageで表示する
+const FootStage3D = dynamic(() => import("./FootStage3D"), { ssr: false });
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
@@ -191,6 +196,17 @@ export default function Viewer({
   const [imgBusy, setImgBusy] = useState(false);
   const [imgDone, setImgDone] = useState(false);
   const [imgError, setImgError] = useState(false);
+
+  // WebGLが使えるかどうか (不可ならCSS版FootStageにフォールバック)
+  const [webglOk] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      const c = document.createElement("canvas");
+      return !!(c.getContext("webgl2") ?? c.getContext("webgl"));
+    } catch {
+      return false;
+    }
+  });
 
   const parseImgRange = (): { start: number; end: number } | null => {
     if (!chart) return null;
@@ -1976,19 +1992,35 @@ export default function Viewer({
 
         <div className="side-pane">
           <div className="card pad-card">
-            <FootStage
-              leftPos={footStep?.leftPos ?? 0}
-              rightPos={footStep?.rightPos ?? 3}
-              stepping={
-                curStep?.shock && curStep.ghost ? [4] : curEvent?.panels ?? []
-              }
-              feet={curStep?.feet ?? [null, null, null, null]}
-              facing={footStep?.facing ?? facing}
-              stepKey={current}
-              heldFeet={footStep?.heldFeet ?? []}
-              oneFoot={stageOneFoot}
-              liftedFoot={footStep?.liftedFoot ?? null}
-            />
+            {webglOk ? (
+              <FootStage3D
+                leftPos={footStep?.leftPos ?? 0}
+                rightPos={footStep?.rightPos ?? 3}
+                stepping={
+                  curStep?.shock && curStep.ghost ? [4] : curEvent?.panels ?? []
+                }
+                feet={curStep?.feet ?? [null, null, null, null]}
+                facing={footStep?.facing ?? facing}
+                stepKey={current}
+                heldFeet={footStep?.heldFeet ?? []}
+                oneFoot={stageOneFoot}
+                liftedFoot={footStep?.liftedFoot ?? null}
+              />
+            ) : (
+              <FootStage
+                leftPos={footStep?.leftPos ?? 0}
+                rightPos={footStep?.rightPos ?? 3}
+                stepping={
+                  curStep?.shock && curStep.ghost ? [4] : curEvent?.panels ?? []
+                }
+                feet={curStep?.feet ?? [null, null, null, null]}
+                facing={footStep?.facing ?? facing}
+                stepKey={current}
+                heldFeet={footStep?.heldFeet ?? []}
+                oneFoot={stageOneFoot}
+                liftedFoot={footStep?.liftedFoot ?? null}
+              />
+            )}
             <div className="controls">
               <button
                 className="secondary"

@@ -958,6 +958,13 @@ select {
   perspective-origin: 50% 20%;
 }
 
+/* WebGL版: perspectiveはThree.js側で持つのでCSS遠近は外す */
+.stage3d-gl .scene {
+  perspective: none;
+  width: calc(var(--stage) * 1.25);
+  height: calc(var(--stage) * 1.02);
+}
+
 .floor {
   position: relative;
   width: var(--stage);
