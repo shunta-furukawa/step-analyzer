@@ -268,7 +268,7 @@ const ja: Strings = {
   videoTitle: "動画を書き出し (β)",
   videoDesc:
     "譜面の自動再生を縦型ショート動画 (720×1280) にします。ハンドクラップ入りで、再生時間ぶんの録画時間がかかります。",
-  videoUseMedia: "曲とジャケットを使う (Webにホストされたファイル)",
+  videoUseMedia: "曲とジャケットを使う",
   videoAudioUrl: "音源 (ogg/mp3) のURL",
   videoJacketUrl: "ジャケット画像のURL (任意)",
   videoOffset: "オフセット秒 (1小節目の頭が音源の何秒目か)",
@@ -434,7 +434,7 @@ const en: Strings = {
   videoTitle: "Export video (beta)",
   videoDesc:
     "Renders the auto-play as a vertical short video (720×1280) with handclaps. Recording takes as long as the playback itself.",
-  videoUseMedia: "Use song & jacket (web-hosted files)",
+  videoUseMedia: "Use song & jacket",
   videoAudioUrl: "Audio URL (ogg/mp3)",
   videoJacketUrl: "Jacket image URL (optional)",
   videoOffset: "Offset seconds (where measure 1 starts in the audio)",
@@ -599,7 +599,7 @@ const ko: Strings = {
   videoTitle: "동영상 내보내기 (β)",
   videoDesc:
     "자동 재생을 세로형 쇼트 동영상 (720×1280) 으로 만듭니다. 핸드클랩 포함, 재생 시간만큼 녹화 시간이 걸립니다.",
-  videoUseMedia: "곡·재킷 사용 (웹에 호스팅된 파일)",
+  videoUseMedia: "곡·재킷 사용",
   videoAudioUrl: "음원 (ogg/mp3) URL",
   videoJacketUrl: "재킷 이미지 URL (선택)",
   videoOffset: "오프셋 초 (1마디 시작이 음원의 몇 초인지)",
