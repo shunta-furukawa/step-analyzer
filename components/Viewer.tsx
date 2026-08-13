@@ -1542,6 +1542,11 @@ export default function Viewer({
                     startMeasure: range.start,
                     endMeasure: range.end,
                     title: title || S.untitled,
+                    subtitle,
+                    diff:
+                      diffCls !== null || diffLvl
+                        ? { cls: diffCls, lvl: diffLvl }
+                        : null,
                     bgColor,
                     measuresPerColumn:
                       Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 16,

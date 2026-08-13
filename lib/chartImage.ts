@@ -20,6 +20,7 @@ import {
   type FootStep,
   type ParsedChart,
 } from "./chart";
+import { DIFF_COLORS, drawDiffFoot } from "./difficulty";
 
 export interface ChartImageOptions {
   chart: ParsedChart;
@@ -28,6 +29,8 @@ export interface ChartImageOptions {
   startMeasure: number; // 1-based inclusive
   endMeasure: number;
   title: string;
+  subtitle?: string; // サブキャプション (アーティスト名など)
+  diff?: { cls: number | null; lvl: string } | null; // 難易度 (クラス色+レベル)
   bgColor: string; // 6桁hex ('#'なし)
   measuresPerColumn?: number;
   hispeed?: number; // 縦の縮尺 (アプリのハイスピ設定に追従)
@@ -275,27 +278,70 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   const ctx = canvas.getContext("2d")!;
   ctx.scale(scale, scale);
 
-  // 背景 (ページと同じ斜めストライプ)
+  // 背景 (ページCSSと同じ斜めストライプ: 115deg・18px)
   ctx.fillStyle = `#${o.bgColor}`;
   ctx.fillRect(0, 0, width, height);
   ctx.save();
   ctx.rotate((-25 * Math.PI) / 180);
-  for (let x = -height * 2; x < width + height * 2; x += 36) {
-    ctx.fillStyle = (x / 36) % 2 === 0 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)";
-    ctx.fillRect(x, -width, 36, width * 2 + height * 2);
+  let stripeI = 0;
+  for (let x = -height; x < width + height; x += 18, stripeI++) {
+    ctx.fillStyle = stripeI % 2 === 0 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)";
+    ctx.fillRect(x, -width, 18, width * 2 + height * 2);
   }
   ctx.restore();
 
-  // ヘッダ: タイトル + 範囲
+  // ヘッダ: タイトル (縦長フォント) + 難易度 (右上) + アーティスト名・範囲
   const fg = fgFor(o.bgColor);
+  const logoFont =
+    (typeof getComputedStyle !== "undefined"
+      ? getComputedStyle(document.documentElement).getPropertyValue("--font-logo").trim()
+      : "") || '"Arial Black"';
+  const titleFont = `${logoFont}, "Arial Black", system-ui, sans-serif`;
+  let diffLeft = width - PAD;
+  if (o.diff && (o.diff.cls !== null || o.diff.lvl)) {
+    const footSize = 22;
+    ctx.font = `400 19px ${titleFont}`;
+    const lm = o.diff.lvl ? ctx.measureText(o.diff.lvl) : null;
+    const diffW =
+      (o.diff.cls !== null ? footSize : 0) +
+      (o.diff.cls !== null && o.diff.lvl ? 4 : 0) +
+      (lm?.width ?? 0);
+    diffLeft = width - PAD - diffW;
+    const midY = PAD + 11;
+    let dx = diffLeft;
+    if (o.diff.cls !== null) {
+      drawDiffFoot(ctx, dx, midY - footSize / 2, footSize, DIFF_COLORS[o.diff.cls], "#ffffff");
+      dx += footSize + 4;
+    }
+    if (o.diff.lvl && lm) {
+      ctx.fillStyle = fg;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      const asc = lm.actualBoundingBoxAscent || 14;
+      const desc = lm.actualBoundingBoxDescent || 0;
+      ctx.fillText(o.diff.lvl, dx, midY + (asc - desc) / 2);
+    }
+  }
   ctx.fillStyle = fg;
-  ctx.font = "800 20px system-ui, sans-serif";
+  ctx.font = `400 21px ${titleFont}`;
   ctx.textAlign = "left";
-  ctx.textBaseline = "top";
-  ctx.fillText(o.title, PAD, PAD, width - PAD * 2 - 120);
+  ctx.textBaseline = "alphabetic";
+  const tMet = ctx.measureText(o.title);
+  ctx.fillText(
+    o.title,
+    PAD,
+    PAD + 2 + (tMet.actualBoundingBoxAscent || 15),
+    Math.max(40, diffLeft - PAD - 8)
+  );
   ctx.font = "700 12px system-ui, sans-serif";
   ctx.globalAlpha = 0.75;
-  ctx.fillText(`#${start}-${end} · step-analyzer`, PAD, PAD + 26);
+  ctx.textBaseline = "top";
+  ctx.fillText(
+    `${o.subtitle ? `${o.subtitle} · ` : ""}#${start}-${end} · step-analyzer`,
+    PAD,
+    PAD + 26,
+    width - PAD * 2
+  );
   ctx.globalAlpha = 1;
 
   const segs = holdSegments(chart, footsteps);

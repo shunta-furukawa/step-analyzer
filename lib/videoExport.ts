@@ -260,11 +260,11 @@ export async function recordChartVideo(
     if (o.diff) {
       const footSize = 40;
       ctx.font = `400 36px ${titleFont}`;
-      const lvlW = o.diff.lvl ? ctx.measureText(o.diff.lvl).width : 0;
+      const lvlMet = o.diff.lvl ? ctx.measureText(o.diff.lvl) : null;
       const diffW =
         (o.diff.cls !== null ? footSize : 0) +
         (o.diff.cls !== null && o.diff.lvl ? 8 : 0) +
-        lvlW;
+        (lvlMet?.width ?? 0);
       diffLeft = Math.min(chipX, W - 24 - diffW);
       const midY = jMidR - 25;
       let dx = W - 24 - diffW;
@@ -280,10 +280,13 @@ export async function recordChartVideo(
         );
         dx += footSize + 8;
       }
-      if (o.diff.lvl) {
+      if (o.diff.lvl && lvlMet) {
+        // アイコンと数字の視覚的な縦中心を実測グリフ高さで揃える
         ctx.fillStyle = fg;
-        ctx.textBaseline = "middle";
-        ctx.fillText(o.diff.lvl, dx, midY);
+        ctx.textBaseline = "alphabetic";
+        const asc = lvlMet.actualBoundingBoxAscent || 26;
+        const desc = lvlMet.actualBoundingBoxDescent || 0;
+        ctx.fillText(o.diff.lvl, dx, midY + (asc - desc) / 2);
       }
     }
 
