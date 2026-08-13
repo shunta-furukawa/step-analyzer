@@ -105,7 +105,7 @@ function withArrowTransform(
   ctx.restore();
 }
 
-export function drawArrow(
+function drawArrow(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
@@ -137,7 +137,7 @@ export function drawArrow(
   });
 }
 
-export function drawGhostArrow(
+function drawGhostArrow(
   ctx: CanvasRenderingContext2D,
   cx: number,
   cy: number,
@@ -159,7 +159,7 @@ export function drawGhostArrow(
   });
 }
 
-export function drawFootBadge(
+function drawFootBadge(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
