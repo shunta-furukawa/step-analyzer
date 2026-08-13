@@ -144,9 +144,9 @@ function makeSoleGeometry(): THREE.ExtrudeGeometry {
   s.lineTo(-w / 2, -l / 2 + r);
   s.absarc(-w / 2 + r, -l / 2 + r, r, Math.PI, Math.PI * 1.5, false);
   const geo = new THREE.ExtrudeGeometry(s, {
-    depth: 0.1,
+    depth: 0.05,
     bevelEnabled: true,
-    bevelThickness: 0.035,
+    bevelThickness: 0.018,
     bevelSize: 0.03,
     bevelSegments: 3,
     curveSegments: 10,
@@ -200,9 +200,9 @@ function makeFoot(color: string, label: string): FootRig {
     map: makeLabelTexture(label),
     transparent: true,
   });
-  const labelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), labelMat);
+  const labelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.45, 0.45), labelMat);
   labelMesh.rotation.x = -Math.PI / 2;
-  labelMesh.position.y = 0.2;
+  labelMesh.position.y = 0.12;
   group.add(labelMesh);
 
   return {
@@ -428,8 +428,15 @@ export default function FootStage3D(props: FootStage3DProps) {
         rig.soleMat.opacity = lifted ? 0.6 : 1;
         rig.outlineMat.opacity = lifted ? 0.5 : 1;
         rig.labelMat.opacity = lifted ? 0.7 : 1;
-        // フリーズ保持中はCSS版と同じく枠 (アウトライン) をミント色に
-        rig.outlineMat.color.set(pr.heldFeet.includes(foot) ? "#00e0a0" : "#ffffff");
+        // フリーズ保持中: 枠をミント色に + 本体をさりげなく発光パルス
+        const held = pr.heldFeet.includes(foot);
+        rig.outlineMat.color.set(held ? "#00e0a0" : "#ffffff");
+        if (held) {
+          rig.soleMat.emissive.set("#00e0a0");
+          rig.soleMat.emissiveIntensity = 0.22 + 0.14 * Math.sin(now / 260);
+        } else {
+          rig.soleMat.emissiveIntensity = 0;
+        }
       };
       applyFoot(st.feet.L, "L", pose.lx, pose.ly, pose.lRot);
       applyFoot(st.feet.R, "R", pose.rx, pose.ry, pose.rRot);
