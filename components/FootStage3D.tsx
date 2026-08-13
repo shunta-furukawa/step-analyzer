@@ -128,6 +128,21 @@ function makeLabelTexture(label: string): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c);
 }
 
+// フリーズ保持中に足の外側へ敷くミントのグロー (放射グラデーション)
+function makeGlowTexture(): THREE.CanvasTexture {
+  const c = document.createElement("canvas");
+  c.width = 128;
+  c.height = 128;
+  const ctx = c.getContext("2d")!;
+  const g = ctx.createRadialGradient(64, 64, 18, 64, 64, 64);
+  g.addColorStop(0, "rgba(0, 224, 160, 0.85)");
+  g.addColorStop(0.55, "rgba(0, 224, 160, 0.35)");
+  g.addColorStop(1, "rgba(0, 224, 160, 0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
+}
+
 // 足型 (角丸の靴底) のジオメトリ
 function makeSoleGeometry(): THREE.ExtrudeGeometry {
   const w = 0.34;
@@ -165,6 +180,8 @@ interface FootRig {
   soleMat: THREE.MeshStandardMaterial;
   outlineMat: THREE.MeshBasicMaterial;
   labelMat: THREE.MeshBasicMaterial;
+  glow: THREE.Mesh;
+  glowMat: THREE.MeshBasicMaterial;
   // アニメーション状態
   cur: { x: number; z: number; rot: number; lift: number };
   from: { x: number; z: number; rot: number; lift: number };
@@ -205,12 +222,28 @@ function makeFoot(color: string, label: string): FootRig {
   labelMesh.position.y = 0.12;
   group.add(labelMesh);
 
+  // フリーズ保持中のグロー (足の形に合わせて縦長の光彩を床に敷く)
+  const glowMat = new THREE.MeshBasicMaterial({
+    map: makeGlowTexture(),
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    opacity: 0,
+  });
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(0.78, 1.0), glowMat);
+  glow.rotation.x = -Math.PI / 2;
+  glow.position.y = 0.005;
+  glow.visible = false;
+  group.add(glow);
+
   return {
     group,
     sole,
     soleMat,
     outlineMat,
     labelMat,
+    glow,
+    glowMat,
     cur: { x: 0, z: 0, rot: 0, lift: 0 },
     from: { x: 0, z: 0, rot: 0, lift: 0 },
     target: { x: 0, z: 0, rot: 0, lift: 0 },
@@ -428,14 +461,13 @@ export default function FootStage3D(props: FootStage3DProps) {
         rig.soleMat.opacity = lifted ? 0.6 : 1;
         rig.outlineMat.opacity = lifted ? 0.5 : 1;
         rig.labelMat.opacity = lifted ? 0.7 : 1;
-        // フリーズ保持中: 枠をミント色に + 本体をさりげなく発光パルス
+        // フリーズ保持中: 枠をミント色に + 足の外側にミントのグローを脈打たせる
+        // (本体の色味は変えない)
         const held = pr.heldFeet.includes(foot);
         rig.outlineMat.color.set(held ? "#00e0a0" : "#ffffff");
+        rig.glow.visible = held;
         if (held) {
-          rig.soleMat.emissive.set("#00e0a0");
-          rig.soleMat.emissiveIntensity = 0.22 + 0.14 * Math.sin(now / 260);
-        } else {
-          rig.soleMat.emissiveIntensity = 0;
+          rig.glowMat.opacity = 0.6 + 0.25 * Math.sin(now / 260);
         }
       };
       applyFoot(st.feet.L, "L", pose.lx, pose.ly, pose.lRot);
