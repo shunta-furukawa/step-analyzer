@@ -165,8 +165,6 @@ interface FootRig {
   soleMat: THREE.MeshStandardMaterial;
   outlineMat: THREE.MeshBasicMaterial;
   labelMat: THREE.MeshBasicMaterial;
-  ring: THREE.Mesh;
-  ringMat: THREE.MeshBasicMaterial;
   // アニメーション状態
   cur: { x: number; z: number; rot: number; lift: number };
   from: { x: number; z: number; rot: number; lift: number };
@@ -207,22 +205,12 @@ function makeFoot(color: string, label: string): FootRig {
   labelMesh.position.y = 0.2;
   group.add(labelMesh);
 
-  // フリーズ保持中のミントリング
-  const ringMat = new THREE.MeshBasicMaterial({ color: "#00e0a0", transparent: true });
-  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.035, 10, 40), ringMat);
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.02;
-  ring.visible = false;
-  group.add(ring);
-
   return {
     group,
     sole,
     soleMat,
     outlineMat,
     labelMat,
-    ring,
-    ringMat,
     cur: { x: 0, z: 0, rot: 0, lift: 0 },
     from: { x: 0, z: 0, rot: 0, lift: 0 },
     target: { x: 0, z: 0, rot: 0, lift: 0 },
@@ -440,7 +428,8 @@ export default function FootStage3D(props: FootStage3DProps) {
         rig.soleMat.opacity = lifted ? 0.6 : 1;
         rig.outlineMat.opacity = lifted ? 0.5 : 1;
         rig.labelMat.opacity = lifted ? 0.7 : 1;
-        rig.ring.visible = pr.heldFeet.includes(foot);
+        // フリーズ保持中はCSS版と同じく枠 (アウトライン) をミント色に
+        rig.outlineMat.color.set(pr.heldFeet.includes(foot) ? "#00e0a0" : "#ffffff");
       };
       applyFoot(st.feet.L, "L", pose.lx, pose.ly, pose.lRot);
       applyFoot(st.feet.R, "R", pose.rx, pose.ry, pose.rRot);
