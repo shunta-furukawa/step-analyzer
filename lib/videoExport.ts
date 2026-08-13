@@ -257,11 +257,11 @@ export async function recordChartVideo(
     ctx.fillStyle = fg;
     ctx.font = `400 44px ${titleFont}`;
     ctx.textBaseline = "top";
-    ctx.fillText(o.title, textX, o.subtitle ? jMid - 44 : jMid - 22, textMaxW);
+    ctx.fillText(o.title, textX, o.subtitle ? jMid - 36 : jMid - 14, textMaxW);
     if (o.subtitle) {
       ctx.globalAlpha = 0.72;
       ctx.font = `400 28px ${titleFont}`;
-      ctx.fillText(o.subtitle, textX, jMid + 16, textMaxW);
+      ctx.fillText(o.subtitle, textX, jMid + 24, textMaxW);
       ctx.globalAlpha = 1;
     }
 
