@@ -37,14 +37,14 @@ export interface VideoExportOptions {
 
 const W = 720;
 const H = 1280;
-const HEADER_H = 190;
-const PAD_H = 330; // 下部の足パッド領域
-const PAD_W = 660;
+const HEADER_H = 160;
+const PAD_H = 380; // 下部の足パッド領域 (幅はキャンバスいっぱい)
+const PAD_W = 760;
 const LANE_W = 170;
 const NOTE = 144;
 const LANE_X = (W - LANE_W * 4) / 2;
-const RECEPTOR_Y = HEADER_H + 100;
-const LANE_BOTTOM = H - PAD_H - 20;
+const RECEPTOR_Y = HEADER_H + 82;
+const LANE_BOTTOM = H - 362;
 const LEAD_IN = 1.5; // 録画開始から1ノーツ目までの助走秒数
 const TAIL = 1.2;
 const FOOT_TRAVEL = 0.25;
@@ -135,6 +135,12 @@ export async function recordChartVideo(
   const segs = holdSegmentsOf(chart, footsteps);
   const pxPerBeat = NOTE * 1.8 * Math.max(0.25, o.hispeed);
   const fg = fgFor(o.bgColor);
+  // アプリのステップ数などと同じ縦長フォント (next/fontのAnton)。
+  // 実フォント名はCSS変数から実行時に解決し、無ければ太字系にフォールバック
+  const logoFont =
+    getComputedStyle(document.documentElement).getPropertyValue("--font-logo").trim() ||
+    '"Arial Black"';
+  const titleFont = `${logoFont}, "Arial Black", system-ui, sans-serif`;
   const offsetSec = o.audio ? o.offsetSec : LEAD_IN; // 音源なしはハンクラのみで頭から
   const songEnd = offsetSec + timeAtBeat(timeline, chart.totalBeats) + TAIL;
   const recStart = Math.max(0, offsetSec - LEAD_IN);
@@ -215,8 +221,8 @@ export async function recordChartVideo(
 
     // ヘッダ: ジャケット (またはアイコン) + タイトル + BPMチップ
     const jSize = 140;
-    const jx = 30;
-    const jy = 24;
+    const jx = 10;
+    const jy = 10;
     if (o.jacket) {
       ctx.save();
       roundRectPath(ctx, jx, jy, jSize, jSize, 18);
@@ -234,7 +240,7 @@ export async function recordChartVideo(
     const bpmText = `♩=${o.bpmLabel}`;
     ctx.font = "700 30px ui-monospace, monospace";
     const chipW = ctx.measureText(bpmText).width + 36;
-    const chipX = W - 24 - chipW;
+    const chipX = W - 10 - chipW;
     const chipY = jy + (jSize - 48) / 2;
     roundRectPath(ctx, chipX, chipY, chipW, 48, 8);
     ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
@@ -244,16 +250,16 @@ export async function recordChartVideo(
     ctx.textBaseline = "middle";
     ctx.fillText(bpmText, chipX + 18, chipY + 25);
 
-    const textX = jx + jSize + 26;
-    const textMaxW = chipX - textX - 20;
+    const textX = jx + jSize + 22;
+    const textMaxW = chipX - textX - 16;
     ctx.fillStyle = fg;
-    ctx.font = "800 42px system-ui, sans-serif";
+    ctx.font = `400 44px ${titleFont}`;
     ctx.textBaseline = "top";
-    ctx.fillText(o.title, textX, o.subtitle ? 40 : 62, textMaxW);
+    ctx.fillText(o.title, textX, o.subtitle ? 26 : 52, textMaxW);
     if (o.subtitle) {
       ctx.globalAlpha = 0.72;
-      ctx.font = "700 27px system-ui, sans-serif";
-      ctx.fillText(o.subtitle, textX, 100, textMaxW);
+      ctx.font = `400 28px ${titleFont}`;
+      ctx.fillText(o.subtitle, textX, 88, textMaxW);
       ctx.globalAlpha = 1;
     }
 
@@ -414,7 +420,8 @@ export async function recordChartVideo(
         }
       }
       footScene.frame(nowMs);
-      ctx.drawImage(footScene.canvas, (W - PAD_W) / 2, H - PAD_H - 14, PAD_W, PAD_H);
+      // 幅はキャンバスより広め (左右は空きなのではみ出してOK)。迫力優先で大きく合成
+      ctx.drawImage(footScene.canvas, (W - PAD_W) / 2, H - PAD_H - 8, PAD_W, PAD_H);
     }
 
     // フッター: 進行バー + クレジット
