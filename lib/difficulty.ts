@@ -54,23 +54,42 @@ export function diffLevelFromSm(meter: string): string {
   return Number.isFinite(n) && n > 0 ? String(Math.min(99, n)) : "";
 }
 
-/** canvasへ足あとアイコンを描く (x,yは左上、sizeは24pxボックスの拡大サイズ) */
+/**
+ * canvasへ足あとアイコンを描く (x,yは左上、sizeは24pxボックスの拡大サイズ)。
+ * outline指定時は全パーツをその色で太らせて下描きし、縁取りの
+ * シルエットを作る (背景色とクラス色が近くても視認できるように)
+ */
 export function drawDiffFoot(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   size: number,
-  color: string
+  color: string,
+  outline?: string
 ) {
   const s = size / 24;
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(s, s);
-  ctx.fillStyle = color;
-  for (const b of FOOT_BLOBS) {
+  const trace = (b: FootBlob) => {
     ctx.beginPath();
     if (isFootCircle(b)) ctx.arc(b.cx, b.cy, b.r, 0, Math.PI * 2);
     else ctx.ellipse(b.cx, b.cy, b.rx, b.ry, b.rot, 0, Math.PI * 2);
+  };
+  if (outline) {
+    ctx.fillStyle = outline;
+    ctx.strokeStyle = outline;
+    ctx.lineWidth = 3;
+    ctx.lineJoin = "round";
+    for (const b of FOOT_BLOBS) {
+      trace(b);
+      ctx.fill();
+      ctx.stroke();
+    }
+  }
+  ctx.fillStyle = color;
+  for (const b of FOOT_BLOBS) {
+    trace(b);
     ctx.fill();
   }
   ctx.restore();

@@ -240,12 +240,14 @@ export async function recordChartVideo(
     } else {
       drawAppIcon(ctx, jx, jy, jSize);
     }
-    // BPMチップ (右寄せ・控えめサイズ)。タイトル・サブキャプションはチップ手前まで
+    // 右側は難易度 (上段) + BPMチップ (下段) の2段組み。
+    // 難易度がなければBPMチップだけをジャケット縦中央に置く
+    const jMidR = jy + jSize / 2;
     const bpmText = `♩=${o.bpmLabel}`;
     ctx.font = "700 24px ui-monospace, monospace";
     const chipW = ctx.measureText(bpmText).width + 28;
     const chipX = W - 24 - chipW;
-    const chipY = jy + (jSize - 40) / 2;
+    const chipY = (o.diff ? jMidR + 25 : jMidR) - 20;
     roundRectPath(ctx, chipX, chipY, chipW, 40, 8);
     ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
     ctx.fill();
@@ -254,22 +256,29 @@ export async function recordChartVideo(
     ctx.textBaseline = "middle";
     ctx.fillText(bpmText, chipX + 14, chipY + 21);
 
-    // 難易度 (色足あと+レベル) をBPMチップの左に置く
     let diffLeft = chipX;
     if (o.diff) {
-      const footSize = 38;
-      ctx.font = `400 34px ${titleFont}`;
+      const footSize = 40;
+      ctx.font = `400 36px ${titleFont}`;
       const lvlW = o.diff.lvl ? ctx.measureText(o.diff.lvl).width : 0;
       const diffW =
         (o.diff.cls !== null ? footSize : 0) +
-        (o.diff.cls !== null && o.diff.lvl ? 6 : 0) +
+        (o.diff.cls !== null && o.diff.lvl ? 8 : 0) +
         lvlW;
-      diffLeft = chipX - 16 - diffW;
-      const midY = chipY + 20;
-      let dx = diffLeft;
+      diffLeft = Math.min(chipX, W - 24 - diffW);
+      const midY = jMidR - 25;
+      let dx = W - 24 - diffW;
       if (o.diff.cls !== null) {
-        drawDiffFoot(ctx, dx, midY - footSize / 2, footSize, DIFF_COLORS[o.diff.cls]);
-        dx += footSize + 6;
+        // 背景色とクラス色が近くても見えるよう白の縁取り付き
+        drawDiffFoot(
+          ctx,
+          dx,
+          midY - footSize / 2,
+          footSize,
+          DIFF_COLORS[o.diff.cls],
+          "#ffffff"
+        );
+        dx += footSize + 8;
       }
       if (o.diff.lvl) {
         ctx.fillStyle = fg;
