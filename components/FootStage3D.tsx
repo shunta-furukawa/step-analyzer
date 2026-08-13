@@ -187,6 +187,7 @@ interface FootRig {
   from: { x: number; z: number; rot: number; lift: number };
   target: { x: number; z: number; rot: number; lift: number };
   tweenT0: number;
+  tweenMoves: boolean; // このトゥイーンが位置移動を含むか (空中の弧を描くか)
   hopT0: number;
 }
 
@@ -248,6 +249,7 @@ function makeFoot(color: string, label: string): FootRig {
     from: { x: 0, z: 0, rot: 0, lift: 0 },
     target: { x: 0, z: 0, rot: 0, lift: 0 },
     tweenT0: 0,
+    tweenMoves: false,
     hopT0: -1,
   };
 }
@@ -429,12 +431,16 @@ export default function FootStage3D(props: FootStage3DProps) {
         rig.cur.z = rig.from.z + (rig.target.z - rig.from.z) * e;
         rig.cur.rot = lerpAngleDeg(rig.from.rot, rig.target.rot, e);
         rig.cur.lift = rig.from.lift + (rig.target.lift - rig.from.lift) * e;
-        // ホップ (踏んだ瞬間の小ジャンプ)
+        // 上下の動き: 移動中は空中の弧 (ジャストで着地)、
+        // 移動なしの踏み (縦連など) は着地時の小さいバウンド
         let hopY = 0;
+        if (rig.tweenMoves && t < 1) {
+          hopY = Math.sin(t * Math.PI) * 0.13;
+        }
         if (rig.hopT0 >= 0) {
           const ht = (now - rig.hopT0) / HOP_MS;
           if (ht >= 1) rig.hopT0 = -1;
-          else hopY = Math.sin(ht * Math.PI) * 0.16;
+          else hopY += Math.sin(ht * Math.PI) * 0.09;
         }
         rig.group.position.set(rig.cur.x, rig.cur.lift + hopY, rig.cur.z);
         rig.group.rotation.y = deg2rotY(rig.cur.rot);
@@ -515,6 +521,8 @@ export default function FootStage3D(props: FootStage3DProps) {
         rig.from = { ...rig.cur };
         rig.target = { x: tx, z: tz, rot, lift };
         rig.tweenT0 = now;
+        rig.tweenMoves =
+          Math.hypot(tx - rig.from.x, tz - rig.from.z) > 0.05;
       }
     };
     retarget(st.feet.L, "L", pose.lx, pose.ly, pose.lRot);
@@ -529,8 +537,12 @@ export default function FootStage3D(props: FootStage3DProps) {
       const rStep =
         props.stepping.includes(props.rightPos) &&
         (props.rightPos === 4 || props.feet[props.rightPos] === "R");
-      if (lStep || props.oneFoot?.foot === "L") st.feet.L.hopT0 = now;
-      if (rStep || props.oneFoot?.foot === "R") st.feet.R.hopT0 = now;
+      const justTraveled = (rig: FootRig) =>
+        rig.tweenMoves && now - rig.tweenT0 < TRAVEL_MS + 80;
+      if ((lStep || props.oneFoot?.foot === "L") && !justTraveled(st.feet.L))
+        st.feet.L.hopT0 = now;
+      if ((rStep || props.oneFoot?.foot === "R") && !justTraveled(st.feet.R))
+        st.feet.R.hopT0 = now;
     }
   }, [props]);
 
