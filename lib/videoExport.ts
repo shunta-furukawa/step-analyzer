@@ -40,7 +40,9 @@ const H = 1280;
 const HEADER_H = 160;
 const PAD_H = 380; // 下部の足パッド領域 (幅はキャンバスいっぱい)
 const PAD_W = 760;
-const LANE_W = 170;
+// ノーツサイズはそのまま列間を詰める。レーンが細くなる分だけ左右に
+// 余白が生まれ、Shorts系アプリの縦長画面での左右クロップからも逃げられる
+const LANE_W = 160;
 const NOTE = 144;
 const LANE_X = (W - LANE_W * 4) / 2;
 const RECEPTOR_Y = HEADER_H + 82;
@@ -221,7 +223,7 @@ export async function recordChartVideo(
 
     // ヘッダ: ジャケット (またはアイコン) + タイトル + BPMチップ
     const jSize = 140;
-    const jx = 10;
+    const jx = 24; // 端ギリギリはShortsの左右クロップで切れるため少し内側に
     const jy = 10;
     if (o.jacket) {
       ctx.save();
@@ -240,7 +242,7 @@ export async function recordChartVideo(
     const bpmText = `♩=${o.bpmLabel}`;
     ctx.font = "700 24px ui-monospace, monospace";
     const chipW = ctx.measureText(bpmText).width + 28;
-    const chipX = W - 10 - chipW;
+    const chipX = W - 24 - chipW;
     const chipY = jy + (jSize - 40) / 2;
     roundRectPath(ctx, chipX, chipY, chipW, 40, 8);
     ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
