@@ -52,9 +52,18 @@ const STAGE_CENTERS = [
   { x: 1.5, y: 1.5 },
 ];
 const PAD_CELL = 150;
-const PAD_SQUASH = 0.55;
-const PAD_X = (W - PAD_CELL * 3) / 2;
-const PAD_Y = LANE_BOTTOM + 55;
+const PAD_SQUASH = 0.5;
+const PAD_Y = LANE_BOTTOM + 60;
+
+// 簡易透視投影: 奥の行ほど狭く・詰めて描き、CSSのperspective+rotateXの
+// 見え方に寄せる。グリッド座標 (0..3, 0..3) → スクリーン座標
+function padProject(gx: number, gy: number): { x: number; y: number; s: number } {
+  const t = gy / 3;
+  const rowScale = 0.74 + 0.38 * t; // 奥0.74倍 → 手前1.12倍
+  const x = W / 2 + (gx - 1.5) * PAD_CELL * rowScale;
+  const y = PAD_Y + PAD_CELL * PAD_SQUASH * gy * (0.8 + 0.09 * gy);
+  return { x, y, s: rowScale };
+}
 
 // 表示用の足の角度 (Viewerと同じ圧縮 + かかと正面の折り返し)
 function displayFootRot(facing: number): number {
@@ -426,7 +435,7 @@ export async function recordChartVideo(
       ctx.restore();
     }
 
-    // 足パッド (疑似3D: Y方向に圧縮したグリッド)
+    // 足パッド (簡易透視投影で3D感を出す)
     const evTimes = evTimesRef;
     let footIdx = -1;
     const tLead = tSong + FOOT_TRAVEL;
@@ -434,38 +443,47 @@ export async function recordChartVideo(
       if (evTimes[k] <= tLead + 1e-6) footIdx = k;
       else break;
     }
-    ctx.save();
-    ctx.translate(PAD_X, PAD_Y);
-    ctx.scale(1, PAD_SQUASH);
-    // パネル
     const stepFlash =
       footIdx >= 0 && tSong - evTimes[footIdx] > -FOOT_TRAVEL && tSong - evTimes[footIdx] < 0.18
         ? chart.events[footIdx]
         : null;
+    // パネル: グリッドの四隅を投影した台形として描く
     for (let p = 0; p < 4; p++) {
       const c = STAGE_CENTERS[p];
-      const px = c.x * PAD_CELL - PAD_CELL / 2 + 5;
-      const py = c.y * PAD_CELL - PAD_CELL / 2 + 5;
-      const size = PAD_CELL - 10;
       const lit = stepFlash?.panels.includes(p) && tSong - evTimes[footIdx] >= -0.02;
       const litFoot = lit && footIdx >= 0 ? footsteps[footIdx].feet[p] : null;
-      ctx.fillStyle = lit
-        ? litFoot
-          ? `${FOOT_COLORS[litFoot]}66`
-          : "rgba(255,255,255,0.25)"
-        : "rgba(23, 24, 28, 0.6)";
+      const m = 0.44; // パネル半径 (グリッド単位)
+      const corners = [
+        padProject(c.x - m, c.y - m),
+        padProject(c.x + m, c.y - m),
+        padProject(c.x + m, c.y + m),
+        padProject(c.x - m, c.y + m),
+      ];
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(px, py, size, size, 14);
-      else ctx.rect(px, py, size, size);
+      ctx.moveTo(corners[0].x, corners[0].y);
+      for (let k = 1; k < 4; k++) ctx.lineTo(corners[k].x, corners[k].y);
+      ctx.closePath();
+      // 奥を暗くして立体感を出す
+      const g = ctx.createLinearGradient(0, corners[0].y, 0, corners[2].y);
+      if (lit && litFoot) {
+        g.addColorStop(0, `${FOOT_COLORS[litFoot]}44`);
+        g.addColorStop(1, `${FOOT_COLORS[litFoot]}77`);
+      } else {
+        g.addColorStop(0, "rgba(14, 15, 18, 0.72)");
+        g.addColorStop(1, "rgba(34, 36, 42, 0.72)");
+      }
+      ctx.fillStyle = g;
       ctx.fill();
-      ctx.strokeStyle = lit && litFoot ? FOOT_COLORS[litFoot] : "rgba(255,255,255,0.22)";
-      ctx.lineWidth = lit ? 5 : 3;
+      ctx.strokeStyle = lit && litFoot ? FOOT_COLORS[litFoot] : "rgba(255,255,255,0.25)";
+      ctx.lineWidth = lit ? 5 : 2.5;
       ctx.stroke();
-      // パネルの矢印 (うっすら)
+      // パネルの矢印 (うっすら、行スケールと圧縮を反映)
+      const pc = padProject(c.x, c.y);
       ctx.save();
       ctx.globalAlpha = 0.3;
       const path = new Path2D(ARROW_PATH);
-      ctx.translate(c.x * PAD_CELL, c.y * PAD_CELL);
+      ctx.translate(pc.x, pc.y);
+      ctx.scale(pc.s, pc.s * PAD_SQUASH * 1.25);
       ctx.rotate((ARROW_ROTATIONS[p] * Math.PI) / 180);
       const sk = (PAD_CELL * 0.5) / 64;
       ctx.scale(sk, sk);
@@ -475,7 +493,7 @@ export async function recordChartVideo(
       ctx.stroke(path);
       ctx.restore();
     }
-    // 足 (直前ステップから0.25秒かけて補間移動)
+    // 足 (直前ステップから0.25秒かけて補間移動 + 着地ホップ + 影)
     if (footIdx >= 0) {
       const cur = footPoseOf(footsteps[footIdx]);
       const prev = footIdx > 0 ? footPoseOf(footsteps[footIdx - 1]) : cur;
@@ -484,20 +502,36 @@ export async function recordChartVideo(
       const ease = pr * (2 - pr); // ease-out
       const heldFeet = footsteps[footIdx].heldFeet;
       const lifted = footsteps[footIdx].liftedFoot;
-      const drawFoot = (
-        foot: Foot,
-        gx: number,
-        gy: number,
-        rot: number
-      ) => {
+      const sincePlay = tSong - evTimes[footIdx];
+      const stepped = footsteps[footIdx];
+      const drawFoot = (foot: Foot, gx: number, gy: number, rot: number) => {
+        const pc = padProject(gx, gy);
+        // 着地直後のホップ (踏んだ足だけ少し拡大して戻る)
+        const isStepping =
+          stepFlash !== null &&
+          sincePlay >= -0.02 &&
+          sincePlay < 0.15 &&
+          stepFlash.panels.some((pp) => stepped.feet[pp] === foot);
+        const hop = isStepping ? 1 + 0.16 * (1 - sincePlay / 0.15) : 1;
+        // 影 (足より少し下の楕円)
         ctx.save();
-        ctx.translate(gx * PAD_CELL, gy * PAD_CELL);
-        ctx.rotate((rot * Math.PI) / 180);
-        if (lifted === foot) ctx.globalAlpha = 0.55;
-        const fw = 52;
-        const fh = 92;
+        ctx.globalAlpha = lifted === foot ? 0.18 : 0.32;
+        ctx.fillStyle = "#000";
         ctx.beginPath();
-        if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 26);
+        ctx.ellipse(pc.x, pc.y + 10 * pc.s, 40 * pc.s, 15 * pc.s, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        // 浮いた足は少し上に描いて「浮き」を表現
+        ctx.translate(pc.x, pc.y - (lifted === foot ? 16 : 6) * pc.s);
+        ctx.scale(pc.s * hop, pc.s * hop);
+        ctx.scale(1, 0.8); // 床に寝ている感じの軽い圧縮
+        ctx.rotate((rot * Math.PI) / 180);
+        if (lifted === foot) ctx.globalAlpha = 0.6;
+        const fw = 54;
+        const fh = 96;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 27);
         else ctx.rect(-fw / 2, -fh / 2, fw, fh);
         ctx.fillStyle = FOOT_COLORS[foot];
         ctx.fill();
@@ -505,7 +539,7 @@ export async function recordChartVideo(
         ctx.strokeStyle = heldFeet.includes(foot) ? "#00e0a0" : "#ffffff";
         ctx.stroke();
         ctx.fillStyle = "#ffffff";
-        ctx.font = "800 40px system-ui, sans-serif";
+        ctx.font = "800 42px system-ui, sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         ctx.fillText(foot, 0, 2);
@@ -524,7 +558,6 @@ export async function recordChartVideo(
         lerpAngle(prev.rRot, cur.rRot, ease)
       );
     }
-    ctx.restore();
 
     // 下部プログレスバー
     const ratio = Math.max(0, Math.min(1, (audioTime - recStart) / durationSec));
