@@ -16,6 +16,7 @@ import {
 } from "./chart";
 import { drawArrow, drawFootBadge, drawGhostArrow } from "./chartImage";
 import { renderClapTrackSamples } from "./clap";
+import { DIFF_COLORS, drawDiffFoot } from "./difficulty";
 import { createFootScene } from "./footScene";
 import { beatAtTime, timeAtBeat, type TimingSeg } from "./timing";
 
@@ -25,6 +26,7 @@ export interface VideoExportOptions {
   timeline: TimingSeg[];
   title: string;
   subtitle: string; // サブキャプション (アーティスト名など。空なら非表示)
+  diff: { cls: number | null; lvl: string } | null; // 難易度 (クラス色+レベル)
   bpmLabel: string; // "175" や "154-308" など表示用
   bgColor: string; // 6桁hex ('#'なし)
   hispeed: number;
@@ -252,11 +254,35 @@ export async function recordChartVideo(
     ctx.textBaseline = "middle";
     ctx.fillText(bpmText, chipX + 14, chipY + 21);
 
+    // 難易度 (色足あと+レベル) をBPMチップの左に置く
+    let diffLeft = chipX;
+    if (o.diff) {
+      const footSize = 38;
+      ctx.font = `400 34px ${titleFont}`;
+      const lvlW = o.diff.lvl ? ctx.measureText(o.diff.lvl).width : 0;
+      const diffW =
+        (o.diff.cls !== null ? footSize : 0) +
+        (o.diff.cls !== null && o.diff.lvl ? 6 : 0) +
+        lvlW;
+      diffLeft = chipX - 16 - diffW;
+      const midY = chipY + 20;
+      let dx = diffLeft;
+      if (o.diff.cls !== null) {
+        drawDiffFoot(ctx, dx, midY - footSize / 2, footSize, DIFF_COLORS[o.diff.cls]);
+        dx += footSize + 6;
+      }
+      if (o.diff.lvl) {
+        ctx.fillStyle = fg;
+        ctx.textBaseline = "middle";
+        ctx.fillText(o.diff.lvl, dx, midY);
+      }
+    }
+
     // タイトル+サブキャプションのブロックをジャケットの縦中央に揃える。
     // textBaseline="top"はブラウザごとに解釈が異なりiOSで下にずれるため、
     // 実際のグリフ高さを測ってalphabeticベースラインで配置する
     const textX = jx + jSize + 22;
-    const textMaxW = chipX - textX - 16;
+    const textMaxW = diffLeft - textX - 16;
     const jMid = jy + jSize / 2;
     const titleFontDecl = `400 44px ${titleFont}`;
     const subFontDecl = `400 28px ${titleFont}`;

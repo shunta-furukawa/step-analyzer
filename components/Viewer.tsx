@@ -52,6 +52,15 @@ import {
   randomTransform,
 } from "@/lib/transform";
 import { listSmCharts, normalizeNotesInput, type SmChartInfo } from "@/lib/url";
+import {
+  DIFF_COLORS,
+  FOOT_BLOBS,
+  diffClassFromSm,
+  diffLevelFromSm,
+  isFootCircle,
+  parseDiffParam,
+  serializeDiff,
+} from "@/lib/difficulty";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
 
@@ -83,6 +92,29 @@ const FOOT_TRAVEL_SEC = 0.25;
 // 背景色のデフォルト (DDR WORLDミントグリーン)
 const DEFAULT_BG = "29d6a2";
 
+// 難易度クラスの足あとアイコン (色のみで区分を表現)
+function DiffFootIcon({ color, size }: { color: string; size: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      {FOOT_BLOBS.map((b, i) =>
+        isFootCircle(b) ? (
+          <circle key={i} cx={b.cx} cy={b.cy} r={b.r} fill={color} />
+        ) : (
+          <ellipse
+            key={i}
+            cx={b.cx}
+            cy={b.cy}
+            rx={b.rx}
+            ry={b.ry}
+            transform={`rotate(${(b.rot * 180) / Math.PI} ${b.cx} ${b.cy})`}
+            fill={color}
+          />
+        )
+      )}
+    </svg>
+  );
+}
+
 // ツールバーに出す変形オプションの短縮ラベル
 function transformShortLabel(tr: string): string {
   if (tr === "mirror") return "MIRROR";
@@ -95,6 +127,7 @@ export default function Viewer({
   compact: initialCompact,
   title: initialTitle,
   subtitle: initialSubtitle,
+  difficulty: initialDifficulty,
   bpm: initialBpm,
   stops: initialStops,
   overrides: initialOverrides,
@@ -108,6 +141,7 @@ export default function Viewer({
   compact: string;
   title?: string;
   subtitle?: string;
+  difficulty?: string;
   bpm?: string;
   stops?: string;
   overrides?: string;
@@ -236,6 +270,10 @@ export default function Viewer({
   const [title, setTitle] = useState(initialTitle ?? "");
   // サブキャプション (アーティスト名など)。SM取り込みで#ARTISTから自動設定される
   const [subtitle, setSubtitle] = useState(initialSubtitle ?? "");
+  // 難易度 (5段階クラス + 1-20レベル)。SM取り込みで自動設定される
+  const initDiff = parseDiffParam(initialDifficulty);
+  const [diffCls, setDiffCls] = useState<number | null>(initDiff.cls);
+  const [diffLvl, setDiffLvl] = useState(initDiff.lvl);
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
   const [stops, setStops] = useState(() => normalizeParam(initialStops ?? ""));
   const [showTiming, setShowTiming] = useState(false);
@@ -428,6 +466,8 @@ export default function Viewer({
     else parts.push(`n=${compact}`);
     if (title) parts.push(`t=${encodeURIComponent(title)}`);
     if (subtitle) parts.push(`st=${encodeURIComponent(subtitle)}`);
+    const df = serializeDiff(diffCls, diffLvl);
+    if (df) parts.push(`df=${df}`);
     if (bpm) parts.push(`b=${enc(bpm)}`);
     if (stops) parts.push(`s=${enc(stops)}`);
     if (overrides.size > 0) parts.push(`f=${serializeOverrides(overrides)}`);
@@ -438,7 +478,7 @@ export default function Viewer({
     if (lang !== "ja") parts.push(`l=${lang}`);
     if (transform) parts.push(`tr=${transform}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, subtitle, bpm, stops, overrides, highlights, hispeed, speed, bgColor, lang, transform]);
+  }, [compact, title, subtitle, diffCls, diffLvl, bpm, stops, overrides, highlights, hispeed, speed, bgColor, lang, transform]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -909,6 +949,37 @@ export default function Viewer({
                       if (e.key === "Enter") setEditingTitle(false);
                     }}
                   />
+                  {/* 難易度: 5クラスの色足あと + 1-20レベル */}
+                  <span className="diff-edit">
+                    {DIFF_COLORS.map((c, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className={`diff-foot-btn${diffCls === i ? " sel" : ""}`}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => {
+                          setDiffCls(diffCls === i ? null : i);
+                          setDirty(true);
+                        }}
+                      >
+                        <DiffFootIcon color={c} size={18} />
+                      </button>
+                    ))}
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      className="diff-lvl-input"
+                      value={diffLvl}
+                      placeholder="Lv"
+                      onChange={(e) => {
+                        setDiffLvl(e.target.value.replace(/\D/g, "").slice(0, 2));
+                        setDirty(true);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") setEditingTitle(false);
+                      }}
+                    />
+                  </span>
                 </span>
               ) : (
                 <button className="title-btn" onClick={() => setEditingTitle(true)}>
@@ -937,6 +1008,18 @@ export default function Viewer({
                 {stopList.length > 0 && " ⏸"}
                 <span className="bpm-caret">▾</span>
               </button>
+              {!editingTitle && (diffCls !== null || diffLvl) && (
+                <button
+                  className="diff-chip"
+                  onClick={() => setEditingTitle(true)}
+                  title={S.titlePlaceholder}
+                >
+                  {diffCls !== null && (
+                    <DiffFootIcon color={DIFF_COLORS[diffCls]} size={16} />
+                  )}
+                  {diffLvl && <span className="diff-num">{diffLvl}</span>}
+                </button>
+              )}
             </div>
             <div className="legend">
               <span className="chip">
@@ -1589,6 +1672,7 @@ export default function Viewer({
                     timeline,
                     title: title || S.untitled,
                     subtitle,
+                    diff: diffCls !== null || diffLvl ? { cls: diffCls, lvl: diffLvl } : null,
                     bpmLabel,
                     bgColor,
                     hispeed,
@@ -1710,13 +1794,17 @@ export default function Viewer({
         <TextImport
           compact={compact}
           S={S}
-          onApply={(next, timing, smTitle, smArtist) => {
+          onApply={(next, timing, smTitle, smArtist, smDiff) => {
             applyEdit(next);
             setOverrides(new Map());
             if (timing?.b) setBpm(timing.b);
             if (timing?.s !== undefined) setStops(timing.s);
             if (smTitle) setTitle(smTitle);
             if (smArtist !== undefined) setSubtitle(smArtist);
+            if (smDiff !== undefined) {
+              setDiffCls(smDiff.cls);
+              setDiffLvl(smDiff.lvl);
+            }
             go(0);
             setShowText(false);
           }}
@@ -2574,7 +2662,8 @@ function TextImport({
     next: string,
     timing?: { b?: string; s?: string },
     smTitle?: string,
-    smArtist?: string
+    smArtist?: string,
+    smDiff?: { cls: number | null; lvl: string }
   ) => void;
 }) {
   const [text, setText] = useState(() =>
@@ -2593,7 +2682,12 @@ function TextImport({
   // 選んだ譜面 (またはテキスト全体) を読み込む。
   // タイミングはSSCの譜面別定義があればそれを優先し、なければファイル全体から。
   // タイトルは常にファイル全体から
-  const applyChart = (noteText: string, full: string, timingText?: string) => {
+  const applyChart = (
+    noteText: string,
+    full: string,
+    timingText?: string,
+    info?: SmChartInfo
+  ) => {
     try {
       const result = normalizeNotesInput(noteText);
       if (result.warning) setWarning(result.warning);
@@ -2613,7 +2707,14 @@ function TextImport({
       // 曲が変わったとみなし、#ARTISTが無ければ空文字で前の曲の値をクリアする
       const am = full.match(/#ARTIST\s*:\s*([^;]*);/i);
       const smArtist = isFullFile ? am?.[1].trim() ?? "" : undefined;
-      onApply(result.compact, timing, smTitle, smArtist);
+      // 難易度も同様: ファイル全体の取り込み時は必ず上書き (不明ならクリア)
+      const smDiff = isFullFile
+        ? {
+            cls: info ? diffClassFromSm(info.difficulty) : null,
+            lvl: info ? diffLevelFromSm(info.meter) : "",
+          }
+        : undefined;
+      onApply(result.compact, timing, smTitle, smArtist, smDiff);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }
@@ -2626,8 +2727,9 @@ function TextImport({
     setChoices(null);
     setExcluded(0);
     const charts = listSmCharts(body);
-    if (charts.length > 1) {
-      // 複数譜面入りのファイル: シングルだけ列挙して選ばせる
+    if (charts.length > 0) {
+      // SM/SSCファイル: シングルだけ列挙し、1つならそのまま、複数なら選ばせる。
+      // 1譜面でもSmChartInfo経由にすることで難易度メタを取り込める
       const singles = charts.filter((c) => !/double|couple|routine/i.test(c.type));
       setExcluded(charts.length - singles.length);
       if (singles.length === 0) {
@@ -2635,7 +2737,7 @@ function TextImport({
         return;
       }
       if (singles.length === 1) {
-        applyChart(singles[0].notes, body, singles[0].timingText);
+        applyChart(singles[0].notes, body, singles[0].timingText, singles[0]);
         return;
       }
       setChoices(singles);
@@ -2700,7 +2802,7 @@ function TextImport({
             <button
               key={i}
               className="secondary"
-              onClick={() => applyChart(c.notes, text, c.timingText)}
+              onClick={() => applyChart(c.notes, text, c.timingText, c)}
             >
               {c.difficulty || S.chartFallback(i + 1)}
               {c.meter && ` (${c.meter})`}

@@ -103,6 +103,7 @@ export default async function Page({
   const { n } = resolveChart(sp);
   const t = pick(sp.t);
   const st = pick(sp.st);
+  const df = pick(sp.df);
   const b = pick(sp.b);
   const s = pick(sp.s);
   const f = pick(sp.f);
@@ -129,6 +130,7 @@ export default async function Page({
         compact={n ?? SAMPLE_COMPACT}
         title={isDefault ? SAMPLE_TITLE : t}
         subtitle={isDefault ? undefined : st}
+        difficulty={isDefault ? undefined : df}
         bpm={isDefault ? SAMPLE_BPM : b}
         stops={isDefault ? undefined : s}
         overrides={f}

@@ -564,6 +564,56 @@ select {
   font-weight: 700;
 }
 
+/* 難易度チップ (色足あと+レベル)。タップでタイトル編集を開く */
+.diff-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: none;
+  border: none;
+  box-shadow: none;
+  padding: 0 2px;
+}
+
+.diff-chip:active {
+  transform: none;
+}
+
+.diff-chip .diff-num {
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-size: 15px;
+  color: #fff;
+  letter-spacing: 0.5px;
+}
+
+/* タイトル編集内の難易度セレクタ */
+.diff-edit {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.diff-foot-btn {
+  display: inline-flex;
+  align-items: center;
+  background: #20232b;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  box-shadow: none;
+  padding: 4px 5px;
+}
+
+.diff-foot-btn.sel {
+  border-color: var(--accent, #00e0a0);
+  background: #2a2f3b;
+}
+
+.diff-lvl-input {
+  width: 52px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
 .chart-title .bpm {
   color: var(--muted-dark);
   font-size: 12px;
