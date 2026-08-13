@@ -422,28 +422,7 @@ export default function FootStage3D(props: FootStage3DProps) {
     const tick = () => {
       const now = performance.now();
       const pr = propsRef.current;
-      const pose = poseOf(pr);
-      const applyFoot = (
-        rig: FootRig,
-        foot: Foot,
-        gx: number,
-        gy: number,
-        rot: number
-      ) => {
-        const lift = pr.liftedFoot === foot ? 0.32 : 0;
-        const tx = gx2wx(gx);
-        const tz = gy2wz(gy);
-        // ターゲットが変わったらトゥイーン開始
-        if (
-          Math.abs(tx - rig.target.x) > 1e-4 ||
-          Math.abs(tz - rig.target.z) > 1e-4 ||
-          Math.abs(rot - rig.target.rot) > 1e-4 ||
-          Math.abs(lift - rig.target.lift) > 1e-4
-        ) {
-          rig.from = { ...rig.cur };
-          rig.target = { x: tx, z: tz, rot, lift };
-          rig.tweenT0 = now;
-        }
+      const applyFoot = (rig: FootRig, foot: Foot) => {
         const t = Math.min(1, (now - rig.tweenT0) / TRAVEL_MS);
         const e = t * (2 - t); // ease-out
         rig.cur.x = rig.from.x + (rig.target.x - rig.from.x) * e;
@@ -472,21 +451,8 @@ export default function FootStage3D(props: FootStage3DProps) {
           rig.glowMat.opacity = 0.6 + 0.25 * Math.sin(now / 260);
         }
       };
-      applyFoot(st.feet.L, "L", pose.lx, pose.ly, pose.lRot);
-      applyFoot(st.feet.R, "R", pose.rx, pose.ry, pose.rRot);
-
-      // ホップのトリガ (stepKeyが変わったフレームで踏み足に発火)
-      if (pr.stepKey !== st.lastStepKey) {
-        st.lastStepKey = pr.stepKey;
-        const lStep =
-          pr.stepping.includes(pr.leftPos) &&
-          (pr.leftPos === 4 || pr.feet[pr.leftPos] === "L");
-        const rStep =
-          pr.stepping.includes(pr.rightPos) &&
-          (pr.rightPos === 4 || pr.feet[pr.rightPos] === "R");
-        if (lStep || pr.oneFoot?.foot === "L") st.feet.L.hopT0 = now;
-        if (rStep || pr.oneFoot?.foot === "R") st.feet.R.hopT0 = now;
-      }
+      applyFoot(st.feet.L, "L");
+      applyFoot(st.feet.R, "R");
 
       // パネルの発光 (選択中のノーツのパネル)
       for (let p = 0; p < 4; p++) {
@@ -527,6 +493,46 @@ export default function FootStage3D(props: FootStage3DProps) {
     // シーンは1回だけ構築し、以降はpropsRef経由で毎フレーム追従する
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ポーズの反映はrAFでの検知ではなくprops変更のコミット時に行う。
+  // CSS版のtransitionと同じく「スタイル適用の瞬間に移動開始」となり、
+  // 再生中の0.25秒先読みと合わせてジャストのタイミングに着地する
+  useEffect(() => {
+    const st = stateRef.current;
+    if (!st) return;
+    const now = performance.now();
+    const pose = poseOf(props);
+    const retarget = (rig: FootRig, foot: Foot, gx: number, gy: number, rot: number) => {
+      const lift = props.liftedFoot === foot ? 0.32 : 0;
+      const tx = gx2wx(gx);
+      const tz = gy2wz(gy);
+      if (
+        Math.abs(tx - rig.target.x) > 1e-4 ||
+        Math.abs(tz - rig.target.z) > 1e-4 ||
+        Math.abs(rot - rig.target.rot) > 1e-4 ||
+        Math.abs(lift - rig.target.lift) > 1e-4
+      ) {
+        rig.from = { ...rig.cur };
+        rig.target = { x: tx, z: tz, rot, lift };
+        rig.tweenT0 = now;
+      }
+    };
+    retarget(st.feet.L, "L", pose.lx, pose.ly, pose.lRot);
+    retarget(st.feet.R, "R", pose.rx, pose.ry, pose.rRot);
+
+    // ホップ (踏んだ瞬間の小ジャンプ) はstepKeyの変化で発火
+    if (props.stepKey !== st.lastStepKey) {
+      st.lastStepKey = props.stepKey;
+      const lStep =
+        props.stepping.includes(props.leftPos) &&
+        (props.leftPos === 4 || props.feet[props.leftPos] === "L");
+      const rStep =
+        props.stepping.includes(props.rightPos) &&
+        (props.rightPos === 4 || props.feet[props.rightPos] === "R");
+      if (lStep || props.oneFoot?.foot === "L") st.feet.L.hopT0 = now;
+      if (rStep || props.oneFoot?.foot === "R") st.feet.R.hopT0 = now;
+    }
+  }, [props]);
 
   return (
     <div className="stage3d stage3d-gl">
