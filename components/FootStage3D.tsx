@@ -294,8 +294,10 @@ export default function FootStage3D(props: FootStage3DProps) {
     renderer.domElement.style.display = "block";
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 30);
-    camera.position.set(0, 3.05, 3.55);
+    // 画角を狭めてカメラを遠ざけると、同じ構図のまま遠近の縮みが弱まる
+    // (fov 38→20でパースの効きはおよそ半分)
+    const camera = new THREE.PerspectiveCamera(20, 1, 0.1, 40);
+    camera.position.set(0, 5.9, 6.85);
     camera.lookAt(0, -0.15, 0.1);
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.85));
