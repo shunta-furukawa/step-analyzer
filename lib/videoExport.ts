@@ -14,6 +14,7 @@ import {
 import { drawArrow, drawFootBadge, drawGhostArrow } from "./chartImage";
 import { ARROW_PATH } from "./arrowShape";
 import { beatAtTime, timeAtBeat, type TimingSeg } from "./timing";
+import { renderClapTrackSamples } from "./clap";
 
 export interface VideoExportOptions {
   chart: ParsedChart;
@@ -37,8 +38,92 @@ const NOTE = 112;
 const LANE_X = (W - LANE_W * 4) / 2;
 const RECEPTOR_Y = 420;
 const HEADER_H = 250;
+const LANE_BOTTOM = H - 370; // ここから下は足パッドの領域
 const LEAD_IN = 1.5; // 録画開始から1ノーツ目までの助走秒数
 const TAIL = 1.2;
+const FOOT_TRAVEL = 0.25; // 足が次のパネルへ移動するのにかける秒数 (アプリと同じ)
+
+// 足パッド (FootStageと同じ3x3グリッド座標)
+const STAGE_CENTERS = [
+  { x: 0.5, y: 1.5 },
+  { x: 1.5, y: 2.5 },
+  { x: 1.5, y: 0.5 },
+  { x: 2.5, y: 1.5 },
+  { x: 1.5, y: 1.5 },
+];
+const PAD_CELL = 150;
+const PAD_SQUASH = 0.55;
+const PAD_X = (W - PAD_CELL * 3) / 2;
+const PAD_Y = LANE_BOTTOM + 55;
+
+// 表示用の足の角度 (Viewerと同じ圧縮 + かかと正面の折り返し)
+function displayFootRot(facing: number): number {
+  const norm = facing % 360;
+  let a = Math.abs(norm);
+  const sign = Math.sign(norm);
+  const heelFlip = a > 180;
+  if (heelFlip) a -= 180;
+  const compressed = Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4);
+  return heelFlip ? sign * (180 - compressed) : sign * compressed;
+}
+
+interface FootPose {
+  lx: number;
+  ly: number;
+  lRot: number;
+  rx: number;
+  ry: number;
+  rRot: number;
+}
+
+// FootStageの配置規則をそのまま再現した表示ポーズ
+function footPoseOf(step: FootStep): FootPose {
+  const same = step.leftPos === step.rightPos && !step.liftedFoot;
+  const rot = displayFootRot(step.facing);
+  const lc = STAGE_CENTERS[step.leftPos];
+  const rc = STAGE_CENTERS[step.rightPos];
+  let lx = lc.x + (same ? -0.22 : 0);
+  let ly = lc.y;
+  let rx = rc.x + (same ? 0.22 : 0);
+  let ry = rc.y;
+  let lRot = rot;
+  let rRot = rot;
+  if (step.stretch) {
+    const c1 = STAGE_CENTERS[step.stretch.panels[0]];
+    const c2 = STAGE_CENTERS[step.stretch.panels[1]];
+    const mx = (c1.x + c2.x) / 2;
+    const my = (c1.y + c2.y) / 2;
+    let tilt = (Math.atan2(c2.x - c1.x, c1.y - c2.y) * 180) / Math.PI;
+    if (tilt > 90) tilt -= 180;
+    if (tilt < -90) tilt += 180;
+    if (step.stretch.foot === "L") {
+      lx = mx;
+      ly = my;
+      lRot = tilt;
+    } else {
+      rx = mx;
+      ry = my;
+      rRot = tilt;
+    }
+  }
+  if (step.liftedFoot === "L") {
+    lx = 1.5 - 0.28;
+    ly = 1.5;
+  } else if (step.liftedFoot === "R") {
+    rx = 1.5 + 0.28;
+    ry = 1.5;
+  }
+  return { lx, ly, lRot, rx, ry, rRot };
+}
+
+const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+// 角度は近い方向へ補間する
+function lerpAngle(a: number, b: number, t: number): number {
+  let d = b - a;
+  while (d > 180) d -= 360;
+  while (d < -180) d += 360;
+  return a + d * t;
+}
 
 function fgFor(bgHex: string): string {
   const r = parseInt(bgHex.slice(0, 2), 16);
@@ -114,6 +199,30 @@ export async function recordChartVideo(
   src.connect(dest);
   src.connect(actx.destination);
 
+  // ハンドクラップ: アプリ再生と同じ判定音を録画開始時刻基準で合成する
+  const judged = chart.events.filter(
+    (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
+  );
+  const clapTimes = judged.map(
+    (e) => o.offsetSec + timeAtBeat(timeline, e.row.beat) - recStart
+  );
+  const clapAccents = judged.map((e) => e.panels.length >= 2);
+  const ghostTimes = chart.events
+    .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
+    .map((e) => o.offsetSec + timeAtBeat(timeline, e.row.beat) - recStart);
+  const { samples: clapSamples, sr: clapSr } = renderClapTrackSamples(
+    clapTimes,
+    clapAccents,
+    durationSec,
+    ghostTimes
+  );
+  const clapBuf = actx.createBuffer(1, clapSamples.length, clapSr);
+  clapBuf.copyToChannel(clapSamples as Float32Array<ArrayBuffer>, 0);
+  const clapSrc = actx.createBufferSource();
+  clapSrc.buffer = clapBuf;
+  clapSrc.connect(dest);
+  clapSrc.connect(actx.destination);
+
   const videoStream = canvas.captureStream(60);
   const stream = new MediaStream([
     ...videoStream.getVideoTracks(),
@@ -128,6 +237,9 @@ export async function recordChartVideo(
   rec.ondataavailable = (e) => {
     if (e.data.size > 0) chunks.push(e.data);
   };
+
+  // 各イベントの譜面内時刻 (足アニメの補間・パネル発光用)
+  const evTimesRef = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
 
   const drawFrame = (audioTime: number) => {
     const tSong = audioTime - o.offsetSec; // 譜面内時刻
@@ -175,13 +287,14 @@ export async function recordChartVideo(
 
     // レーン背景
     ctx.fillStyle = "#17181c";
-    ctx.fillRect(LANE_X - 8, HEADER_H, LANE_W * 4 + 16, H - HEADER_H);
+    ctx.fillRect(LANE_X - 8, HEADER_H, LANE_W * 4 + 16, LANE_BOTTOM - HEADER_H);
 
     const yOf = (beat: number) => RECEPTOR_Y + (beat - curBeat) * pxPerBeat;
     const clipTop = RECEPTOR_Y - NOTE / 2; // 受け皿上端より上は描かない
     ctx.save();
     ctx.beginPath();
-    ctx.rect(LANE_X - 8, Math.max(HEADER_H, clipTop), LANE_W * 4 + 16, H);
+    const clipY = Math.max(HEADER_H, clipTop);
+    ctx.rect(LANE_X - 8, clipY, LANE_W * 4 + 16, LANE_BOTTOM - clipY);
     ctx.clip();
 
     // 体の向きバンド
@@ -313,6 +426,106 @@ export async function recordChartVideo(
       ctx.restore();
     }
 
+    // 足パッド (疑似3D: Y方向に圧縮したグリッド)
+    const evTimes = evTimesRef;
+    let footIdx = -1;
+    const tLead = tSong + FOOT_TRAVEL;
+    for (let k = 0; k < chart.events.length; k++) {
+      if (evTimes[k] <= tLead + 1e-6) footIdx = k;
+      else break;
+    }
+    ctx.save();
+    ctx.translate(PAD_X, PAD_Y);
+    ctx.scale(1, PAD_SQUASH);
+    // パネル
+    const stepFlash =
+      footIdx >= 0 && tSong - evTimes[footIdx] > -FOOT_TRAVEL && tSong - evTimes[footIdx] < 0.18
+        ? chart.events[footIdx]
+        : null;
+    for (let p = 0; p < 4; p++) {
+      const c = STAGE_CENTERS[p];
+      const px = c.x * PAD_CELL - PAD_CELL / 2 + 5;
+      const py = c.y * PAD_CELL - PAD_CELL / 2 + 5;
+      const size = PAD_CELL - 10;
+      const lit = stepFlash?.panels.includes(p) && tSong - evTimes[footIdx] >= -0.02;
+      const litFoot = lit && footIdx >= 0 ? footsteps[footIdx].feet[p] : null;
+      ctx.fillStyle = lit
+        ? litFoot
+          ? `${FOOT_COLORS[litFoot]}66`
+          : "rgba(255,255,255,0.25)"
+        : "rgba(23, 24, 28, 0.6)";
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(px, py, size, size, 14);
+      else ctx.rect(px, py, size, size);
+      ctx.fill();
+      ctx.strokeStyle = lit && litFoot ? FOOT_COLORS[litFoot] : "rgba(255,255,255,0.22)";
+      ctx.lineWidth = lit ? 5 : 3;
+      ctx.stroke();
+      // パネルの矢印 (うっすら)
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      const path = new Path2D(ARROW_PATH);
+      ctx.translate(c.x * PAD_CELL, c.y * PAD_CELL);
+      ctx.rotate((ARROW_ROTATIONS[p] * Math.PI) / 180);
+      const sk = (PAD_CELL * 0.5) / 64;
+      ctx.scale(sk, sk);
+      ctx.translate(-32, -33);
+      ctx.strokeStyle = "#8a93b5";
+      ctx.lineWidth = 6;
+      ctx.stroke(path);
+      ctx.restore();
+    }
+    // 足 (直前ステップから0.25秒かけて補間移動)
+    if (footIdx >= 0) {
+      const cur = footPoseOf(footsteps[footIdx]);
+      const prev = footIdx > 0 ? footPoseOf(footsteps[footIdx - 1]) : cur;
+      const t0f = evTimes[footIdx] - FOOT_TRAVEL;
+      const pr = Math.max(0, Math.min(1, (tSong - t0f) / FOOT_TRAVEL));
+      const ease = pr * (2 - pr); // ease-out
+      const heldFeet = footsteps[footIdx].heldFeet;
+      const lifted = footsteps[footIdx].liftedFoot;
+      const drawFoot = (
+        foot: Foot,
+        gx: number,
+        gy: number,
+        rot: number
+      ) => {
+        ctx.save();
+        ctx.translate(gx * PAD_CELL, gy * PAD_CELL);
+        ctx.rotate((rot * Math.PI) / 180);
+        if (lifted === foot) ctx.globalAlpha = 0.55;
+        const fw = 52;
+        const fh = 92;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(-fw / 2, -fh / 2, fw, fh, 26);
+        else ctx.rect(-fw / 2, -fh / 2, fw, fh);
+        ctx.fillStyle = FOOT_COLORS[foot];
+        ctx.fill();
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = heldFeet.includes(foot) ? "#00e0a0" : "#ffffff";
+        ctx.stroke();
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "800 40px system-ui, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(foot, 0, 2);
+        ctx.restore();
+      };
+      drawFoot(
+        "L",
+        lerp(prev.lx, cur.lx, ease),
+        lerp(prev.ly, cur.ly, ease),
+        lerpAngle(prev.lRot, cur.lRot, ease)
+      );
+      drawFoot(
+        "R",
+        lerp(prev.rx, cur.rx, ease),
+        lerp(prev.ry, cur.ry, ease),
+        lerpAngle(prev.rRot, cur.rRot, ease)
+      );
+    }
+    ctx.restore();
+
     // 下部プログレスバー
     const ratio = Math.max(0, Math.min(1, (audioTime - recStart) / durationSec));
     ctx.fillStyle = "rgba(255,255,255,0.18)";
@@ -330,6 +543,11 @@ export async function recordChartVideo(
       } catch {
         // 既に停止済みなら無視
       }
+      try {
+        clapSrc.stop();
+      } catch {
+        // 既に停止済みなら無視
+      }
       void actx.close();
     };
     rec.onstop = () => {
@@ -343,6 +561,7 @@ export async function recordChartVideo(
 
     const t0 = actx.currentTime;
     src.start(0, Math.min(recStart, Math.max(0, o.audio.duration - 0.1)));
+    clapSrc.start(0);
     rec.start(1000);
     const tick = () => {
       if (o.signal?.cancelled) {

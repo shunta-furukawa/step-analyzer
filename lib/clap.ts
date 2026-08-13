@@ -73,12 +73,13 @@ function renderJumpClapSamples(gain: number, sr: number): Float32Array {
  * ghostTimes には空打ち (ストンプ音) の発音時刻を渡す。
  * 使い終わったURLは呼び出し側で URL.revokeObjectURL すること。
  */
-export function buildClapTrackUrl(
+/** クラップトラックの生波形を生成する (動画書き出しでの音声ミックスにも使う) */
+export function renderClapTrackSamples(
   eventTimes: number[],
   accents: boolean[],
   durationSec: number,
   ghostTimes: number[] = []
-): string {
+): { samples: Float32Array; sr: number } {
   const sr = 44100;
   const len = Math.max(sr, Math.ceil((durationSec + 0.6) * sr));
   const mix = new Float32Array(len);
@@ -99,6 +100,22 @@ export function buildClapTrackUrl(
     const end = Math.min(stomp.length, len - off);
     for (let j = 0; j < end; j++) mix[off + j] += stomp[j];
   }
+  return { samples: mix, sr };
+}
+
+export function buildClapTrackUrl(
+  eventTimes: number[],
+  accents: boolean[],
+  durationSec: number,
+  ghostTimes: number[] = []
+): string {
+  const { samples: mix, sr } = renderClapTrackSamples(
+    eventTimes,
+    accents,
+    durationSec,
+    ghostTimes
+  );
+  const len = mix.length;
 
   const bytes = new Uint8Array(44 + len * 2);
   const dv = new DataView(bytes.buffer);
