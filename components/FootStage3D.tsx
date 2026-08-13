@@ -152,6 +152,10 @@ function makeSoleGeometry(): THREE.ExtrudeGeometry {
     curveSegments: 10,
   });
   geo.rotateX(-Math.PI / 2); // XZ平面に寝かせる (押し出しはY+方向)
+  // ベベルがy=0より下に張り出してパネルに食い込むため、
+  // 最下点をパネル表面のわずかに上へ持ち上げる
+  geo.computeBoundingBox();
+  geo.translate(0, -geo.boundingBox!.min.y + 0.008, 0);
   return geo;
 }
 
@@ -192,7 +196,6 @@ function makeFoot(color: string, label: string): FootRig {
   });
   const outline = new THREE.Mesh(geo, outlineMat);
   outline.scale.setScalar(1.09);
-  outline.position.y = -0.005;
   group.add(outline);
 
   const labelMat = new THREE.MeshBasicMaterial({
@@ -201,7 +204,7 @@ function makeFoot(color: string, label: string): FootRig {
   });
   const labelMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.3), labelMat);
   labelMesh.rotation.x = -Math.PI / 2;
-  labelMesh.position.y = 0.145;
+  labelMesh.position.y = 0.2;
   group.add(labelMesh);
 
   // フリーズ保持中のミントリング
