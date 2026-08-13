@@ -39,8 +39,8 @@ const H = 1280;
 const HEADER_H = 190;
 const PAD_H = 330; // 下部の足パッド領域
 const PAD_W = 660;
-const LANE_W = 150;
-const NOTE = 128;
+const LANE_W = 170;
+const NOTE = 144;
 const LANE_X = (W - LANE_W * 4) / 2;
 const RECEPTOR_Y = HEADER_H + 100;
 const LANE_BOTTOM = H - PAD_H - 20;
@@ -199,14 +199,16 @@ export async function recordChartVideo(
     const tSong = audioTime - offsetSec; // 譜面内時刻
     const curBeat = beatAtTime(timeline, Math.max(0, tSong));
 
-    // 背景 (ページと同じ斜めストライプ)
+    // 背景 (ページと同じ斜めストライプ: 115deg・18px相当を動画スケールに拡大)
     ctx.fillStyle = `#${o.bgColor}`;
     ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.rotate((-25 * Math.PI) / 180);
-    for (let x = -H * 2; x < W + H * 2; x += 72) {
-      ctx.fillStyle = (x / 72) % 2 === 0 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)";
-      ctx.fillRect(x, -W, 72, W * 2 + H * 2);
+    const stripeW = 34;
+    let stripeI = 0;
+    for (let x = -H; x < W + H; x += stripeW, stripeI++) {
+      ctx.fillStyle = stripeI % 2 === 0 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)";
+      ctx.fillRect(x, -W, stripeW, W * 2 + H * 2);
     }
     ctx.restore();
 
