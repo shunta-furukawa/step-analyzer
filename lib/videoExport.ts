@@ -14,7 +14,7 @@ import {
   type FootStep,
   type ParsedChart,
 } from "./chart";
-import { drawArrow, drawFootBadge, drawGhostArrow } from "./chartImage";
+import { drawArrow, drawFootBadge, drawGhostArrow, drawSiteLogo } from "./chartImage";
 import { renderClapTrackSamples } from "./clap";
 import { DIFF_COLORS, drawDiffFoot } from "./difficulty";
 import { createFootScene } from "./footScene";
@@ -485,12 +485,9 @@ export async function recordChartVideo(
       ctx.drawImage(footScene.canvas, (W - PAD_W) / 2, H - PAD_H - 8, PAD_W, PAD_H);
     }
 
-    // フッター: 進行バー + クレジット
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = "700 20px system-ui, sans-serif";
-    ctx.textAlign = "right";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillText("step-analyzer", W - 16, H - 18);
+    // フッター: 進行バー + サイトロゴ風クレジット
+    ctx.textAlign = "left";
+    drawSiteLogo(ctx, W - 14, H - 32, 22);
     const ratio = Math.max(0, Math.min(1, (audioTime - recStart) / durationSec));
     ctx.fillStyle = "rgba(255,255,255,0.18)";
     ctx.fillRect(0, H - 8, W, 8);

@@ -46,6 +46,7 @@ const PX_PER_BEAT = Math.round(NOTE * 1.8);
 const COL_GAP = 18;
 const PAD = 18;
 const HEADER = 46;
+const FOOTER = 30; // サイトロゴ入りフッター帯
 
 /** 書き出し画像のレイアウト (寸法と各列の枠)。モーダルのプレビューと共用 */
 export interface ChartImageLayout {
@@ -67,7 +68,7 @@ export function computeChartImageLayout(
   const noteMargin = NOTE / 2 + 3;
   const colH = Math.min(count, perCol) * 4 * pxPerBeat;
   const width = PAD * 2 + cols * (colInnerW + COL_GAP) - COL_GAP;
-  const height = PAD * 2 + HEADER + noteMargin + colH + noteMargin;
+  const height = PAD * 2 + HEADER + noteMargin + colH + noteMargin + FOOTER;
   const topY = PAD + HEADER + noteMargin;
   const colRects = [];
   for (let ci = 0; ci < cols; ci++) {
@@ -80,6 +81,43 @@ export function computeChartImageLayout(
     });
   }
   return { width, height, cols: colRects };
+}
+
+/**
+ * サイトのタイトルロゴ風の "STEP ANALYZER" を描く (右端揃え)。
+ * CSSの .site-header h1 と同じ構成: 白抜き + 黒アウトライン +
+ * 黄色のベタ押し出し + 黒縁。sizeはCSSの22pxロゴ相当を基準にスケール
+ */
+export function drawSiteLogo(
+  ctx: CanvasRenderingContext2D,
+  rightX: number,
+  midY: number,
+  size: number
+) {
+  const logoFamily =
+    (typeof getComputedStyle !== "undefined"
+      ? getComputedStyle(document.documentElement).getPropertyValue("--font-title").trim()
+      : "") || '"Arial Black"';
+  const text = "STEP ANALYZER";
+  const k = size / 22;
+  ctx.save();
+  ctx.font = `400 ${size}px ${logoFamily}, "Arial Black", sans-serif`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  const met = ctx.measureText(text);
+  const x = rightX - met.width - 7 * k;
+  const y = midY + (met.actualBoundingBoxAscent || size * 0.75) / 2;
+  ctx.lineJoin = "round";
+  ctx.fillStyle = INK;
+  ctx.fillText(text, x + 7 * k, y + 7 * k);
+  ctx.fillStyle = "#ffd400";
+  for (const o of [5, 4, 3]) ctx.fillText(text, x + o * k, y + o * k);
+  ctx.strokeStyle = INK;
+  ctx.lineWidth = Math.max(2, 4 * k);
+  ctx.strokeText(text, x, y);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x, y);
+  ctx.restore();
 }
 
 function fgFor(bgHex: string): string {
@@ -337,12 +375,15 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   ctx.globalAlpha = 0.75;
   ctx.textBaseline = "top";
   ctx.fillText(
-    `${o.subtitle ? `${o.subtitle} · ` : ""}#${start}-${end} · step-analyzer`,
+    `${o.subtitle ? `${o.subtitle} · ` : ""}#${start}-${end}`,
     PAD,
     PAD + 26,
     width - PAD * 2
   );
   ctx.globalAlpha = 1;
+
+  // フッター: サイトのタイトルロゴ風クレジット
+  drawSiteLogo(ctx, width - PAD, height - PAD - FOOTER / 2 + 4, 15);
 
   const segs = holdSegments(chart, footsteps);
   const hlBoxes = o.highlights ? highlightBoxesOf(chart, o.highlights) : [];
