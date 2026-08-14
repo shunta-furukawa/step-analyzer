@@ -92,7 +92,8 @@ export function drawSiteLogo(
   ctx: CanvasRenderingContext2D,
   rightX: number,
   midY: number,
-  size: number
+  size: number,
+  align: "right" | "center" = "right"
 ) {
   const logoFamily =
     (typeof getComputedStyle !== "undefined"
@@ -105,7 +106,11 @@ export function drawSiteLogo(
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   const met = ctx.measureText(text);
-  const x = rightX - met.width - 7 * k;
+  // alignがcenterのときはrightXを中心x座標として扱う
+  const x =
+    align === "center"
+      ? rightX - (met.width + 7 * k) / 2
+      : rightX - met.width - 7 * k;
   const y = midY + (met.actualBoundingBoxAscent || size * 0.75) / 2;
   ctx.lineJoin = "round";
   ctx.fillStyle = INK;

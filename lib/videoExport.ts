@@ -226,11 +226,13 @@ export async function recordChartVideo(
   // ジャケット大 + 難易度チップ + 曲名 + BPM を1枚絵として見せる
   const drawIntro = () => {
     drawStripedBg();
+    // サムネの上に大きなサイトロゴ (イントロカードだけの特別配置)
+    drawSiteLogo(ctx, W / 2, 100, 54, "center");
     // ジャケットは直角 (サイトのカードと同じ様式)。難易度クラス色の枠 +
     // ぼかしなしの黒ハードシャドウで、枠色が背景色と近くても浮かせる
     const jSize = 540;
     const jx = (W - jSize) / 2;
-    const jy = 150;
+    const jy = 215;
     const frameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
     const frameW = 10;
     ctx.fillStyle = "#17181c";
@@ -284,21 +286,20 @@ export async function recordChartVideo(
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = fg;
     ctx.font = `400 58px ${titleFont}`;
-    ctx.fillText(o.title, W / 2, 856, W - 80);
+    ctx.fillText(o.title, W / 2, 920, W - 80);
     if (o.subtitle) {
       ctx.globalAlpha = 0.75;
       ctx.font = `400 34px ${titleFont}`;
-      ctx.fillText(o.subtitle, W / 2, 918, W - 80);
+      ctx.fillText(o.subtitle, W / 2, 982, W - 80);
       ctx.globalAlpha = 1;
     }
     ctx.globalAlpha = 0.8;
-    ctx.font = `400 40px ${titleFont}`;
-    ctx.fillText("BPM", W / 2, 1032);
+    ctx.font = `400 34px ${titleFont}`;
+    ctx.fillText("BPM", W / 2, 1086);
     ctx.globalAlpha = 1;
-    ctx.font = `400 92px ${titleFont}`;
-    ctx.fillText(o.bpmLabel, W / 2, 1134, W - 80);
+    ctx.font = `400 76px ${titleFont}`;
+    ctx.fillText(o.bpmLabel, W / 2, 1172, W - 80);
     ctx.textAlign = "left";
-    drawSiteLogo(ctx, W - 14, H - 32, 22);
   };
 
   const drawFrame = (audioTime: number, nowMs: number) => {

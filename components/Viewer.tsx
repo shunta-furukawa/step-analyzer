@@ -1784,7 +1784,7 @@ export default function Viewer({
                     : `${+bpms[0].bpm.toFixed(1)}`;
                 const shareUrl = location.origin + (await buildUrl());
                 const text = [
-                  `【Step Analysis】${name}${diffTxt}`,
+                  `【STEP ANALYZER】${name}${diffTxt}`,
                   "",
                   `${name}${subtitle ? ` / ${subtitle}` : ""}`,
                   `♩=${bpmTxt}${diffTxt}`,
