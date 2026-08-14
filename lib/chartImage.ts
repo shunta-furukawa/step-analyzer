@@ -35,6 +35,56 @@ export interface ChartImageOptions {
   measuresPerColumn?: number;
   hispeed?: number; // 縦の縮尺 (アプリのハイスピ設定に追従)
   highlights?: Set<number>; // 注目ノーツのtick集合 (黄色い枠で強調)
+  comments?: Map<number, string>; // 注目ノーツのコメント (脚注として下部に一覧)
+}
+
+// 注目コメントの脚注に使うフォントと行送り
+const COMMENT_FONT = '700 12px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+const COMMENT_LINE_H = 17;
+
+function wrapChars(c: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const lines: string[] = [];
+  let line = "";
+  for (const ch of text) {
+    if (line && c.measureText(line + ch).width > maxW) {
+      lines.push(line);
+      line = ch;
+    } else {
+      line += ch;
+    }
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+/** 書き出し範囲内のコメントだけに絞る (tickは48分音単位、1小節=192) */
+export function filterCommentsForRange(
+  comments: Map<number, string> | undefined,
+  startMeasure: number,
+  endMeasure: number
+): Map<number, string> {
+  const out = new Map<number, string>();
+  if (!comments) return out;
+  const lo = (startMeasure - 1) * 192;
+  const hi = endMeasure * 192;
+  for (const [tick, text] of comments) {
+    if (tick >= lo && tick < hi) out.set(tick, text);
+  }
+  return out;
+}
+
+/** コメント脚注ブロックの高さ (0=なし)。レイアウトプレビューと描画で共用 */
+export function measureChartComments(
+  comments: Map<number, string>,
+  width: number
+): number {
+  if (comments.size === 0) return 0;
+  const c = document.createElement("canvas").getContext("2d")!;
+  c.font = COMMENT_FONT;
+  const maxW = width - PAD * 2 - 48;
+  let lines = 0;
+  for (const [, t] of comments) lines += wrapChars(c, t, maxW).length;
+  return 10 + 22 + lines * COMMENT_LINE_H + (comments.size - 1) * 6;
 }
 
 const INK = "#17181c";
@@ -313,23 +363,29 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   const noteMargin = NOTE / 2 + 3;
   const { width, height } = computeChartImageLayout(count, perCol, o.hispeed ?? 1);
 
+  // 注目コメントは脚注として下部にまとめる (範囲外のものは除く)
+  const comments = filterCommentsForRange(o.comments, start, end);
+  const commentEntries = [...comments.entries()].sort((a, b) => a[0] - b[0]);
+  const commentH = measureChartComments(comments, width);
+  const totalH = height + commentH;
+
   // 長い縦一列でもブラウザのcanvasサイズ上限に収まるよう解像度を調整
-  const scale = Math.min(2, 16000 / Math.max(width, height));
+  const scale = Math.min(2, 16000 / Math.max(width, totalH));
   const canvas = document.createElement("canvas");
   canvas.width = width * scale;
-  canvas.height = height * scale;
+  canvas.height = totalH * scale;
   const ctx = canvas.getContext("2d")!;
   ctx.scale(scale, scale);
 
   // 背景 (ページCSSと同じ斜めストライプ: 115deg・18px)
   ctx.fillStyle = `#${o.bgColor}`;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, width, totalH);
   ctx.save();
   ctx.rotate((-25 * Math.PI) / 180);
   let stripeI = 0;
-  for (let x = -height; x < width + height; x += 18, stripeI++) {
+  for (let x = -totalH; x < width + totalH; x += 18, stripeI++) {
     ctx.fillStyle = stripeI % 2 === 0 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)";
-    ctx.fillRect(x, -width, 18, width * 2 + height * 2);
+    ctx.fillRect(x, -width, 18, width * 2 + totalH * 2);
   }
   ctx.restore();
 
@@ -389,8 +445,8 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   );
   ctx.globalAlpha = 1;
 
-  // フッター: サイトのタイトルロゴ風クレジット
-  drawSiteLogo(ctx, width - PAD, height - PAD - FOOTER / 2 + 4, 15);
+  // フッター: サイトのタイトルロゴ風クレジット (コメント欄のぶん下へ)
+  drawSiteLogo(ctx, width - PAD, totalH - PAD - FOOTER / 2 + 4, 15);
 
   const segs = holdSegments(chart, footsteps);
   const hlBoxes = o.highlights ? highlightBoxesOf(chart, o.highlights) : [];
@@ -540,8 +596,63 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
       ctx.strokeStyle = "#ffd93b";
       ctx.lineWidth = 3.5;
       ctx.stroke();
+      // コメント付きの枠には脚注番号バッジを付ける
+      const ci = commentEntries.findIndex(
+        ([tick]) => tick >= tickOf(b.start) && tick <= tickOf(b.end)
+      );
+      if (ci >= 0) drawCommentBadge(ctx, x + w - 2, yTop + 2, ci + 1);
     }
   }
 
+  // 注目コメントの脚注カード (白+ハードシャドウ、番号バッジ付き)
+  if (commentEntries.length > 0) {
+    const cardX = PAD;
+    const cardW = width - PAD * 2;
+    const cardY = height - FOOTER - PAD + 10;
+    const cardH = commentH - 10;
+    ctx.fillStyle = INK;
+    ctx.fillRect(cardX + 5, cardY + 5, cardW, cardH);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(cardX, cardY, cardW, cardH);
+    ctx.strokeStyle = INK;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(cardX, cardY, cardW, cardH);
+    ctx.font = COMMENT_FONT;
+    let y = cardY + 11 + 12;
+    commentEntries.forEach(([, text], i) => {
+      drawCommentBadge(ctx, cardX + 20, y - 4, i + 1);
+      ctx.font = COMMENT_FONT;
+      ctx.fillStyle = INK;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      for (const line of wrapChars(ctx, text, cardW - 48)) {
+        ctx.fillText(line, cardX + 36, y);
+        y += COMMENT_LINE_H;
+      }
+      y += 6;
+    });
+  }
+
   return canvas;
+}
+
+// 脚注番号バッジ (黄色い丸 + 黒番号)
+function drawCommentBadge(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  n: number
+) {
+  ctx.beginPath();
+  ctx.arc(x, y, 9, 0, Math.PI * 2);
+  ctx.fillStyle = "#ffd93b";
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = INK;
+  ctx.stroke();
+  ctx.fillStyle = INK;
+  ctx.font = "800 11px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(n), x, y + 0.5);
 }

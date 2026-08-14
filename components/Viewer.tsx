@@ -15,7 +15,12 @@ import {
   type FootOverride,
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
-import { computeChartImageLayout, renderChartImage } from "@/lib/chartImage";
+import {
+  computeChartImageLayout,
+  filterCommentsForRange,
+  measureChartComments,
+  renderChartImage,
+} from "@/lib/chartImage";
 import { loadAudioFromUrl, loadImageFromUrl, recordChartVideo } from "@/lib/videoExport";
 
 // Three.js版の足ステージ (WebGL)。バンドルを分けるため遅延読み込みし、
@@ -1536,18 +1541,25 @@ export default function Viewer({
                 Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 16,
                 hispeed
               );
-              const sc = Math.min(200 / layout.width, 150 / layout.height, 1);
+              // 注目コメントの脚注ぶんも高さに含める
+              const totalH =
+                layout.height +
+                measureChartComments(
+                  filterCommentsForRange(noteComments, range.start, range.end),
+                  layout.width
+                );
+              const sc = Math.min(200 / layout.width, 150 / totalH, 1);
               const ratio =
-                layout.height >= layout.width
-                  ? `1 : ${(layout.height / layout.width).toFixed(1)}`
-                  : `${(layout.width / layout.height).toFixed(1)} : 1`;
+                totalH >= layout.width
+                  ? `1 : ${(totalH / layout.width).toFixed(1)}`
+                  : `${(layout.width / totalH).toFixed(1)} : 1`;
               return (
                 <div className="img-preview">
                   <div
                     className="img-preview-frame"
                     style={{
                       width: Math.max(6, layout.width * sc),
-                      height: Math.max(6, layout.height * sc),
+                      height: Math.max(6, totalH * sc),
                       background: `#${bgColor}`,
                     }}
                   >
@@ -1565,7 +1577,7 @@ export default function Viewer({
                     ))}
                   </div>
                   <span className="img-preview-meta">
-                    {Math.round(layout.width)}×{Math.round(layout.height)}px
+                    {Math.round(layout.width)}×{Math.round(totalH)}px
                     <br />
                     {ratio}
                   </span>
@@ -1602,6 +1614,7 @@ export default function Viewer({
                       Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 16,
                     hispeed,
                     highlights,
+                    comments: noteComments,
                   });
                   const blob = await new Promise<Blob | null>((resolve) =>
                     canvas.toBlob(resolve, "image/png")
