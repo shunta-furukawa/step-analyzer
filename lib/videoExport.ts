@@ -36,6 +36,9 @@ export interface VideoExportOptions {
   offsetSec: number; // 譜面1小節目の頭が音源の何秒目か (音源なしなら無視)
   landscape?: boolean; // 横長 (1920x1080・0.5倍速) で書き出す
   stats?: { label: string; value: number }[]; // 統計カード (横長のみ表示)
+  // 注目ノーツのコメント (横長のみ)。該当ノーツが判定線に達したら
+  // 効果音と共に停止し、字送りでコメントを表示してから再開する
+  spotlights?: { beat: number; text: string }[];
   onProgress?: (ratio: number) => void;
   signal?: { cancelled: boolean };
 }
@@ -153,7 +156,42 @@ export async function recordChartVideo(
   const songEnd = offsetSec + timeAtBeat(timeline, chart.totalBeats) + TAIL;
   const recStart = Math.max(0, offsetSec - LEAD_IN);
   const durationSec = songEnd - recStart; // 譜面内時間
-  const realDuration = durationSec / vSpeed; // 実時間 (0.5倍速なら2倍)
+
+  // 注目シーンの停止 (横長のみ)。停止時間はコメント量に応じて伸ばす
+  const pauses = (L ? o.spotlights ?? [] : [])
+    .map((sp) => ({
+      t: offsetSec + timeAtBeat(timeline, sp.beat),
+      text: sp.text,
+      dur: Math.min(8, 2.0 + sp.text.length * 0.06),
+    }))
+    .filter((p) => p.t >= recStart)
+    .sort((a, b) => a.t - b.t);
+  const pausesTotal = pauses.reduce((s, p) => s + p.dur, 0);
+  const realDuration = durationSec / vSpeed + pausesTotal; // 実時間 (0.5倍速なら2倍+停止分)
+
+  // 譜面内時刻 → 実時間 (停止分を加算)。クラップの発音時刻計算に使う
+  const songToReal = (t: number) => {
+    let real = (t - recStart) / vSpeed;
+    for (const p of pauses) if (p.t < t) real += p.dur;
+    return real;
+  };
+
+  // 実時間 → 譜面内時刻。停止中はその停止イベントと経過秒も返す
+  const realToSong = (
+    r: number
+  ): { t: number; pauseIdx: number; pauseElapsed: number } => {
+    let rAcc = 0; // 消費済みの実時間
+    let sAcc = recStart; // rAccに対応する譜面内時刻
+    for (let i = 0; i < pauses.length; i++) {
+      const p = pauses[i];
+      const rAtPause = rAcc + (p.t - sAcc) / vSpeed;
+      if (r < rAtPause) break;
+      if (r < rAtPause + p.dur) return { t: p.t, pauseIdx: i, pauseElapsed: r - rAtPause };
+      rAcc = rAtPause + p.dur;
+      sAcc = p.t;
+    }
+    return { t: sAcc + (r - rAcc) * vSpeed, pauseIdx: -1, pauseElapsed: 0 };
+  };
 
   // 音声グラフ (スピーカーにも出して進行がわかるように)
   const actx = new AudioContext();
@@ -175,13 +213,12 @@ export async function recordChartVideo(
   const judged = chart.events.filter(
     (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
   );
-  const clapTimes = judged.map(
-    (e) => (offsetSec + timeAtBeat(timeline, e.row.beat) - recStart) / vSpeed
-  );
+  // 停止分も織り込んだ実時間で発音する (停止中のノーツはない前提)
+  const clapTimes = judged.map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
   const clapAccents = judged.map((e) => e.panels.length >= 2);
   const ghostTimes = chart.events
     .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
-    .map((e) => (offsetSec + timeAtBeat(timeline, e.row.beat) - recStart) / vSpeed);
+    .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
   const { samples: clapSamples, sr: clapSr } = renderClapTrackSamples(
     clapTimes,
     clapAccents,
@@ -194,6 +231,32 @@ export async function recordChartVideo(
   clapSrc.buffer = clapBuf;
   clapSrc.connect(dest);
   clapSrc.connect(actx.destination);
+
+  // 注目シーン開始の合図音 (上昇2音の短いブリップ)
+  const pingBuf = (() => {
+    const sr = actx.sampleRate;
+    const len = Math.floor(sr * 0.28);
+    const buf = actx.createBuffer(1, len, sr);
+    const ch = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      let v = 0;
+      if (t < 0.12) v += Math.sin(2 * Math.PI * 880 * t) * Math.exp(-t * 26) * 0.5;
+      if (t >= 0.09) {
+        const u = t - 0.09;
+        v += Math.sin(2 * Math.PI * 1318.5 * u) * Math.exp(-u * 18) * 0.5;
+      }
+      ch[i] = v;
+    }
+    return buf;
+  })();
+  const playPing = () => {
+    const src = actx.createBufferSource();
+    src.buffer = pingBuf;
+    src.connect(dest);
+    src.connect(actx.destination);
+    src.start();
+  };
 
   // 足パッド (アプリと同じThree.jsシーン)
   const footScene = createFootScene();
@@ -500,6 +563,57 @@ export async function recordChartVideo(
     }
   };
 
+  // 注目シーンのコメントカード (横のみ)。統計カードと足パッドの間に
+  // 白カードを重ね、経過時間ぶんの文字数だけ字送りで表示する
+  const drawSpotlightCard = (p: { text: string }, elapsed: number) => {
+    const cardX = paneX;
+    const cardW = W - paneX - 40;
+    const font = '700 30px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    ctx.font = font;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    // 全文を折り返してから字送り (行の途中で改行位置が動かないように)
+    const maxW = cardW - 132;
+    const lines: string[] = [];
+    let line = "";
+    for (const chr of p.text) {
+      if (line && ctx.measureText(line + chr).width > maxW) {
+        lines.push(line);
+        line = chr;
+      } else {
+        line += chr;
+      }
+    }
+    if (line) lines.push(line);
+    const lineH = 44;
+    const cardH = 44 + lines.length * lineH;
+    const cardY = 460 - cardH / 2;
+    ctx.fillStyle = "#17181c";
+    ctx.fillRect(cardX + 8, cardY + 8, cardW, cardH);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(cardX, cardY, cardW, cardH);
+    ctx.strokeStyle = "#17181c";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(cardX, cardY, cardW, cardH);
+    // 注目マーク (アプリの★注目と同じ黄色)
+    ctx.font = "36px system-ui, sans-serif";
+    ctx.fillStyle = "#ffd93b";
+    ctx.strokeStyle = "#17181c";
+    ctx.lineWidth = 2.5;
+    const starY = cardY + cardH / 2 + 13;
+    ctx.strokeText("★", cardX + 30, starY);
+    ctx.fillText("★", cardX + 30, starY);
+    // 字送り本文
+    ctx.font = font;
+    ctx.fillStyle = "#17181c";
+    let remain = Math.max(0, Math.floor((elapsed - 0.35) / 0.05));
+    for (let i = 0; i < lines.length && remain > 0; i++) {
+      const seg = lines[i].slice(0, remain);
+      ctx.fillText(seg, cardX + 92, cardY + 58 + i * lineH);
+      remain -= lines[i].length;
+    }
+  };
+
   const drawFrame = (audioTime: number, nowMs: number) => {
     const tSong = audioTime - offsetSec; // 譜面内時刻
     const curBeat = beatAtTime(timeline, Math.max(0, tSong));
@@ -717,18 +831,34 @@ export async function recordChartVideo(
     }
     clapSrc.start(0);
     rec.start(1000);
+    let lastPauseIdx = -1;
     const tick = () => {
       if (o.signal?.cancelled) {
         rec.stop();
         return;
       }
-      // 実時間 r → 譜面内時刻 (0.5倍速なら半分の速さで進む)
+      // 実時間 r → 譜面内時刻 (0.5倍速なら半分の速さで進む。注目停止中は凍結)
       const r = actx.currentTime - t0;
-      const songTime = recStart + r * vSpeed;
-      if (r < INTRO_SEC) drawIntro();
-      else drawFrame(songTime, performance.now());
+      const m = realToSong(r);
+      if (m.pauseIdx !== lastPauseIdx) {
+        // 停止への出入りで音源を止める/再開する (クラップは停止込みの
+        // タイムラインで合成済みなので触らない)
+        if (m.pauseIdx >= 0) {
+          musicSrc?.playbackRate.setValueAtTime(0.0001, actx.currentTime);
+          playPing();
+        } else {
+          musicSrc?.playbackRate.setValueAtTime(vSpeed, actx.currentTime);
+        }
+        lastPauseIdx = m.pauseIdx;
+      }
+      if (r < INTRO_SEC) {
+        drawIntro();
+      } else {
+        drawFrame(m.t, performance.now());
+        if (m.pauseIdx >= 0) drawSpotlightCard(pauses[m.pauseIdx], m.pauseElapsed);
+      }
       o.onProgress?.(Math.max(0, Math.min(1, r / realDuration)));
-      if (songTime >= songEnd) {
+      if (m.t >= songEnd) {
         rec.stop();
         return;
       }

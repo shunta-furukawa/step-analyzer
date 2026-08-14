@@ -276,7 +276,7 @@ const ja: Strings = {
   videoBtnTitle: "譜面再生をショート動画で書き出し",
   videoTitle: "動画を書き出し (β)",
   videoDesc:
-    "譜面の自動再生を縦型ショート動画 (720×1280) にします。ハンドクラップ入りで、再生時間ぶんの録画時間がかかります。",
+    "譜面の自動再生を動画にします。縦はショート向け (720×1280・等速)、横はじっくり観察向け (1920×1080・0.5倍速、注目コメントで一時停止)。録画は再生時間ぶんかかります。",
   videoUseMedia: "曲とジャケットを使う",
   videoAudioUrl: "音源 (ogg/mp3) のURL",
   videoJacketUrl: "ジャケット画像のURL (任意)",
@@ -449,7 +449,7 @@ const en: Strings = {
   videoBtnTitle: "Export playback as a short video",
   videoTitle: "Export video (beta)",
   videoDesc:
-    "Renders the auto-play as a vertical short video (720×1280) with handclaps. Recording takes as long as the playback itself.",
+    "Renders the auto-play as a video. Portrait for Shorts (720×1280, 1×), landscape for study (1920×1080, 0.5× with spotlight comment pauses). Recording takes as long as the playback.",
   videoUseMedia: "Use song & jacket",
   videoAudioUrl: "Audio URL (ogg/mp3)",
   videoJacketUrl: "Jacket image URL (optional)",
@@ -621,7 +621,7 @@ const ko: Strings = {
   videoBtnTitle: "재생을 쇼트 동영상으로 내보내기",
   videoTitle: "동영상 내보내기 (β)",
   videoDesc:
-    "자동 재생을 세로형 쇼트 동영상 (720×1280) 으로 만듭니다. 핸드클랩 포함, 재생 시간만큼 녹화 시간이 걸립니다.",
+    "자동 재생을 동영상으로 만듭니다. 세로는 쇼트용 (720×1280·1배속), 가로는 관찰용 (1920×1080·0.5배속, 주목 코멘트에서 일시정지). 녹화는 재생 시간만큼 걸립니다.",
   videoUseMedia: "곡·재킷 사용",
   videoAudioUrl: "음원 (ogg/mp3) URL",
   videoJacketUrl: "재킷 이미지 URL (선택)",

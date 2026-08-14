@@ -1761,6 +1761,11 @@ export default function Viewer({
                         ? [{ label: S.shocks, value: stats.shocks }]
                         : []),
                     ],
+                    // 注目コメント (tick=48分音基準をbeatへ換算)。横長のみ使われる
+                    spotlights: [...noteComments.entries()].map(([tick, text]) => ({
+                      beat: tick / 48,
+                      text,
+                    })),
                     onProgress: setVProgress,
                     signal: vSignal.current,
                   });
