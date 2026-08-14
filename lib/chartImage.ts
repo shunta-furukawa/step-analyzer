@@ -344,6 +344,8 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   if (o.diff && (o.diff.cls !== null || o.diff.lvl)) {
     const footSize = 22;
     ctx.font = `400 19px ${titleFont}`;
+    // actualBoundingBoxは計測時のtextBaseline基準 (Safari)。alphabeticで統一
+    ctx.textBaseline = "alphabetic";
     const lm = o.diff.lvl ? ctx.measureText(o.diff.lvl) : null;
     const diffW =
       (o.diff.cls !== null ? footSize : 0) +

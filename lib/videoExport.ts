@@ -252,6 +252,8 @@ export async function recordChartVideo(
     const lvl = o.diff?.lvl ?? "";
     if (cls !== null || lvl) {
       ctx.font = `400 66px ${titleFont}`;
+      // actualBoundingBoxは計測時のtextBaseline基準 (Safari)。alphabeticで統一
+      ctx.textBaseline = "alphabetic";
       const lm = lvl ? ctx.measureText(lvl) : null;
       const footSize = cls !== null ? 78 : 0;
       const innerW = footSize + (footSize && lm ? 14 : 0) + (lm?.width ?? 0);
@@ -345,6 +347,11 @@ export async function recordChartVideo(
     if (o.diff) {
       const footSize = 40;
       ctx.font = `400 36px ${titleFont}`;
+      // 注意: actualBoundingBoxは計測時のtextBaseline基準で返る仕様。
+      // 直前のBPMチップがmiddleにしているので、必ずalphabeticに戻してから測る
+      // (Safariは仕様通りbaseline依存、Chromiumは常にalphabetic基準のため、
+      //  ここを揃えないとiOSだけ数字が上にずれる)
+      ctx.textBaseline = "alphabetic";
       const lvlMet = o.diff.lvl ? ctx.measureText(o.diff.lvl) : null;
       const diffW =
         (o.diff.cls !== null ? footSize : 0) +
