@@ -24,9 +24,11 @@ const FootStage3D = dynamic(() => import("./FootStage3D"), { ssr: false });
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
+  parseComments,
   parseHighlights,
   parseOverrides,
   placeHoldRange,
+  serializeComments,
   serializeHighlights,
   serializeOverrides,
   toggleNote,
@@ -137,6 +139,7 @@ export default function Viewer({
   stops: initialStops,
   overrides: initialOverrides,
   highlights: initialHighlights,
+  comments: initialComments,
   hispeed: initialHispeed,
   speed: initialSpeed,
   bg: initialBg,
@@ -151,6 +154,7 @@ export default function Viewer({
   stops?: string;
   overrides?: string;
   highlights?: string;
+  comments?: string;
   hispeed?: string;
   speed?: string;
   bg?: string;
@@ -289,6 +293,10 @@ export default function Viewer({
   // 注目ノーツ (hl=)。「ここを見て!」と共有したいノーツのtick集合
   const [highlights, setHighlights] = useState<Set<number>>(() =>
     parseHighlights(initialHighlights)
+  );
+  // 注目ノーツのコメント (hc=)。横長動画の注目シーンで表示する
+  const [noteComments, setNoteComments] = useState<Map<number, string>>(() =>
+    parseComments(initialComments)
   );
   const [dirty, setDirty] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -481,13 +489,15 @@ export default function Viewer({
     if (stops) parts.push(`s=${enc(stops)}`);
     if (overrides.size > 0) parts.push(`f=${serializeOverrides(overrides)}`);
     if (highlights.size > 0) parts.push(`hl=${serializeHighlights(highlights)}`);
+    const hc = serializeComments(noteComments);
+    if (hc) parts.push(`hc=${hc}`);
     if (hispeed !== 1) parts.push(`hs=${hispeed}`);
     if (speed !== 1) parts.push(`sp=${speed}`);
     if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
     if (lang !== "ja") parts.push(`l=${lang}`);
     if (transform) parts.push(`tr=${transform}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, subtitle, diffCls, diffLvl, bpm, stops, overrides, highlights, hispeed, speed, bgColor, lang, transform]);
+  }, [compact, title, subtitle, diffCls, diffLvl, bpm, stops, overrides, highlights, noteComments, hispeed, speed, bgColor, lang, transform]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -2539,8 +2549,18 @@ export default function Viewer({
                         const tick = tickOf(curEvent.row.beat);
                         setHighlights((prev) => {
                           const next = new Set(prev);
-                          if (next.has(tick)) next.delete(tick);
-                          else next.add(tick);
+                          if (next.has(tick)) {
+                            next.delete(tick);
+                            // 注目解除時はコメントも一緒に消す
+                            setNoteComments((pc) => {
+                              if (!pc.has(tick)) return pc;
+                              const nc = new Map(pc);
+                              nc.delete(tick);
+                              return nc;
+                            });
+                          } else {
+                            next.add(tick);
+                          }
                           return next;
                         });
                         setDirty(true);
@@ -2551,6 +2571,29 @@ export default function Viewer({
                   )}
                   </span>
                 </div>
+                {/* 注目ノーツへのコメント (横長動画の注目シーンで字送り表示する) */}
+                {!curEvent.shock &&
+                  curEvent.panels.length > 0 &&
+                  highlights.has(tickOf(curEvent.row.beat)) && (
+                    <input
+                      type="text"
+                      className="hl-comment-input"
+                      maxLength={120}
+                      value={noteComments.get(tickOf(curEvent.row.beat)) ?? ""}
+                      placeholder={S.hlCommentPlaceholder}
+                      onChange={(e) => {
+                        const tick = tickOf(curEvent.row.beat);
+                        const v = e.target.value;
+                        setNoteComments((prev) => {
+                          const next = new Map(prev);
+                          if (v) next.set(tick, v);
+                          else next.delete(tick);
+                          return next;
+                        });
+                        setDirty(true);
+                      }}
+                    />
+                  )}
                 {curEvent.panels.length === 2 && (
                   <div className="override-row">
                     <span className="override-label">{S.stepFootLabel}</span>

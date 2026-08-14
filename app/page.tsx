@@ -108,6 +108,7 @@ export default async function Page({
   const s = pick(sp.s);
   const f = pick(sp.f);
   const hl = pick(sp.hl);
+  const hc = pick(sp.hc);
   const hs = pick(sp.hs);
   const spd = pick(sp.sp);
   const c = pick(sp.c);
@@ -135,6 +136,7 @@ export default async function Page({
         stops={isDefault ? undefined : s}
         overrides={f}
         highlights={hl}
+        comments={hc}
         hispeed={hs}
         speed={spd}
         bg={bg}

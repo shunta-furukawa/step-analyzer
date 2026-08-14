@@ -640,6 +640,14 @@ select {
   margin-top: -4px;
 }
 
+/* 注目ノーツのコメント入力 */
+.hl-comment-input {
+  width: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 6px;
+}
+
 /* 投稿テンプレのコピー (目立たないリンク風) */
 .tpl-copy {
   background: none;

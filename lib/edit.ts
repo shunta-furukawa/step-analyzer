@@ -237,3 +237,48 @@ export function parseHighlights(h: string | undefined): Set<number> {
 export function serializeHighlights(hl: Set<number>): string {
   return [...hl].sort((a, b) => a - b).join("-");
 }
+
+// ===== 注目ノーツのコメント (hcパラメータ) =====
+// tick:テキスト を , 区切りで持つ。テキストはbase64url (英数と-_のみ) なので、
+// クエリが途中で1回デコードされても区切り文字と衝突しない。
+// 日本語は%エンコード (9文字/字) よりbase64url (約4文字/字) の方が短い
+
+function textToB64(s: string): string {
+  const bytes = new TextEncoder().encode(s);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64ToText(s: string): string {
+  const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+export function parseComments(h: string | undefined): Map<number, string> {
+  const out = new Map<number, string>();
+  if (!h) return out;
+  for (const part of h.split(",")) {
+    const i = part.indexOf(":");
+    if (i <= 0) continue;
+    const tick = Number(part.slice(0, i));
+    if (!Number.isInteger(tick) || tick < 0) continue;
+    try {
+      const text = b64ToText(part.slice(i + 1));
+      if (text) out.set(tick, text);
+    } catch {
+      // 壊れたエントリは無視
+    }
+  }
+  return out;
+}
+
+export function serializeComments(m: Map<number, string>): string {
+  return [...m.entries()]
+    .filter(([, t]) => t.trim().length > 0)
+    .sort((a, b) => a[0] - b[0])
+    .map(([tick, t]) => `${tick}:${textToB64(t.trim())}`)
+    .join(",");
+}

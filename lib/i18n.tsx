@@ -114,6 +114,7 @@ export interface Strings {
   videoDone: string;
   videoTplCopy: string;
   videoTplCopied: string;
+  hlCommentPlaceholder: string;
   videoCancel: string;
   // 小節番号タップの範囲選択
   rangePending: (m: number) => string;
@@ -283,6 +284,7 @@ const ja: Strings = {
   videoDone: "✓ 書き出しました",
   videoTplCopy: "動画概要をテキストでコピー",
   videoTplCopied: "✓ コピーしました",
+  hlCommentPlaceholder: "コメント (動画の注目シーンで表示)",
   videoCancel: "中止",
   rangePending: (m) => `始点: ${m}小節目 — 終点の番号をタップ`,
   rangeActive: (a, b) => `共有・画像の範囲: ${a}〜${b}小節`,
@@ -453,6 +455,7 @@ const en: Strings = {
   videoDone: "✓ Exported",
   videoTplCopy: "Copy video summary as text",
   videoTplCopied: "✓ Copied",
+  hlCommentPlaceholder: "Comment (shown at spotlight scenes in videos)",
   videoCancel: "Cancel",
   rangePending: (m) => `Start: measure ${m} — tap the end measure number`,
   rangeActive: (a, b) => `Share / image range: ${a}–${b}`,
@@ -622,6 +625,7 @@ const ko: Strings = {
   videoDone: "✓ 내보냈습니다",
   videoTplCopy: "동영상 개요를 텍스트로 복사",
   videoTplCopied: "✓ 복사했습니다",
+  hlCommentPlaceholder: "코멘트 (동영상 주목 장면에 표시)",
   videoCancel: "중지",
   rangePending: (m) => `시작: ${m}마디 — 끝 마디 번호를 탭`,
   rangeActive: (a, b) => `공유·이미지 범위: ${a}〜${b}마디`,
