@@ -246,6 +246,8 @@ export default function Viewer({
   // 動画書き出しモーダル
   const [showVideo, setShowVideo] = useState(false);
   const [vTplCopied, setVTplCopied] = useState(false);
+  // 動画の向き: 縦=ショート (等速) / 横=じっくり観察用 (0.5倍速)
+  const [vMode, setVMode] = useState<"portrait" | "landscape">("portrait");
   const [vUseMedia, setVUseMedia] = useState(false);
   const [vOgg, setVOgg] = useState("");
   const [vJacket, setVJacket] = useState("");
@@ -1661,6 +1663,22 @@ export default function Viewer({
               </button>
             </div>
             <p className="hint opt-hint">{S.videoDesc}</p>
+            <div className="opt-row">
+              <div className="opt-btns">
+                <button
+                  className={vMode === "portrait" ? "" : "secondary"}
+                  onClick={() => setVMode("portrait")}
+                >
+                  {S.videoModePortrait}
+                </button>
+                <button
+                  className={vMode === "landscape" ? "" : "secondary"}
+                  onClick={() => setVMode("landscape")}
+                >
+                  {S.videoModeLandscape}
+                </button>
+              </div>
+            </div>
             <label className="toggle-row">
               <input
                 type="checkbox"
@@ -1732,6 +1750,17 @@ export default function Viewer({
                     audio,
                     jacket,
                     offsetSec: Number.isFinite(off) ? off : 0,
+                    landscape: vMode === "landscape",
+                    stats: [
+                      { label: S.steps, value: stats.steps },
+                      { label: S.jumps, value: stats.jumps },
+                      { label: S.jacks, value: stats.jacks },
+                      { label: S.crossovers, value: stats.crossovers },
+                      { label: S.doubleSteps, value: stats.doubleSteps },
+                      ...(stats.shocks > 0
+                        ? [{ label: S.shocks, value: stats.shocks }]
+                        : []),
+                    ],
                     onProgress: setVProgress,
                     signal: vSignal.current,
                   });

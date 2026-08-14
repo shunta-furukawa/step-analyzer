@@ -1,4 +1,5 @@
-// 縦型ショート動画 (720x1280) の書き出し。
+// 譜面動画の書き出し。縦型ショート (720x1280・等速) と
+// 横長じっくり版 (1920x1080・0.5倍速) の2モード。
 // 譜面再生をcanvasに描画し、ハンドクラップ (+任意で音源) と合わせて
 // MediaRecorderでリアルタイム録画する。足パッドはアプリと同じ
 // Three.jsレンダラ (lib/footScene) を合成するので見た目が完全に一致する。
@@ -33,23 +34,13 @@ export interface VideoExportOptions {
   audio: AudioBuffer | null; // 音源 (なければハンクラのみ)
   jacket: HTMLImageElement | null; // ジャケット (なければアプリアイコン風)
   offsetSec: number; // 譜面1小節目の頭が音源の何秒目か (音源なしなら無視)
+  landscape?: boolean; // 横長 (1920x1080・0.5倍速) で書き出す
+  stats?: { label: string; value: number }[]; // 統計カード (横長のみ表示)
   onProgress?: (ratio: number) => void;
   signal?: { cancelled: boolean };
 }
 
-const W = 720;
-const H = 1280;
-const HEADER_H = 160;
-const PAD_H = 380; // 下部の足パッド領域 (幅はキャンバスいっぱい)
-const PAD_W = 760;
-// ノーツサイズはそのまま列間を詰める。レーンが細くなる分だけ左右に
-// 余白が生まれ、Shorts系アプリの縦長画面での左右クロップからも逃げられる
-const LANE_W = 160;
-const NOTE = 144;
-const LANE_X = (W - LANE_W * 4) / 2;
-const RECEPTOR_Y = HEADER_H + 82;
-const LANE_BOTTOM = H - 362;
-const LEAD_IN = 1.5; // 録画開始から1ノーツ目までの助走秒数
+const LEAD_IN = 1.5; // 録画開始から1ノーツ目までの助走秒数 (譜面内時間)
 const INTRO_SEC = 0.5; // 冒頭のサムネ向けイントロカード表示時間
 const TAIL = 1.2;
 const FOOT_TRAVEL = 0.25;
@@ -124,6 +115,26 @@ export async function recordChartVideo(
   o: VideoExportOptions
 ): Promise<{ blob: Blob; ext: string }> {
   const { chart, footsteps, timeline } = o;
+
+  // モード別レイアウト。縦=ショート向け1カラム、横=左レーン+右情報ペーンの2カラム
+  const L = !!o.landscape;
+  const vSpeed = L ? 0.5 : 1; // 横長はじっくり観察用に0.5倍速
+  const W = L ? 1920 : 720;
+  const H = L ? 1080 : 1280;
+  const HEADER_H = L ? 24 : 160; // レーン上端 (横はヘッダーなし)
+  const LANE_W = L ? 176 : 160;
+  const NOTE = L ? 150 : 144;
+  const LANE_X = L ? 50 : (W - LANE_W * 4) / 2;
+  const RECEPTOR_Y = HEADER_H + (L ? 96 : 82);
+  const LANE_BOTTOM = L ? H - 24 : H - 362;
+  // 右ペーン (横のみ)。足パッドはペーン中央に大きく合成する
+  const paneX = LANE_X + LANE_W * 4 + 46;
+  const paneCx = (paneX + W - 40) / 2;
+  const PAD_W = L ? 1320 : 760;
+  const PAD_H = L ? 660 : 380;
+  const padX = L ? paneCx - PAD_W / 2 : (W - PAD_W) / 2;
+  const padY = H - PAD_H - (L ? 10 : 8);
+
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -141,7 +152,8 @@ export async function recordChartVideo(
   const offsetSec = o.audio ? o.offsetSec : LEAD_IN; // 音源なしはハンクラのみで頭から
   const songEnd = offsetSec + timeAtBeat(timeline, chart.totalBeats) + TAIL;
   const recStart = Math.max(0, offsetSec - LEAD_IN);
-  const durationSec = songEnd - recStart;
+  const durationSec = songEnd - recStart; // 譜面内時間
+  const realDuration = durationSec / vSpeed; // 実時間 (0.5倍速なら2倍)
 
   // 音声グラフ (スピーカーにも出して進行がわかるように)
   const actx = new AudioContext();
@@ -151,23 +163,29 @@ export async function recordChartVideo(
   if (o.audio) {
     musicSrc = actx.createBufferSource();
     musicSrc.buffer = o.audio;
+    // 0.5倍速はテープ遅回し方式 (ピッチも1オクターブ下がる)
+    musicSrc.playbackRate.value = vSpeed;
     musicSrc.connect(dest);
     musicSrc.connect(actx.destination);
   }
 
-  // ハンドクラップ (アプリ再生と同じ判定音を録画開始時刻基準で合成)
+  // ハンドクラップ (アプリ再生と同じ判定音を録画開始時刻基準で合成)。
+  // 時刻は実時間に換算する: 波形はそのまま間隔だけ1/vSpeedに引き伸ばすので、
+  // 0.5倍速でもクラップの音色は変わらない
   const judged = chart.events.filter(
     (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
   );
-  const clapTimes = judged.map((e) => offsetSec + timeAtBeat(timeline, e.row.beat) - recStart);
+  const clapTimes = judged.map(
+    (e) => (offsetSec + timeAtBeat(timeline, e.row.beat) - recStart) / vSpeed
+  );
   const clapAccents = judged.map((e) => e.panels.length >= 2);
   const ghostTimes = chart.events
     .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
-    .map((e) => offsetSec + timeAtBeat(timeline, e.row.beat) - recStart);
+    .map((e) => (offsetSec + timeAtBeat(timeline, e.row.beat) - recStart) / vSpeed);
   const { samples: clapSamples, sr: clapSr } = renderClapTrackSamples(
     clapTimes,
     clapAccents,
-    durationSec,
+    realDuration,
     ghostTimes
   );
   const clapBuf = actx.createBuffer(1, clapSamples.length, clapSr);
@@ -192,7 +210,7 @@ export async function recordChartVideo(
   const { mime, ext } = pickMime();
   const rec = new MediaRecorder(stream, {
     ...(mime ? { mimeType: mime } : {}),
-    videoBitsPerSecond: 8_000_000,
+    videoBitsPerSecond: L ? 12_000_000 : 8_000_000,
   });
   const chunks: BlobPart[] = [];
   rec.ondataavailable = (e) => {
@@ -219,12 +237,13 @@ export async function recordChartVideo(
   const drawIntro = () => {
     drawStripedBg();
     // サムネの上に大きなサイトロゴ (イントロカードだけの特別配置)
-    drawSiteLogo(ctx, W / 2, 100, 54, "center");
+    drawSiteLogo(ctx, W / 2, L ? 84 : 100, L ? 60 : 54, "center");
     // ジャケットは直角 (サイトのカードと同じ様式)。難易度クラス色の枠 +
     // ぼかしなしの黒ハードシャドウで、枠色が背景色と近くても浮かせる
-    const jSize = 540;
-    const jx = (W - jSize) / 2;
-    const jy = 215;
+    // 横長はジャケット左+テキスト右の2カラム
+    const jSize = L ? 560 : 540;
+    const jx = L ? 300 : (W - jSize) / 2;
+    const jy = L ? 260 : 215;
     const frameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
     const frameW = 10;
     ctx.fillStyle = "#17181c";
@@ -251,7 +270,7 @@ export async function recordChartVideo(
       const innerW = footSize + (footSize && lm ? 14 : 0) + (lm?.width ?? 0);
       const chipW2 = innerW + 60;
       const chipH = 106;
-      const cx0 = (W - chipW2) / 2;
+      const cx0 = jx + (jSize - chipW2) / 2; // ジャケット中央に重ねる
       const cy0 = jy + jSize - chipH / 2;
       // チップも直角 (白 + 黒ハードシャドウ + 黒枠)
       ctx.fillStyle = "#17181c";
@@ -275,45 +294,33 @@ export async function recordChartVideo(
         ctx.fillText(lvl, dx, cy0 + chipH / 2 + (asc - desc) / 2);
       }
     }
-    // 曲名 + アーティスト + BPM (中央揃え)
+    // 曲名 + アーティスト + BPM (縦=下部中央 / 横=右カラム中央)
+    const tcx = L ? (jx + jSize + 80 + (W - 100)) / 2 : W / 2;
+    const tMaxW = L ? W - (jx + jSize + 80) - 100 : W - 80;
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = fg;
-    ctx.font = `400 58px ${titleFont}`;
-    ctx.fillText(o.title, W / 2, 920, W - 80);
+    ctx.font = `400 ${L ? 64 : 58}px ${titleFont}`;
+    ctx.fillText(o.title, tcx, L ? 460 : 920, tMaxW);
     if (o.subtitle) {
       ctx.globalAlpha = 0.75;
-      ctx.font = `400 34px ${titleFont}`;
-      ctx.fillText(o.subtitle, W / 2, 982, W - 80);
+      ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
+      ctx.fillText(o.subtitle, tcx, L ? 535 : 982, tMaxW);
       ctx.globalAlpha = 1;
     }
     ctx.globalAlpha = 0.8;
-    ctx.font = `400 34px ${titleFont}`;
-    ctx.fillText("BPM", W / 2, 1086);
+    ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
+    ctx.fillText("BPM", tcx, L ? 690 : 1086);
     ctx.globalAlpha = 1;
-    ctx.font = `400 76px ${titleFont}`;
-    ctx.fillText(o.bpmLabel, W / 2, 1172, W - 80);
+    ctx.font = `400 ${L ? 88 : 76}px ${titleFont}`;
+    ctx.fillText(o.bpmLabel, tcx, L ? 790 : 1172, tMaxW);
     ctx.textAlign = "left";
   };
 
-  const drawFrame = (audioTime: number, nowMs: number) => {
-    const tSong = audioTime - offsetSec; // 譜面内時刻
-    const curBeat = beatAtTime(timeline, Math.max(0, tSong));
-
-    drawStripedBg();
-
-    // ヘッダ: ジャケット (またはアイコン) + タイトル + BPMチップ。
-    // 左右はShortsの縦長画面クロップ (片側最大8%≒60px弱) を避けて配置する
-    const SAFE_X = 56;
-    // 枠+ハードシャドウがレーン上端 (HEADER_H) に触れない一回り小さめサイズ
-    const jSize = 120;
-    const jx = SAFE_X;
-    const jy = 12;
-    // イントロカードと同じ直角+難易度色枠+黒ハードシャドウ
-    const hFrameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
-    const hfw = 6;
+  // 直角ジャケット+難易度色枠+黒ハードシャドウ (縦ヘッダー/横右ペーン共通)
+  const drawFramedJacket = (jx: number, jy: number, jSize: number, fw: number) => {
     ctx.fillStyle = "#17181c";
-    ctx.fillRect(jx - hfw + 8, jy - hfw + 8, jSize + hfw * 2, jSize + hfw * 2);
+    ctx.fillRect(jx - fw + 8, jy - fw + 8, jSize + fw * 2, jSize + fw * 2);
     if (o.jacket) {
       ctx.drawImage(o.jacket, jx, jy, jSize, jSize);
     } else {
@@ -321,9 +328,20 @@ export async function recordChartVideo(
       ctx.fillRect(jx, jy, jSize, jSize);
       drawArrow(ctx, jx + jSize / 2, jy + jSize / 2, jSize * 0.72, 90, "#ff5262");
     }
-    ctx.strokeStyle = hFrameColor;
-    ctx.lineWidth = hfw;
-    ctx.strokeRect(jx - hfw / 2, jy - hfw / 2, jSize + hfw, jSize + hfw);
+    ctx.strokeStyle = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
+    ctx.lineWidth = fw;
+    ctx.strokeRect(jx - fw / 2, jy - fw / 2, jSize + fw, jSize + fw);
+  };
+
+  // 縦モードの上部ヘッダー
+  const drawPortraitHeader = () => {
+    // 左右はShortsの縦長画面クロップ (片側最大8%≒60px弱) を避けて配置する
+    const SAFE_X = 56;
+    // 枠+ハードシャドウがレーン上端 (HEADER_H) に触れない一回り小さめサイズ
+    const jSize = 120;
+    const jx = SAFE_X;
+    const jy = 12;
+    drawFramedJacket(jx, jy, jSize, 6);
     // 右側は難易度 (上段) + BPMチップ (下段) の2段組み。
     // 難易度がなければBPMチップだけをジャケット縦中央に置く
     const jMidR = jy + jSize / 2;
@@ -359,14 +377,7 @@ export async function recordChartVideo(
       let dx = W - SAFE_X - diffW;
       if (o.diff.cls !== null) {
         // 背景色とクラス色が近くても見えるよう白の縁取り付き
-        drawDiffFoot(
-          ctx,
-          dx,
-          midY - footSize / 2,
-          footSize,
-          DIFF_COLORS[o.diff.cls],
-          "#ffffff"
-        );
+        drawDiffFoot(ctx, dx, midY - footSize / 2, footSize, DIFF_COLORS[o.diff.cls], "#ffffff");
         dx += footSize + 8;
       }
       if (o.diff.lvl && lvlMet) {
@@ -411,6 +422,94 @@ export async function recordChartVideo(
       ctx.font = subFontDecl;
       ctx.fillText(o.subtitle, textX, blockTop + tAsc + tDesc + lineGap + sAsc, textMaxW);
       ctx.globalAlpha = 1;
+    }
+  };
+
+  // 横モードの右ペーン: ジャケット+曲名+難易度+BPM / 統計カード。
+  // 足パッドはペーン下半分に後段で合成される
+  const drawRightPane = () => {
+    const jSize = 170;
+    const jx = paneX;
+    const jy = 36;
+    drawFramedJacket(jx, jy, jSize, 6);
+    const textX = jx + jSize + 26;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = fg;
+    ctx.font = `400 46px ${titleFont}`;
+    ctx.fillText(o.title, textX, 82, W - textX - 40);
+    if (o.subtitle) {
+      ctx.globalAlpha = 0.72;
+      ctx.font = `400 27px ${titleFont}`;
+      ctx.fillText(o.subtitle, textX, 126, W - textX - 40);
+      ctx.globalAlpha = 1;
+    }
+    // 難易度 + BPMチップを1行に
+    const rowY = 178;
+    let dx = textX;
+    if (o.diff) {
+      const footSize = 42;
+      ctx.font = `400 38px ${titleFont}`;
+      ctx.textBaseline = "alphabetic";
+      const lvlMet = o.diff.lvl ? ctx.measureText(o.diff.lvl) : null;
+      if (o.diff.cls !== null) {
+        drawDiffFoot(ctx, dx, rowY - footSize / 2, footSize, DIFF_COLORS[o.diff.cls], "#ffffff");
+        dx += footSize + 8;
+      }
+      if (o.diff.lvl && lvlMet) {
+        ctx.fillStyle = fg;
+        const asc = lvlMet.actualBoundingBoxAscent || 27;
+        const desc = lvlMet.actualBoundingBoxDescent || 0;
+        ctx.fillText(o.diff.lvl, dx, rowY + (asc - desc) / 2);
+        dx += lvlMet.width + 24;
+      }
+    }
+    const bpmText = `♩=${o.bpmLabel}`;
+    ctx.font = "700 24px ui-monospace, monospace";
+    const chipW = ctx.measureText(bpmText).width + 28;
+    roundRectPath(ctx, dx, rowY - 20, chipW, 40, 8);
+    ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
+    ctx.fill();
+    ctx.fillStyle = "#00e0a0";
+    ctx.textBaseline = "middle";
+    ctx.fillText(bpmText, dx + 14, rowY + 1);
+
+    // 統計カード (アプリのstatsと同じ内容をインクのタイルで)
+    if (o.stats && o.stats.length > 0) {
+      const n = o.stats.length;
+      const gap = 14;
+      const paneW = W - paneX - 40;
+      const cardW = (paneW - gap * (n - 1)) / n;
+      const cardY = 240;
+      const cardH = 104;
+      ctx.textAlign = "center";
+      for (let i = 0; i < n; i++) {
+        const s = o.stats[i];
+        const x = paneX + i * (cardW + gap);
+        ctx.fillStyle = "rgba(23, 24, 28, 0.92)";
+        ctx.fillRect(x, cardY, cardW, cardH);
+        ctx.fillStyle = "#00e0a0";
+        ctx.font = `400 42px ${titleFont}`;
+        ctx.textBaseline = "alphabetic";
+        ctx.fillText(String(s.value), x + cardW / 2, cardY + 56);
+        ctx.fillStyle = "rgba(255,255,255,0.82)";
+        ctx.font = "700 18px system-ui, sans-serif";
+        ctx.fillText(s.label, x + cardW / 2, cardY + 88, cardW - 12);
+      }
+      ctx.textAlign = "left";
+    }
+  };
+
+  const drawFrame = (audioTime: number, nowMs: number) => {
+    const tSong = audioTime - offsetSec; // 譜面内時刻
+    const curBeat = beatAtTime(timeline, Math.max(0, tSong));
+
+    drawStripedBg();
+
+    if (L) {
+      drawRightPane();
+    } else {
+      drawPortraitHeader();
     }
 
     // レーン背景
@@ -530,8 +629,9 @@ export async function recordChartVideo(
       if (evTimes[k] <= tSong + 1e-6) curIdx = k;
       else break;
     }
+    // フラッシュの実時間は速度によらず一定 (0.18秒)
     const hitEvent =
-      curIdx >= 0 && tSong - evTimes[curIdx] < 0.18 ? chart.events[curIdx] : null;
+      curIdx >= 0 && tSong - evTimes[curIdx] < 0.18 * vSpeed ? chart.events[curIdx] : null;
     for (let p = 0; p < 4; p++) {
       const hit = hitEvent?.panels.includes(p) ?? false;
       const foot = hit && curIdx >= 0 ? footsteps[curIdx].feet[p] : null;
@@ -541,7 +641,8 @@ export async function recordChartVideo(
     // 足パッド (Three.jsシーンを合成)
     if (footScene) {
       let footIdx = -1;
-      const tLead = tSong + FOOT_TRAVEL;
+      // 足の移動アニメーション(実時間0.25秒)ぶんだけ先読みする
+      const tLead = tSong + FOOT_TRAVEL * vSpeed;
       for (let k = 0; k < chart.events.length; k++) {
         if (evTimes[k] <= tLead + 1e-6) footIdx = k;
         else break;
@@ -570,8 +671,8 @@ export async function recordChartVideo(
         }
       }
       footScene.frame(nowMs);
-      // 幅はキャンバスより広め (左右は空きなのではみ出してOK)。迫力優先で大きく合成
-      ctx.drawImage(footScene.canvas, (W - PAD_W) / 2, H - PAD_H - 8, PAD_W, PAD_H);
+      // 幅は領域より広め (左右は空きなのではみ出してOK)。迫力優先で大きく合成
+      ctx.drawImage(footScene.canvas, padX, padY, PAD_W, PAD_H);
     }
 
     // フッター: 進行バー + サイトロゴ風クレジット
@@ -621,11 +722,13 @@ export async function recordChartVideo(
         rec.stop();
         return;
       }
-      const audioTime = recStart + (actx.currentTime - t0);
-      if (audioTime - recStart < INTRO_SEC) drawIntro();
-      else drawFrame(audioTime, performance.now());
-      o.onProgress?.(Math.max(0, Math.min(1, (audioTime - recStart) / durationSec)));
-      if (audioTime >= songEnd) {
+      // 実時間 r → 譜面内時刻 (0.5倍速なら半分の速さで進む)
+      const r = actx.currentTime - t0;
+      const songTime = recStart + r * vSpeed;
+      if (r < INTRO_SEC) drawIntro();
+      else drawFrame(songTime, performance.now());
+      o.onProgress?.(Math.max(0, Math.min(1, r / realDuration)));
+      if (songTime >= songEnd) {
         rec.stop();
         return;
       }

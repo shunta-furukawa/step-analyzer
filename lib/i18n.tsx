@@ -115,6 +115,8 @@ export interface Strings {
   videoTplCopy: string;
   videoTplCopied: string;
   hlCommentPlaceholder: string;
+  videoModePortrait: string;
+  videoModeLandscape: string;
   videoCancel: string;
   // 小節番号タップの範囲選択
   rangePending: (m: number) => string;
@@ -285,6 +287,8 @@ const ja: Strings = {
   videoTplCopy: "動画概要をテキストでコピー",
   videoTplCopied: "✓ コピーしました",
   hlCommentPlaceholder: "コメント (動画の注目シーンで表示)",
+  videoModePortrait: "縦 (ショート・等速)",
+  videoModeLandscape: "横 (じっくり0.5倍速)",
   videoCancel: "中止",
   rangePending: (m) => `始点: ${m}小節目 — 終点の番号をタップ`,
   rangeActive: (a, b) => `共有・画像の範囲: ${a}〜${b}小節`,
@@ -456,6 +460,8 @@ const en: Strings = {
   videoTplCopy: "Copy video summary as text",
   videoTplCopied: "✓ Copied",
   hlCommentPlaceholder: "Comment (shown at spotlight scenes in videos)",
+  videoModePortrait: "Portrait (Shorts, 1×)",
+  videoModeLandscape: "Landscape (study, 0.5×)",
   videoCancel: "Cancel",
   rangePending: (m) => `Start: measure ${m} — tap the end measure number`,
   rangeActive: (a, b) => `Share / image range: ${a}–${b}`,
@@ -626,6 +632,8 @@ const ko: Strings = {
   videoTplCopy: "동영상 개요를 텍스트로 복사",
   videoTplCopied: "✓ 복사했습니다",
   hlCommentPlaceholder: "코멘트 (동영상 주목 장면에 표시)",
+  videoModePortrait: "세로 (쇼트·1배속)",
+  videoModeLandscape: "가로 (관찰용 0.5배속)",
   videoCancel: "중지",
   rangePending: (m) => `시작: ${m}마디 — 끝 마디 번호를 탭`,
   rangeActive: (a, b) => `공유·이미지 범위: ${a}〜${b}마디`,
