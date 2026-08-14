@@ -1827,13 +1827,37 @@ export default function Viewer({
                       ).toFixed(1)}`
                     : `${+bpms[0].bpm.toFixed(1)}`;
                 const shareUrl = location.origin + (await buildUrl());
+                // 1行目=動画タイトル、空行以降=概要欄。縦横で文言を分ける
+                const isLand = vMode === "landscape";
+                const head = isLand
+                  ? `【STEP ANALYZER】${name}${diffTxt} 足割りじっくり解説 (0.5倍速)`
+                  : `【STEP ANALYZER】${name}${diffTxt} #Shorts`;
+                const body = isLand
+                  ? [
+                      "DDRの譜面をどちらの足で踏むか (足割り) を自動解析し、0.5倍速でじっくり再生しています。",
+                      "注目ポイントでは一時停止して解説コメントが入ります。",
+                      "",
+                      "譜面と足割りをブラウザで見る:",
+                      shareUrl,
+                      "",
+                      "#DDR #DanceDanceRevolution #StepAnalyzer",
+                    ]
+                  : [
+                      "DDRの譜面をどちらの足で踏むか (足割り) を自動解析して再生しています。",
+                      "じっくり見たい人向けの0.5倍速解説版は関連動画からどうぞ。",
+                      "",
+                      "譜面と足割りをブラウザで見る:",
+                      shareUrl,
+                      "",
+                      "#DDR #DanceDanceRevolution #Shorts #StepAnalyzer",
+                    ];
                 const text = [
-                  `【STEP ANALYZER】${name}${diffTxt}`,
+                  head,
                   "",
                   `${name}${subtitle ? ` / ${subtitle}` : ""}`,
-                  `♩=${bpmTxt}${diffTxt}`,
-                  `足割り・譜面: ${shareUrl}`,
-                  "#DDR #DanceDanceRevolution #Shorts #StepAnalyzer",
+                  `♩=${bpmTxt}${diffTxt} / ${stats.steps}ステップ`,
+                  "",
+                  ...body,
                 ].join("\n");
                 try {
                   await navigator.clipboard.writeText(text);
