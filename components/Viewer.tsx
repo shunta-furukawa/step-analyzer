@@ -1784,10 +1784,8 @@ export default function Viewer({
                     : `${+bpms[0].bpm.toFixed(1)}`;
                 const shareUrl = location.origin + (await buildUrl());
                 const text = [
-                  "▼タイトル",
                   `【How to Execute】${name}${diffTxt}`,
                   "",
-                  "▼概要欄",
                   `${name}${subtitle ? ` / ${subtitle}` : ""}`,
                   `♩=${bpmTxt}${diffTxt}`,
                   `足割り・譜面: ${shareUrl}`,
