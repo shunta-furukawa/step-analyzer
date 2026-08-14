@@ -1784,12 +1784,12 @@ export default function Viewer({
                     : `${+bpms[0].bpm.toFixed(1)}`;
                 const shareUrl = location.origin + (await buildUrl());
                 const text = [
-                  `【How to Execute】${name}${diffTxt}`,
+                  `【Step Analysis】${name}${diffTxt}`,
                   "",
                   `${name}${subtitle ? ` / ${subtitle}` : ""}`,
                   `♩=${bpmTxt}${diffTxt}`,
                   `足割り・譜面: ${shareUrl}`,
-                  "#DDR #DanceDanceRevolution #Shorts",
+                  "#DDR #DanceDanceRevolution #Shorts #StepAnalyzer",
                 ].join("\n");
                 try {
                   await navigator.clipboard.writeText(text);
