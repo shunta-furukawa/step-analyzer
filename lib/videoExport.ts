@@ -843,6 +843,11 @@ export async function recordChartVideo(
       reject(new Error("録画に失敗しました"));
     };
 
+    // 録画開始前にイントロカードを描いておく。最初のrAFが来る前に
+    // キャプチャされるフレームが真っ黒にならないように (=1フレーム目が
+    // そのままサムネになる)
+    drawIntro();
+
     const t0 = actx.currentTime;
     if (musicSrc && o.audio) {
       musicSrc.start(0, Math.min(recStart, Math.max(0, o.audio.duration - 0.1)));
