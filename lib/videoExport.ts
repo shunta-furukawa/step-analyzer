@@ -225,6 +225,24 @@ export async function recordChartVideo(
     realDuration,
     ghostTimes
   );
+  // 字送りに合わせたデジタル音 (矩形波の短いブリップ) をトラックへ焼き込む。
+  // 文字の出現時刻は事前に確定しているので、波形に直接書けばズレない
+  for (const p of pauses) {
+    const startReal = songToReal(p.t) + 0.35; // drawSpotlightCardの字送り開始と同期
+    const chars = [...p.text];
+    for (let k = 0; k < chars.length; k++) {
+      if (/\s/.test(chars[k])) continue; // 空白は無音 (セリフ送りらしい間になる)
+      const at = startReal + k * 0.05;
+      const start = Math.floor(at * clapSr);
+      const len = Math.floor(clapSr * 0.028);
+      for (let i = 0; i < len && start + i < clapSamples.length; i++) {
+        const t = i / clapSr;
+        const sq = Math.sign(Math.sin(2 * Math.PI * 1046.5 * t)); // C6の矩形波
+        clapSamples[start + i] += sq * 0.1 * Math.exp(-t * 90);
+      }
+    }
+  }
+
   const clapBuf = actx.createBuffer(1, clapSamples.length, clapSr);
   clapBuf.copyToChannel(clapSamples as Float32Array<ArrayBuffer>, 0);
   const clapSrc = actx.createBufferSource();
