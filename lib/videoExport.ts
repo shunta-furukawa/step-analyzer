@@ -50,6 +50,7 @@ const LANE_X = (W - LANE_W * 4) / 2;
 const RECEPTOR_Y = HEADER_H + 82;
 const LANE_BOTTOM = H - 362;
 const LEAD_IN = 1.5; // 録画開始から1ノーツ目までの助走秒数
+const INTRO_SEC = 0.5; // 冒頭のサムネ向けイントロカード表示時間
 const TAIL = 1.2;
 const FOOT_TRAVEL = 0.25;
 
@@ -206,11 +207,8 @@ export async function recordChartVideo(
     if (e.data.size > 0) chunks.push(e.data);
   };
 
-  const drawFrame = (audioTime: number, nowMs: number) => {
-    const tSong = audioTime - offsetSec; // 譜面内時刻
-    const curBeat = beatAtTime(timeline, Math.max(0, tSong));
-
-    // 背景 (ページと同じ斜めストライプ: 115deg・18px相当を動画スケールに拡大)
+  // 背景 (ページと同じ斜めストライプ: 115deg・18px相当を動画スケールに拡大)
+  const drawStripedBg = () => {
     ctx.fillStyle = `#${o.bgColor}`;
     ctx.fillRect(0, 0, W, H);
     ctx.save();
@@ -222,6 +220,90 @@ export async function recordChartVideo(
       ctx.fillRect(x, -W, stripeW, W * 2 + H * 2);
     }
     ctx.restore();
+  };
+
+  // 冒頭のイントロカード (ショートのサムネはほぼ先頭フレームが使われる)。
+  // ジャケット大 + 難易度チップ + 曲名 + BPM を1枚絵として見せる
+  const drawIntro = () => {
+    drawStripedBg();
+    const jSize = 540;
+    const jx = (W - jSize) / 2;
+    const jy = 150;
+    if (o.jacket) {
+      ctx.save();
+      roundRectPath(ctx, jx, jy, jSize, jSize, 28);
+      ctx.clip();
+      ctx.drawImage(o.jacket, jx, jy, jSize, jSize);
+      ctx.restore();
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 8;
+      roundRectPath(ctx, jx, jy, jSize, jSize, 28);
+      ctx.stroke();
+    } else {
+      drawAppIcon(ctx, jx, jy, jSize);
+    }
+    // 難易度チップ (白地にハードシャドウ、ジャケット下辺に重ねる)
+    const cls = o.diff?.cls ?? null;
+    const lvl = o.diff?.lvl ?? "";
+    if (cls !== null || lvl) {
+      ctx.font = `400 66px ${titleFont}`;
+      const lm = lvl ? ctx.measureText(lvl) : null;
+      const footSize = cls !== null ? 78 : 0;
+      const innerW = footSize + (footSize && lm ? 14 : 0) + (lm?.width ?? 0);
+      const chipW2 = innerW + 60;
+      const chipH = 106;
+      const cx0 = (W - chipW2) / 2;
+      const cy0 = jy + jSize - chipH / 2;
+      ctx.fillStyle = "#17181c";
+      roundRectPath(ctx, cx0 + 7, cy0 + 7, chipW2, chipH, 14);
+      ctx.fill();
+      roundRectPath(ctx, cx0, cy0, chipW2, chipH, 14);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#17181c";
+      ctx.lineWidth = 5;
+      ctx.stroke();
+      let dx = cx0 + 30;
+      if (cls !== null) {
+        drawDiffFoot(ctx, dx, cy0 + (chipH - footSize) / 2, footSize, DIFF_COLORS[cls]);
+        dx += footSize + 14;
+      }
+      if (lm) {
+        ctx.fillStyle = "#17181c";
+        ctx.textAlign = "left";
+        ctx.textBaseline = "alphabetic";
+        const asc = lm.actualBoundingBoxAscent || 46;
+        const desc = lm.actualBoundingBoxDescent || 0;
+        ctx.fillText(lvl, dx, cy0 + chipH / 2 + (asc - desc) / 2);
+      }
+    }
+    // 曲名 + アーティスト + BPM (中央揃え)
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = fg;
+    ctx.font = `400 58px ${titleFont}`;
+    ctx.fillText(o.title, W / 2, 856, W - 80);
+    if (o.subtitle) {
+      ctx.globalAlpha = 0.75;
+      ctx.font = `400 34px ${titleFont}`;
+      ctx.fillText(o.subtitle, W / 2, 918, W - 80);
+      ctx.globalAlpha = 1;
+    }
+    ctx.globalAlpha = 0.8;
+    ctx.font = `400 40px ${titleFont}`;
+    ctx.fillText("BPM", W / 2, 1032);
+    ctx.globalAlpha = 1;
+    ctx.font = `400 92px ${titleFont}`;
+    ctx.fillText(o.bpmLabel, W / 2, 1134, W - 80);
+    ctx.textAlign = "left";
+    drawSiteLogo(ctx, W - 14, H - 32, 22);
+  };
+
+  const drawFrame = (audioTime: number, nowMs: number) => {
+    const tSong = audioTime - offsetSec; // 譜面内時刻
+    const curBeat = beatAtTime(timeline, Math.max(0, tSong));
+
+    drawStripedBg();
 
     // ヘッダ: ジャケット (またはアイコン) + タイトル + BPMチップ
     const jSize = 140;
@@ -533,7 +615,8 @@ export async function recordChartVideo(
         return;
       }
       const audioTime = recStart + (actx.currentTime - t0);
-      drawFrame(audioTime, performance.now());
+      if (audioTime - recStart < INTRO_SEC) drawIntro();
+      else drawFrame(audioTime, performance.now());
       o.onProgress?.(Math.max(0, Math.min(1, (audioTime - recStart) / durationSec)));
       if (audioTime >= songEnd) {
         rec.stop();
