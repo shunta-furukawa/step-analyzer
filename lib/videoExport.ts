@@ -229,18 +229,24 @@ export async function recordChartVideo(
     const jSize = 540;
     const jx = (W - jSize) / 2;
     const jy = 150;
+    // 枠線は難易度クラスが設定されていればその色に (未設定は白)
+    const frameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
     if (o.jacket) {
       ctx.save();
       roundRectPath(ctx, jx, jy, jSize, jSize, 28);
       ctx.clip();
       ctx.drawImage(o.jacket, jx, jy, jSize, jSize);
       ctx.restore();
-      ctx.strokeStyle = "#ffffff";
+      ctx.strokeStyle = frameColor;
       ctx.lineWidth = 8;
       roundRectPath(ctx, jx, jy, jSize, jSize, 28);
       ctx.stroke();
     } else {
       drawAppIcon(ctx, jx, jy, jSize);
+      ctx.strokeStyle = frameColor;
+      ctx.lineWidth = 8;
+      roundRectPath(ctx, jx, jy, jSize, jSize, jSize * 0.16);
+      ctx.stroke();
     }
     // 難易度チップ (白地にハードシャドウ、ジャケット下辺に重ねる)
     const cls = o.diff?.cls ?? null;
