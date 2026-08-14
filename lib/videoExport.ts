@@ -226,28 +226,25 @@ export async function recordChartVideo(
   // ジャケット大 + 難易度チップ + 曲名 + BPM を1枚絵として見せる
   const drawIntro = () => {
     drawStripedBg();
+    // ジャケットは直角 (サイトのカードと同じ様式)。難易度クラス色の枠 +
+    // ぼかしなしの黒ハードシャドウで、枠色が背景色と近くても浮かせる
     const jSize = 540;
     const jx = (W - jSize) / 2;
     const jy = 150;
-    // 枠線は難易度クラスが設定されていればその色に (未設定は白)
     const frameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
+    const frameW = 10;
+    ctx.fillStyle = "#17181c";
+    ctx.fillRect(jx - frameW + 14, jy - frameW + 14, jSize + frameW * 2, jSize + frameW * 2);
     if (o.jacket) {
-      ctx.save();
-      roundRectPath(ctx, jx, jy, jSize, jSize, 28);
-      ctx.clip();
       ctx.drawImage(o.jacket, jx, jy, jSize, jSize);
-      ctx.restore();
-      ctx.strokeStyle = frameColor;
-      ctx.lineWidth = 8;
-      roundRectPath(ctx, jx, jy, jSize, jSize, 28);
-      ctx.stroke();
     } else {
-      drawAppIcon(ctx, jx, jy, jSize);
-      ctx.strokeStyle = frameColor;
-      ctx.lineWidth = 8;
-      roundRectPath(ctx, jx, jy, jSize, jSize, jSize * 0.16);
-      ctx.stroke();
+      ctx.fillStyle = "#0b0e1a";
+      ctx.fillRect(jx, jy, jSize, jSize);
+      drawArrow(ctx, jx + jSize / 2, jy + jSize / 2, jSize * 0.72, 90, "#ff5262");
     }
+    ctx.strokeStyle = frameColor;
+    ctx.lineWidth = frameW;
+    ctx.strokeRect(jx - frameW / 2, jy - frameW / 2, jSize + frameW, jSize + frameW);
     // 難易度チップ (白地にハードシャドウ、ジャケット下辺に重ねる)
     const cls = o.diff?.cls ?? null;
     const lvl = o.diff?.lvl ?? "";
@@ -260,15 +257,14 @@ export async function recordChartVideo(
       const chipH = 106;
       const cx0 = (W - chipW2) / 2;
       const cy0 = jy + jSize - chipH / 2;
+      // チップも直角 (白 + 黒ハードシャドウ + 黒枠)
       ctx.fillStyle = "#17181c";
-      roundRectPath(ctx, cx0 + 7, cy0 + 7, chipW2, chipH, 14);
-      ctx.fill();
-      roundRectPath(ctx, cx0, cy0, chipW2, chipH, 14);
+      ctx.fillRect(cx0 + 7, cy0 + 7, chipW2, chipH);
       ctx.fillStyle = "#ffffff";
-      ctx.fill();
+      ctx.fillRect(cx0, cy0, chipW2, chipH);
       ctx.strokeStyle = "#17181c";
       ctx.lineWidth = 5;
-      ctx.stroke();
+      ctx.strokeRect(cx0, cy0, chipW2, chipH);
       let dx = cx0 + 30;
       if (cls !== null) {
         drawDiffFoot(ctx, dx, cy0 + (chipH - footSize) / 2, footSize, DIFF_COLORS[cls]);
