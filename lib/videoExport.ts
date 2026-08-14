@@ -120,14 +120,6 @@ function holdSegmentsOf(chart: ParsedChart, footsteps: FootStep[]) {
   return segs;
 }
 
-// ジャケットがないときのアプリアイコン風タイル (ダークネイビー + 赤矢印)
-function drawAppIcon(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
-  roundRectPath(ctx, x, y, size, size, size * 0.16);
-  ctx.fillStyle = "#0b0e1a";
-  ctx.fill();
-  drawArrow(ctx, x + size / 2, y + size / 2, size * 0.72, 90, "#ff5262");
-}
-
 export async function recordChartVideo(
   o: VideoExportOptions
 ): Promise<{ blob: Blob; ext: string }> {
@@ -310,30 +302,34 @@ export async function recordChartVideo(
 
     drawStripedBg();
 
-    // ヘッダ: ジャケット (またはアイコン) + タイトル + BPMチップ
+    // ヘッダ: ジャケット (またはアイコン) + タイトル + BPMチップ。
+    // 左右はShortsの縦長画面クロップ (片側最大8%≒60px弱) を避けて配置する
+    const SAFE_X = 56;
     const jSize = 140;
-    const jx = 24; // 端ギリギリはShortsの左右クロップで切れるため少し内側に
+    const jx = SAFE_X;
     const jy = 10;
+    // イントロカードと同じ直角+難易度色枠+黒ハードシャドウ
+    const hFrameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
+    const hfw = 6;
+    ctx.fillStyle = "#17181c";
+    ctx.fillRect(jx - hfw + 8, jy - hfw + 8, jSize + hfw * 2, jSize + hfw * 2);
     if (o.jacket) {
-      ctx.save();
-      roundRectPath(ctx, jx, jy, jSize, jSize, 18);
-      ctx.clip();
       ctx.drawImage(o.jacket, jx, jy, jSize, jSize);
-      ctx.restore();
-      ctx.strokeStyle = "rgba(255,255,255,0.75)";
-      ctx.lineWidth = 4;
-      roundRectPath(ctx, jx, jy, jSize, jSize, 18);
-      ctx.stroke();
     } else {
-      drawAppIcon(ctx, jx, jy, jSize);
+      ctx.fillStyle = "#0b0e1a";
+      ctx.fillRect(jx, jy, jSize, jSize);
+      drawArrow(ctx, jx + jSize / 2, jy + jSize / 2, jSize * 0.72, 90, "#ff5262");
     }
+    ctx.strokeStyle = hFrameColor;
+    ctx.lineWidth = hfw;
+    ctx.strokeRect(jx - hfw / 2, jy - hfw / 2, jSize + hfw, jSize + hfw);
     // 右側は難易度 (上段) + BPMチップ (下段) の2段組み。
     // 難易度がなければBPMチップだけをジャケット縦中央に置く
     const jMidR = jy + jSize / 2;
     const bpmText = `♩=${o.bpmLabel}`;
     ctx.font = "700 24px ui-monospace, monospace";
     const chipW = ctx.measureText(bpmText).width + 28;
-    const chipX = W - 24 - chipW;
+    const chipX = W - SAFE_X - chipW;
     const chipY = (o.diff ? jMidR + 25 : jMidR) - 20;
     roundRectPath(ctx, chipX, chipY, chipW, 40, 8);
     ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
@@ -357,9 +353,9 @@ export async function recordChartVideo(
         (o.diff.cls !== null ? footSize : 0) +
         (o.diff.cls !== null && o.diff.lvl ? 8 : 0) +
         (lvlMet?.width ?? 0);
-      diffLeft = Math.min(chipX, W - 24 - diffW);
+      diffLeft = Math.min(chipX, W - SAFE_X - diffW);
       const midY = jMidR - 25;
-      let dx = W - 24 - diffW;
+      let dx = W - SAFE_X - diffW;
       if (o.diff.cls !== null) {
         // 背景色とクラス色が近くても見えるよう白の縁取り付き
         drawDiffFoot(
