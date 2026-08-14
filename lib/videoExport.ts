@@ -815,6 +815,24 @@ export async function recordChartVideo(
     ctx.fillRect(0, H - 8, W, 8);
     ctx.fillStyle = "#00e0a0";
     ctx.fillRect(0, H - 8, W * ratio, 8);
+    // 注目停止の位置を★で予告する (通過済みは薄く)。急に止まって
+    // 驚かないよう、どこで止まるかをタイムライン上で見せておく
+    if (pauses.length > 0) {
+      ctx.font = "700 24px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "alphabetic";
+      for (const p of pauses) {
+        const px = Math.max(16, Math.min(W - 16, (W * (p.t - recStart)) / durationSec));
+        ctx.globalAlpha = audioTime > p.t + 1e-6 ? 0.35 : 1;
+        ctx.strokeStyle = "#17181c";
+        ctx.lineWidth = 3;
+        ctx.strokeText("★", px, H - 14);
+        ctx.fillStyle = "#ffd93b";
+        ctx.fillText("★", px, H - 14);
+      }
+      ctx.globalAlpha = 1;
+      ctx.textAlign = "left";
+    }
   };
 
   return new Promise<{ blob: Blob; ext: string }>((resolve, reject) => {
