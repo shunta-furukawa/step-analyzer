@@ -241,6 +241,7 @@ export default function Viewer({
 
   // 動画書き出しモーダル
   const [showVideo, setShowVideo] = useState(false);
+  const [vTplCopied, setVTplCopied] = useState(false);
   const [vUseMedia, setVUseMedia] = useState(false);
   const [vOgg, setVOgg] = useState("");
   const [vJacket, setVJacket] = useState("");
@@ -1159,6 +1160,7 @@ export default function Viewer({
             if (!chart) return;
             setVDone(false);
             setVError(null);
+            setVTplCopied(false);
             setShowVideo(true);
           }}
           title={S.videoBtnTitle}
@@ -1765,6 +1767,42 @@ export default function Viewer({
                 {S.videoCancel}
               </button>
             )}
+            {/* 投稿用テンプレ (タイトル+概要欄) をクリップボードへ。控えめに */}
+            <button
+              className="tpl-copy"
+              onClick={async () => {
+                const name = title || S.untitled;
+                const diffTxt =
+                  diffCls !== null || diffLvl
+                    ? ` (${diffCls !== null ? ["習", "楽", "踊", "激", "鬼"][diffCls] : "Lv"}${diffLvl})`
+                    : "";
+                const bpmTxt =
+                  bpms.length > 1
+                    ? `${+Math.min(...bpms.map((x) => x.bpm)).toFixed(1)}-${+Math.max(
+                        ...bpms.map((x) => x.bpm)
+                      ).toFixed(1)}`
+                    : `${+bpms[0].bpm.toFixed(1)}`;
+                const shareUrl = location.origin + (await buildUrl());
+                const text = [
+                  "▼タイトル",
+                  `【How to Execute】${name}${diffTxt}`,
+                  "",
+                  "▼概要欄",
+                  `${name}${subtitle ? ` / ${subtitle}` : ""}`,
+                  `♩=${bpmTxt}${diffTxt}`,
+                  `足割り・譜面: ${shareUrl}`,
+                  "#DDR #DanceDanceRevolution #Shorts",
+                ].join("\n");
+                try {
+                  await navigator.clipboard.writeText(text);
+                  setVTplCopied(true);
+                } catch {
+                  // クリップボード不許可なら黙って何もしない
+                }
+              }}
+            >
+              {vTplCopied ? S.videoTplCopied : S.videoTplCopy}
+            </button>
           </div>
         </div>
       )}

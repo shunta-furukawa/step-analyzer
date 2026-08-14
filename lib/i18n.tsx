@@ -112,6 +112,8 @@ export interface Strings {
   videoExport: string;
   videoRecording: (pct: number) => string;
   videoDone: string;
+  videoTplCopy: string;
+  videoTplCopied: string;
   videoCancel: string;
   // 小節番号タップの範囲選択
   rangePending: (m: number) => string;
@@ -279,6 +281,8 @@ const ja: Strings = {
   videoExport: "動画を書き出し",
   videoRecording: (pct) => `録画中… ${pct}%`,
   videoDone: "✓ 書き出しました",
+  videoTplCopy: "投稿用テンプレをコピー",
+  videoTplCopied: "✓ テンプレをコピーしました",
   videoCancel: "中止",
   rangePending: (m) => `始点: ${m}小節目 — 終点の番号をタップ`,
   rangeActive: (a, b) => `共有・画像の範囲: ${a}〜${b}小節`,
@@ -447,6 +451,8 @@ const en: Strings = {
   videoExport: "Export video",
   videoRecording: (pct) => `Recording… ${pct}%`,
   videoDone: "✓ Exported",
+  videoTplCopy: "Copy post template",
+  videoTplCopied: "✓ Template copied",
   videoCancel: "Cancel",
   rangePending: (m) => `Start: measure ${m} — tap the end measure number`,
   rangeActive: (a, b) => `Share / image range: ${a}–${b}`,
@@ -614,6 +620,8 @@ const ko: Strings = {
   videoExport: "동영상 내보내기",
   videoRecording: (pct) => `녹화 중… ${pct}%`,
   videoDone: "✓ 내보냈습니다",
+  videoTplCopy: "게시용 템플릿 복사",
+  videoTplCopied: "✓ 템플릿을 복사했습니다",
   videoCancel: "중지",
   rangePending: (m) => `시작: ${m}마디 — 끝 마디 번호를 탭`,
   rangeActive: (a, b) => `공유·이미지 범위: ${a}〜${b}마디`,

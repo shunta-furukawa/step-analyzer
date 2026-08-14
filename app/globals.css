@@ -640,6 +640,24 @@ select {
   margin-top: -4px;
 }
 
+/* 投稿テンプレのコピー (目立たないリンク風) */
+.tpl-copy {
+  background: none;
+  border: none;
+  box-shadow: none;
+  color: var(--muted-dark);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 0 0;
+  text-align: center;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tpl-copy:active {
+  transform: none;
+}
+
 .chart-title .bpm {
   color: var(--muted-dark);
   font-size: 12px;
