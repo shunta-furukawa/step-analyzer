@@ -305,9 +305,10 @@ export async function recordChartVideo(
     // ヘッダ: ジャケット (またはアイコン) + タイトル + BPMチップ。
     // 左右はShortsの縦長画面クロップ (片側最大8%≒60px弱) を避けて配置する
     const SAFE_X = 56;
-    const jSize = 140;
+    // 枠+ハードシャドウがレーン上端 (HEADER_H) に触れない一回り小さめサイズ
+    const jSize = 120;
     const jx = SAFE_X;
-    const jy = 10;
+    const jy = 12;
     // イントロカードと同じ直角+難易度色枠+黒ハードシャドウ
     const hFrameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
     const hfw = 6;
@@ -384,8 +385,8 @@ export async function recordChartVideo(
     const textX = jx + jSize + 22;
     const textMaxW = diffLeft - textX - 16;
     const jMid = jy + jSize / 2;
-    const titleFontDecl = `400 44px ${titleFont}`;
-    const subFontDecl = `400 28px ${titleFont}`;
+    const titleFontDecl = `400 38px ${titleFont}`;
+    const subFontDecl = `400 24px ${titleFont}`;
     ctx.textBaseline = "alphabetic";
     ctx.font = titleFontDecl;
     const tMet = ctx.measureText(o.title);
