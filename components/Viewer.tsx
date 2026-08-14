@@ -65,7 +65,12 @@ import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
 
 const EDIT_RESOLUTIONS = [4, 8, 12, 16, 24, 32];
-const HISPEED_OPTIONS = [0.5, 0.75, 1, 1.5, 2, 3];
+// ハイスピは0.05刻みの自由値 (0.25〜6)。URL値も丸めて取り込む
+const HS_MIN = 0.25;
+const HS_MAX = 6;
+function clampHs(n: number): number {
+  return Math.min(HS_MAX, Math.max(HS_MIN, Math.round(n * 20) / 20));
+}
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1];
 
 // URLパラメータの値を選択肢のうち最も近いものに丸める
@@ -295,9 +300,12 @@ export default function Viewer({
   const [playedIdx, setPlayedIdx] = useState(-1);
   const [playing, setPlaying] = useState(false);
   const [speed, setSpeed] = useState(() => parseChoice(initialSpeed, SPEED_OPTIONS, 1));
-  const [hispeed, setHispeed] = useState(() =>
-    parseChoice(initialHispeed, HISPEED_OPTIONS, 1)
-  );
+  const [hispeed, setHispeed] = useState(() => {
+    const n = Number(initialHispeed);
+    return Number.isFinite(n) && n > 0 ? clampHs(n) : 1;
+  });
+  // 入力途中の "1." などを許すため表示用テキストは別に持つ
+  const [hsText, setHsText] = useState(() => String(hispeed));
   const [muted, setMuted] = useState(false);
   const [ghostSound, setGhostSound] = useState(true); // 空打ちのストンプ音
   const [bgColor, setBgColor] = useState(() =>
@@ -1224,20 +1232,48 @@ export default function Viewer({
             </div>
             <div className="opt-row">
               <span className="opt-label">{S.hispeedLabel}</span>
-              <select
-                value={hispeed}
-                onChange={(e) => {
-                  setHispeed(Number(e.target.value));
-                  setDirty(true);
-                }}
-              >
-                {HISPEED_OPTIONS.map((h) => (
-                  <option key={h} value={h}>
-                    HS {h}×
-                  </option>
-                ))}
-              </select>
+              <div className="hs-edit">
+                <input
+                  type="range"
+                  min={HS_MIN}
+                  max={HS_MAX}
+                  step={0.05}
+                  value={hispeed}
+                  onChange={(e) => {
+                    const v = clampHs(Number(e.target.value));
+                    setHispeed(v);
+                    setHsText(String(v));
+                    setDirty(true);
+                  }}
+                />
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  className="hs-num"
+                  value={hsText}
+                  onChange={(e) => {
+                    const t = e.target.value;
+                    setHsText(t);
+                    const n = Number(t);
+                    if (Number.isFinite(n) && n > 0) {
+                      setHispeed(clampHs(n));
+                      setDirty(true);
+                    }
+                  }}
+                  onBlur={() => setHsText(String(hispeed))}
+                />
+              </div>
             </div>
+            {/* 見かけのスクロールBPM (BPM × HS) */}
+            <p className="hint hs-bpm-hint">
+              {S.hsScrollBpm}: ♩=
+              {bpms.length > 1
+                ? `${+(Math.min(...bpms.map((x) => x.bpm)) * hispeed).toFixed(1)}-${+(
+                    Math.max(...bpms.map((x) => x.bpm)) * hispeed
+                  ).toFixed(1)}`
+                : `${+(bpms[0].bpm * hispeed).toFixed(1)}`}
+              {` (BPM × ${hispeed})`}
+            </p>
             <div className="opt-row">
               <span className="opt-label">{S.transformLabel}</span>
               <div className="opt-btns">

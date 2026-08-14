@@ -77,6 +77,7 @@ export interface Strings {
   optionsBtn: string;
   optionsTitle: string;
   hispeedLabel: string;
+  hsScrollBpm: string;
   transformLabel: string;
   transformOff: string;
   transformRandomReroll: string;
@@ -243,6 +244,7 @@ const ja: Strings = {
   optionsBtn: "オプション",
   optionsTitle: "オプション",
   hispeedLabel: "ハイスピード (縦縮尺)",
+  hsScrollBpm: "見かけのスクロールBPM",
   transformLabel: "変形 (矢印の並べ替え)",
   transformOff: "OFF",
   transformRandomReroll: "タップするたびに並びを引き直します",
@@ -410,6 +412,7 @@ const en: Strings = {
   optionsBtn: "Options",
   optionsTitle: "Options",
   hispeedLabel: "Hi-Speed (vertical scale)",
+  hsScrollBpm: "Apparent scroll BPM",
   transformLabel: "Transform (arrow shuffle)",
   transformOff: "OFF",
   transformRandomReroll: "Tap again to reroll the arrangement",
@@ -576,6 +579,7 @@ const ko: Strings = {
   optionsBtn: "옵션",
   optionsTitle: "옵션",
   hispeedLabel: "하이스피드 (세로 배율)",
+  hsScrollBpm: "체감 스크롤 BPM",
   transformLabel: "변형 (화살표 재배치)",
   transformOff: "OFF",
   transformRandomReroll: "탭할 때마다 배치를 다시 뽑습니다",

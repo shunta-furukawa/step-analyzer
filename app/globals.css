@@ -614,6 +614,32 @@ select {
   font-weight: 700;
 }
 
+/* ハイスピのスライダー+数値入力 */
+.hs-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.hs-edit input[type="range"] {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--accent, #00e0a0);
+}
+
+.hs-num {
+  width: 64px;
+  font-size: 16px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.hs-bpm-hint {
+  margin-top: -4px;
+}
+
 .chart-title .bpm {
   color: var(--muted-dark);
   font-size: 12px;
