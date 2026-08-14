@@ -640,6 +640,18 @@ select {
   margin-top: -4px;
 }
 
+/* 範囲編集の操作ボタン群 */
+.range-ops {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.range-ops button {
+  font-size: 12px;
+  padding: 5px 9px;
+}
+
 /* 注目ノーツのコメント入力 */
 .hl-comment-input {
   width: 100%;

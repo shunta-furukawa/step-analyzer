@@ -201,6 +201,149 @@ export function placeHoldRange(
   return measures.map((mm) => mm.join("")).join("-");
 }
 
+// ===== 拍単位の範囲編集 (コピー/削除/貼り付け/小節追加) =====
+
+/** コピーバッファ: 1拍ごとの行配列 (行=4文字)。拍ごとに解像度を保つ */
+export type BeatClip = string[][];
+
+// 小節を4の倍数行に展開する (拍境界を行に揃えるため)
+function expandToBeatGrid(rows: string[], extraRes = 1): string[] {
+  const L = lcm(lcm(rows.length, 4), 4 * extraRes);
+  const f = L / rows.length;
+  const out: string[] = [];
+  for (let i = 0; i < L; i++) out.push(i % f === 0 ? rows[i / f] : "0000");
+  return out;
+}
+
+// 終端を失ったフリーズ頭 (2/4) をタップに変換する (範囲操作の後始末)
+function fixDanglingHolds(measures: string[][]): void {
+  for (let c = 0; c < 4; c++) {
+    let openAt: { m: number; i: number } | null = null;
+    for (let m = 0; m < measures.length; m++) {
+      const rows = measures[m];
+      for (let i = 0; i < rows.length; i++) {
+        const ch = rows[i][c];
+        if (ch === "2" || ch === "4") openAt = { m, i };
+        else if (ch === "3" || ch === "6") openAt = null;
+      }
+    }
+    if (openAt) {
+      const rows = measures[openAt.m];
+      rows[openAt.i] = setChar(rows[openAt.i], c, "1");
+    }
+  }
+}
+
+/** 拍範囲 [startBeat, endBeat) をコピーする */
+export function copyBeats(compact: string, startBeat: number, endBeat: number): BeatClip {
+  const measures = compact.split("-").map(splitRows);
+  const clip: BeatClip = [];
+  for (let beat = startBeat; beat < endBeat; beat++) {
+    const rows = measures[Math.floor(beat / 4)];
+    if (!rows) {
+      clip.push(["0000"]);
+      continue;
+    }
+    const expanded = expandToBeatGrid(rows);
+    const perBeat = expanded.length / 4;
+    const lb = beat % 4;
+    clip.push(expanded.slice(lb * perBeat, (lb + 1) * perBeat));
+  }
+  return clip;
+}
+
+// 範囲内に尻尾だけが入るフリーズは、頭 (範囲外) をタップに変えて無効化する。
+// こうしないとcleanupHoldsが開きっぱなしの頭で後続のフリーズを飲み込む
+function neutralizeHoldsEndingInRange(
+  compactStr: string,
+  measures: string[][],
+  startBeat: number,
+  endBeat: number
+): void {
+  try {
+    for (const h of parseCompact(compactStr).holds) {
+      if (
+        h.startBeat < startBeat - 1e-9 &&
+        h.endBeat >= startBeat - 1e-9 &&
+        h.endBeat < endBeat - 1e-9
+      ) {
+        const m = Math.floor(h.startBeat / 4 + 1e-9);
+        const rows = measures[m];
+        if (!rows) continue;
+        const i = Math.round(((h.startBeat - m * 4) / 4) * rows.length);
+        if (rows[i] && (rows[i][h.panel] === "2" || rows[i][h.panel] === "4")) {
+          rows[i] = setChar(rows[i], h.panel, "1");
+        }
+      }
+    }
+  } catch {
+    // パース不能なら何もしない
+  }
+}
+
+/** 拍範囲 [startBeat, endBeat) のノーツを消す (小節数=時間は保つ) */
+export function clearBeats(compact: string, startBeat: number, endBeat: number): string {
+  const measures = compact.split("-").map(splitRows);
+  neutralizeHoldsEndingInRange(compact, measures, startBeat, endBeat);
+  for (let m = 0; m < measures.length; m++) {
+    const mStart = m * 4;
+    if (mStart + 4 <= startBeat || mStart >= endBeat) continue;
+    const expanded = expandToBeatGrid(measures[m]);
+    const perBeat = expanded.length / 4;
+    for (let i = 0; i < expanded.length; i++) {
+      const beat = mStart + i / perBeat;
+      if (beat >= startBeat - 1e-9 && beat < endBeat - 1e-9) expanded[i] = "0000";
+    }
+    measures[m] = reduceRows(expanded);
+  }
+  cleanupHolds(measures);
+  fixDanglingHolds(measures);
+  return measures.map((mm) => mm.join("")).join("-");
+}
+
+/**
+ * クリップを指定拍位置へ上書き貼り付けする。
+ * はみ出すぶんは末尾に空小節を足して受ける (maxMeasuresまで)
+ */
+export function pasteBeats(
+  compact: string,
+  atBeat: number,
+  clip: BeatClip,
+  maxMeasures: number
+): string {
+  if (clip.length === 0) return compact;
+  const measures = compact.split("-").map(splitRows);
+  neutralizeHoldsEndingInRange(compact, measures, atBeat, atBeat + clip.length);
+  const needMeasures = Math.ceil((atBeat + clip.length) / 4);
+  while (measures.length < Math.min(needMeasures, maxMeasures)) {
+    measures.push(["0000", "0000", "0000", "0000"]);
+  }
+  for (let k = 0; k < clip.length; k++) {
+    const beat = atBeat + k;
+    const m = Math.floor(beat / 4);
+    if (m >= measures.length) break;
+    const bufRows = clip[k];
+    const expanded = expandToBeatGrid(measures[m], bufRows.length);
+    const perBeat = expanded.length / 4;
+    const bf = perBeat / bufRows.length;
+    const lb = beat % 4;
+    for (let i = 0; i < perBeat; i++) {
+      expanded[lb * perBeat + i] = i % bf === 0 ? bufRows[i / bf] : "0000";
+    }
+    measures[m] = reduceRows(expanded);
+  }
+  cleanupHolds(measures);
+  fixDanglingHolds(measures);
+  return measures.map((mm) => mm.join("")).join("-");
+}
+
+/** 空の小節をn個末尾に追加する (maxMeasuresまで) */
+export function appendMeasures(compact: string, n: number, maxMeasures: number): string {
+  const parts = compact.split("-");
+  for (let i = 0; i < n && parts.length < maxMeasures; i++) parts.push("0".repeat(16));
+  return parts.join("-");
+}
+
 // ===== 足の手動指定 (fパラメータ) のシリアライズ =====
 
 export function parseOverrides(f: string | undefined): Map<number, FootOverride> {

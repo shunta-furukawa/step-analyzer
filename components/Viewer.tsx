@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ARROW_ROTATIONS,
   FOOT_COLORS,
+  MAX_MEASURES,
   QUANT_COLORS,
   assignFeet,
   facingColor,
@@ -29,15 +30,20 @@ const FootStage3D = dynamic(() => import("./FootStage3D"), { ssr: false });
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
+  appendMeasures,
+  clearBeats,
+  copyBeats,
   parseComments,
   parseHighlights,
   parseOverrides,
+  pasteBeats,
   placeHoldRange,
   serializeComments,
   serializeHighlights,
   serializeOverrides,
   toggleNote,
   toggleShock,
+  type BeatClip,
 } from "@/lib/edit";
 import {
   beatAtTime,
@@ -213,30 +219,43 @@ export default function Viewer({
     return { start, end };
   };
 
-  // 小節番号タップによる範囲選択。共有・画像書き出しのデフォルト範囲になる。
+  // 左端ゾーンのタップによる範囲選択 (4分=1拍単位)。
   // aだけの状態=始点選択中、bが入ると確定 (上下逆でも正規化する)
   const [rangeSel, setRangeSel] = useState<{ a: number; b: number | null } | null>(
     null
   );
-  const selRange =
+  // 拍単位の確定範囲 (両端inclusive)。編集の範囲操作に使う
+  const selBeats =
     rangeSel && rangeSel.b !== null
       ? {
-          start: Math.min(rangeSel.a, rangeSel.b) + 1,
-          end: Math.max(rangeSel.a, rangeSel.b) + 1,
+          start: Math.min(rangeSel.a, rangeSel.b),
+          end: Math.max(rangeSel.a, rangeSel.b),
         }
       : null;
-  const tapMeasureNum = (mi: number) => {
+  // 小節単位へ丸めた範囲 (共有クリップ・画像書き出しのデフォルト)
+  const selRange = selBeats
+    ? {
+        start: Math.floor(selBeats.start / 4) + 1,
+        end: Math.floor(selBeats.end / 4) + 1,
+      }
+    : null;
+  const tapBeatZone = (beat: number) => {
     if (!rangeSel || rangeSel.b !== null) {
-      // 未選択、または確定済み → その小節を新しい始点に
-      setRangeSel({ a: mi, b: null });
+      // 未選択、または確定済み → その拍を新しい始点に
+      setRangeSel({ a: beat, b: null });
       return;
     }
-    if (rangeSel.a === mi) {
+    if (rangeSel.a === beat) {
       setRangeSel(null);
       return;
     }
-    setRangeSel({ a: rangeSel.a, b: mi });
+    setRangeSel({ a: rangeSel.a, b: beat });
   };
+  // 「小節目.拍目」の表示ラベル
+  const fmtBeat = (beat: number) => `${Math.floor(beat / 4) + 1}.${(beat % 4) + 1}`;
+
+  // 範囲編集用のコピーバッファ (セッション内のみ)
+  const [beatClip, setBeatClip] = useState<BeatClip | null>(null);
 
   // 画像書き出しモーダル (クリップと同じ「検証はblur/実行時のみ」方式)
   const [showImage, setShowImage] = useState(false);
@@ -1237,6 +1256,14 @@ export default function Viewer({
           >
             ▮{editFreeze ? S.freezeModeActive : S.freezeMode}
           </button>
+          <button
+            className="secondary"
+            disabled={chart ? chart.measures.length >= MAX_MEASURES : true}
+            onClick={() => applyEdit(appendMeasures(compact, 1, MAX_MEASURES))}
+            title={S.addMeasureTitle}
+          >
+            ＋{S.addMeasure}
+          </button>
         </div>
       )}
 
@@ -1904,12 +1931,65 @@ export default function Viewer({
         <p className="range-hint">
           <span>
             {rangeSel.b === null
-              ? S.rangePending(rangeSel.a + 1)
+              ? S.rangePending(fmtBeat(rangeSel.a))
               : S.rangeActive(
-                  Math.min(rangeSel.a, rangeSel.b) + 1,
-                  Math.max(rangeSel.a, rangeSel.b) + 1
+                  fmtBeat(Math.min(rangeSel.a, rangeSel.b)),
+                  fmtBeat(Math.max(rangeSel.a, rangeSel.b))
                 )}
           </span>
+          {/* 範囲編集 (編集モード中のみ)。貼り付け先は選択の始点 */}
+          {editMode && (
+            <span className="range-ops">
+              {selBeats && (
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    setBeatClip(copyBeats(compact, selBeats.start, selBeats.end + 1))
+                  }
+                >
+                  ⧉ {S.rangeCopy}
+                </button>
+              )}
+              {selBeats && (
+                <button
+                  className="secondary"
+                  onClick={() => {
+                    setBeatClip(copyBeats(compact, selBeats.start, selBeats.end + 1));
+                    applyEdit(clearBeats(compact, selBeats.start, selBeats.end + 1));
+                  }}
+                >
+                  ✂ {S.rangeCut}
+                </button>
+              )}
+              {selBeats && (
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    applyEdit(clearBeats(compact, selBeats.start, selBeats.end + 1))
+                  }
+                >
+                  ⌫ {S.rangeDelete}
+                </button>
+              )}
+              {beatClip && (
+                <button
+                  className="secondary"
+                  onClick={() =>
+                    applyEdit(
+                      pasteBeats(
+                        compact,
+                        selBeats ? selBeats.start : rangeSel.a,
+                        beatClip,
+                        MAX_MEASURES
+                      )
+                    )
+                  }
+                >
+                  ⎘ {S.rangePaste}
+                </button>
+              )}
+            </span>
+          )}
           <button className="secondary range-clear" onClick={() => setRangeSel(null)}>
             ✕ {S.rangeClear}
           </button>
@@ -2075,7 +2155,7 @@ export default function Viewer({
                   {m < chart.measures.length && (
                     <span
                       className={`measure-num${
-                        rangeSel && rangeSel.b === null && rangeSel.a === m
+                        rangeSel && rangeSel.b === null && Math.floor(rangeSel.a / 4) === m
                           ? " range-anchor"
                           : selRange && m + 1 >= selRange.start && m + 1 <= selRange.end
                           ? " in-range"
@@ -2087,14 +2167,20 @@ export default function Viewer({
                     </span>
                   )}
                   {m < chart.measures.length && (
-                    // 左端の小節番号ゾーン: タップで範囲選択 (譜面レーンは邪魔しない)
+                    // 左端の小節番号ゾーン: タップで範囲選択 (4分単位。
+                    // タップ位置の高さからどの拍かを割り出す)
                     <div
                       className="measure-tap"
                       style={{
                         top: m * 4 * pxPerBeat + noteSize / 2,
                         height: 4 * pxPerBeat,
                       }}
-                      onClick={() => tapMeasureNum(m)}
+                      onClick={(e) => {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        const frac = (e.clientY - rect.top) / rect.height;
+                        const lb = Math.min(3, Math.max(0, Math.floor(frac * 4)));
+                        tapBeatZone(m * 4 + lb);
+                      }}
                     />
                   )}
                   {m < chart.measures.length &&
@@ -2109,18 +2195,16 @@ export default function Viewer({
                 );
               })}
 
-              {/* 範囲選択のインジケータ: 左端の縦バー (選択中は薄く表示) */}
+              {/* 範囲選択のインジケータ: 左端の縦バー (拍単位、選択中は薄く表示) */}
               {rangeSel && (
                 <div
                   className={`range-bar${rangeSel.b === null ? " pending" : ""}`}
                   style={{
                     top:
-                      Math.min(rangeSel.a, rangeSel.b ?? rangeSel.a) * 4 * pxPerBeat +
+                      Math.min(rangeSel.a, rangeSel.b ?? rangeSel.a) * pxPerBeat +
                       noteSize / 2,
                     height:
-                      (Math.abs((rangeSel.b ?? rangeSel.a) - rangeSel.a) + 1) *
-                      4 *
-                      pxPerBeat,
+                      (Math.abs((rangeSel.b ?? rangeSel.a) - rangeSel.a) + 1) * pxPerBeat,
                   }}
                 />
               )}

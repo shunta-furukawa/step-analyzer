@@ -119,9 +119,15 @@ export interface Strings {
   videoModeLandscape: string;
   videoCancel: string;
   // 小節番号タップの範囲選択
-  rangePending: (m: number) => string;
-  rangeActive: (a: number, b: number) => string;
+  rangePending: (p: string) => string;
+  rangeActive: (a: string, b: string) => string;
   rangeClear: string;
+  rangeCopy: string;
+  rangeCut: string;
+  rangeDelete: string;
+  rangePaste: string;
+  addMeasure: string;
+  addMeasureTitle: string;
   spotlightBtn: string;
   spotlightTitle: string;
   // コントロール
@@ -290,9 +296,15 @@ const ja: Strings = {
   videoModePortrait: "縦 (ショート・等速)",
   videoModeLandscape: "横 (じっくり0.5倍速)",
   videoCancel: "中止",
-  rangePending: (m) => `始点: ${m}小節目 — 終点の番号をタップ`,
-  rangeActive: (a, b) => `共有・画像の範囲: ${a}〜${b}小節`,
+  rangePending: (p) => `始点: ${p} — 終点の位置をタップ`,
+  rangeActive: (a, b) => `選択範囲: ${a}〜${b} (小節.拍)`,
   rangeClear: "解除",
+  rangeCopy: "コピー",
+  rangeCut: "切り取り",
+  rangeDelete: "削除",
+  rangePaste: "貼り付け",
+  addMeasure: "小節追加",
+  addMeasureTitle: "末尾に空の小節を1つ追加",
   spotlightBtn: "注目",
   spotlightTitle: "注目ノーツにする (黄色い枠で強調され、URLや画像に反映)",
   toStartTitle: "最初に戻る",
@@ -463,9 +475,15 @@ const en: Strings = {
   videoModePortrait: "Portrait (Shorts, 1×)",
   videoModeLandscape: "Landscape (study, 0.5×)",
   videoCancel: "Cancel",
-  rangePending: (m) => `Start: measure ${m} — tap the end measure number`,
-  rangeActive: (a, b) => `Share / image range: ${a}–${b}`,
+  rangePending: (p) => `Start: ${p} — tap the end position`,
+  rangeActive: (a, b) => `Selection: ${a}–${b} (measure.beat)`,
   rangeClear: "Clear",
+  rangeCopy: "Copy",
+  rangeCut: "Cut",
+  rangeDelete: "Delete",
+  rangePaste: "Paste",
+  addMeasure: "Add bar",
+  addMeasureTitle: "Append an empty measure at the end",
   spotlightBtn: "Spotlight",
   spotlightTitle: "Mark as a spotlight note (yellow frame, saved to URL and images)",
   toStartTitle: "Back to start",
@@ -635,9 +653,15 @@ const ko: Strings = {
   videoModePortrait: "세로 (쇼트·1배속)",
   videoModeLandscape: "가로 (관찰용 0.5배속)",
   videoCancel: "중지",
-  rangePending: (m) => `시작: ${m}마디 — 끝 마디 번호를 탭`,
-  rangeActive: (a, b) => `공유·이미지 범위: ${a}〜${b}마디`,
+  rangePending: (p) => `시작: ${p} — 끝 위치를 탭`,
+  rangeActive: (a, b) => `선택 범위: ${a}〜${b} (마디.박)`,
   rangeClear: "해제",
+  rangeCopy: "복사",
+  rangeCut: "잘라내기",
+  rangeDelete: "삭제",
+  rangePaste: "붙여넣기",
+  addMeasure: "마디 추가",
+  addMeasureTitle: "끝에 빈 마디를 1개 추가",
   spotlightBtn: "주목",
   spotlightTitle: "주목 노트로 표시 (노란 테두리로 강조, URL·이미지에 반영)",
   toStartTitle: "처음으로",
