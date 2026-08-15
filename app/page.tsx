@@ -150,7 +150,11 @@ export default async function Page({
         lang={lang}
         transform={tr}
       />
-      <footer className="site-footer">{STRINGS[lang].footerContact}</footer>
+      <footer className="site-footer">
+        {STRINGS[lang].footerContact}
+        {" · "}
+        <a href="/spec">{STRINGS[lang].specLink}</a>
+      </footer>
     </main>
   );
 }

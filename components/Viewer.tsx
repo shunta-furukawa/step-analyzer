@@ -23,6 +23,7 @@ import {
   renderChartImage,
 } from "@/lib/chartImage";
 import { loadAudioFromUrl, loadImageFromUrl, recordChartVideo } from "@/lib/videoExport";
+import { AI_SERVICES, aiPromptUrl } from "@/lib/aiPrompt";
 
 // Three.js版の足ステージ (WebGL)。バンドルを分けるため遅延読み込みし、
 // ロード中と非対応環境はCSS版FootStageで表示する
@@ -3087,6 +3088,21 @@ function TextImport({
         <button className="secondary" onClick={fetchFromUrl} disabled={loading || !url.trim()}>
           {loading ? S.loading : S.loadFromUrl}
         </button>
+      </div>
+      {/* 外部AIにURL仕様入りプロンプトを渡して譜面URLを作ってもらう */}
+      <div className="ai-links">
+        <span className="hint">{S.aiGenLabel}</span>
+        {AI_SERVICES.map((sv) => (
+          <a
+            key={sv.key}
+            className="ai-link"
+            href={aiPromptUrl(sv)}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {sv.label} ↗
+          </a>
+        ))}
       </div>
       <textarea value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} />
       <div className="form-row">

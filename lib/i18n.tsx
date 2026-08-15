@@ -129,6 +129,8 @@ export interface Strings {
   addMeasure: string;
   addMeasureTitle: string;
   metronomeTitle: string;
+  aiGenLabel: string;
+  specLink: string;
   spotlightBtn: string;
   spotlightTitle: string;
   // コントロール
@@ -307,6 +309,8 @@ const ja: Strings = {
   addMeasure: "小節追加",
   addMeasureTitle: "末尾に空の小節を1つ追加",
   metronomeTitle: "メトロノーム (4分のティック音)",
+  aiGenLabel: "🤖 AIに譜面を作ってもらう:",
+  specLink: "URL仕様",
   spotlightBtn: "注目",
   spotlightTitle: "注目ノーツにする (黄色い枠で強調され、URLや画像に反映)",
   toStartTitle: "最初に戻る",
@@ -487,6 +491,8 @@ const en: Strings = {
   addMeasure: "Add bar",
   addMeasureTitle: "Append an empty measure at the end",
   metronomeTitle: "Metronome (quarter-note ticks)",
+  aiGenLabel: "🤖 Ask an AI to build a chart:",
+  specLink: "URL spec",
   spotlightBtn: "Spotlight",
   spotlightTitle: "Mark as a spotlight note (yellow frame, saved to URL and images)",
   toStartTitle: "Back to start",
@@ -666,6 +672,8 @@ const ko: Strings = {
   addMeasure: "마디 추가",
   addMeasureTitle: "끝에 빈 마디를 1개 추가",
   metronomeTitle: "메트로놈 (4분 틱 사운드)",
+  aiGenLabel: "🤖 AI에게 채보 생성 요청:",
+  specLink: "URL 사양",
   spotlightBtn: "주목",
   spotlightTitle: "주목 노트로 표시 (노란 테두리로 강조, URL·이미지에 반영)",
   toStartTitle: "처음으로",

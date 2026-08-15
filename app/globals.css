@@ -640,6 +640,74 @@ select {
   margin-top: -4px;
 }
 
+/* 外部AIへの譜面生成リンク */
+.ai-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 4px;
+}
+
+.ai-link {
+  display: inline-block;
+  background: #fff;
+  color: var(--ink, #17181c);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 6px 10px;
+  text-decoration: none;
+  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.55);
+}
+
+.ai-link:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* URL仕様ページ */
+.spec-h {
+  font-size: 16px;
+  font-weight: 800;
+  margin: 14px 0 8px;
+  color: var(--mint, #00e0a0);
+}
+
+.spec-list .spec-row {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.spec-list dt {
+  font-family: ui-monospace, monospace;
+  font-weight: 700;
+  color: #ffd93b;
+  word-break: break-all;
+}
+
+.spec-list dd {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.spec-examples {
+  padding-left: 18px;
+  font-size: 13px;
+  line-height: 2;
+}
+
+.spec-examples code {
+  font-family: ui-monospace, monospace;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  word-break: break-all;
+}
+
 /* 範囲編集の操作ボタン群 */
 .range-ops {
   display: inline-flex;
