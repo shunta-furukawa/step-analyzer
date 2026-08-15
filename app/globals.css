@@ -640,23 +640,17 @@ select {
   margin-top: -4px;
 }
 
-/* フッター: 左に連絡先、右にAI生成ボタン */
-.footer-split {
+/* AI生成ボタン: フッター帯の外に右寄せで置く */
+.ai-gen-row {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  margin: 4px 0 10px;
 }
 
 .ai-gen-btn {
   font-size: 12px;
   padding: 8px 12px;
-}
-
-/* 折り返したときも右寄せを保つ */
-.footer-split .ai-gen-btn {
-  margin-left: auto;
+  white-space: nowrap;
 }
 
 /* AI生成モーダル */

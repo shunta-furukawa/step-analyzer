@@ -151,13 +151,14 @@ export default async function Page({
         lang={lang}
         transform={tr}
       />
-      <footer className="site-footer footer-split">
-        <span>
-          {STRINGS[lang].footerContact}
-          {" · "}
-          <a href="/spec">{STRINGS[lang].specLink}</a>
-        </span>
+      {/* AI生成ボタンはフッター帯の外 (右寄せ) に置く */}
+      <div className="ai-gen-row">
         <AiGen lang={lang} />
+      </div>
+      <footer className="site-footer">
+        {STRINGS[lang].footerContact}
+        {" · "}
+        <a href="/spec">{STRINGS[lang].specLink}</a>
       </footer>
     </main>
   );

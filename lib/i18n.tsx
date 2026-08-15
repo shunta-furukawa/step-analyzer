@@ -313,7 +313,7 @@ const ja: Strings = {
   addMeasure: "小節追加",
   addMeasureTitle: "末尾に空の小節を1つ追加",
   metronomeTitle: "メトロノーム (4分のティック音)",
-  aiGenBtn: "AIで譜面を作成する",
+  aiGenBtn: "AIで譜面作成",
   aiModalTitle: "AIで譜面を作成",
   aiModalDesc:
     "作りたい譜面のイメージを書いて、相談するAIを選んでください。譜面URLの仕様を教えるプロンプト付きで外部のAIチャットが新しいタブで開き、会話の最後にこのアプリで開けるURLを受け取れます。",
@@ -501,7 +501,7 @@ const en: Strings = {
   addMeasure: "Add bar",
   addMeasureTitle: "Append an empty measure at the end",
   metronomeTitle: "Metronome (quarter-note ticks)",
-  aiGenBtn: "Build a chart with AI",
+  aiGenBtn: "Build with AI",
   aiModalTitle: "Build a chart with AI",
   aiModalDesc:
     "Describe the chart you want, then pick an AI to ask. An external AI chat opens in a new tab with a prompt that teaches it this app's URL format, and you'll get back a URL that opens here.",
@@ -688,7 +688,7 @@ const ko: Strings = {
   addMeasure: "마디 추가",
   addMeasureTitle: "끝에 빈 마디를 1개 추가",
   metronomeTitle: "메트로놈 (4분 틱 사운드)",
-  aiGenBtn: "AI로 채보 만들기",
+  aiGenBtn: "AI 채보 생성",
   aiModalTitle: "AI로 채보 만들기",
   aiModalDesc:
     "원하는 채보의 이미지를 적고 상담할 AI를 선택하세요. 이 앱의 URL 사양을 알려주는 프롬프트와 함께 외부 AI 채팅이 새 탭에서 열리고, 대화 끝에 여기서 열 수 있는 URL을 받게 됩니다.",
