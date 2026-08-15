@@ -129,7 +129,11 @@ export interface Strings {
   addMeasure: string;
   addMeasureTitle: string;
   metronomeTitle: string;
-  aiGenLabel: string;
+  aiGenBtn: string;
+  aiModalTitle: string;
+  aiModalDesc: string;
+  aiWishPlaceholder: string;
+  aiOpenExternal: string;
   specLink: string;
   spotlightBtn: string;
   spotlightTitle: string;
@@ -309,7 +313,13 @@ const ja: Strings = {
   addMeasure: "小節追加",
   addMeasureTitle: "末尾に空の小節を1つ追加",
   metronomeTitle: "メトロノーム (4分のティック音)",
-  aiGenLabel: "🤖 AIに譜面を作ってもらう:",
+  aiGenBtn: "AIで譜面を作成する",
+  aiModalTitle: "AIで譜面を作成",
+  aiModalDesc:
+    "作りたい譜面のイメージを書いて、相談するAIを選んでください。譜面URLの仕様を教えるプロンプト付きで外部のAIチャットが新しいタブで開き、会話の最後にこのアプリで開けるURLを受け取れます。",
+  aiWishPlaceholder:
+    "例: BPM170で8分メインの4小節。最後に16分の階段でラス殺しっぽく。激14ぐらい",
+  aiOpenExternal: "外部サイトを開く",
   specLink: "URL仕様",
   spotlightBtn: "注目",
   spotlightTitle: "注目ノーツにする (黄色い枠で強調され、URLや画像に反映)",
@@ -491,7 +501,13 @@ const en: Strings = {
   addMeasure: "Add bar",
   addMeasureTitle: "Append an empty measure at the end",
   metronomeTitle: "Metronome (quarter-note ticks)",
-  aiGenLabel: "🤖 Ask an AI to build a chart:",
+  aiGenBtn: "Build a chart with AI",
+  aiModalTitle: "Build a chart with AI",
+  aiModalDesc:
+    "Describe the chart you want, then pick an AI to ask. An external AI chat opens in a new tab with a prompt that teaches it this app's URL format, and you'll get back a URL that opens here.",
+  aiWishPlaceholder:
+    "e.g. 4 measures at BPM 170, mostly 8th notes, ending with a 16th-note staircase",
+  aiOpenExternal: "opens external site",
   specLink: "URL spec",
   spotlightBtn: "Spotlight",
   spotlightTitle: "Mark as a spotlight note (yellow frame, saved to URL and images)",
@@ -672,7 +688,12 @@ const ko: Strings = {
   addMeasure: "마디 추가",
   addMeasureTitle: "끝에 빈 마디를 1개 추가",
   metronomeTitle: "메트로놈 (4분 틱 사운드)",
-  aiGenLabel: "🤖 AI에게 채보 생성 요청:",
+  aiGenBtn: "AI로 채보 만들기",
+  aiModalTitle: "AI로 채보 만들기",
+  aiModalDesc:
+    "원하는 채보의 이미지를 적고 상담할 AI를 선택하세요. 이 앱의 URL 사양을 알려주는 프롬프트와 함께 외부 AI 채팅이 새 탭에서 열리고, 대화 끝에 여기서 열 수 있는 URL을 받게 됩니다.",
+  aiWishPlaceholder: "예: BPM 170, 8분 위주 4마디. 마지막에 16분 계단",
+  aiOpenExternal: "외부 사이트 열기",
   specLink: "URL 사양",
   spotlightBtn: "주목",
   spotlightTitle: "주목 노트로 표시 (노란 테두리로 강조, URL·이미지에 반영)",

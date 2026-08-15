@@ -640,29 +640,72 @@ select {
   margin-top: -4px;
 }
 
-/* 外部AIへの譜面生成リンク */
-.ai-links {
+/* フッター: 左に連絡先、右にAI生成ボタン */
+.footer-split {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
   flex-wrap: wrap;
-  margin: 10px 0 4px;
 }
 
-.ai-link {
-  display: inline-block;
+.ai-gen-btn {
+  font-size: 12px;
+  padding: 8px 12px;
+}
+
+/* 折り返したときも右寄せを保つ */
+.footer-split .ai-gen-btn {
+  margin-left: auto;
+}
+
+/* AI生成モーダル */
+.ai-wish {
+  width: 100%;
+  font-size: 16px;
+  min-height: 84px;
+}
+
+.ai-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+/* モーダルはフッター内に描画されるため .site-footer a より強くしておく */
+.site-footer a.ai-choice-btn,
+.ai-choice-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   background: #fff;
   color: var(--ink, #17181c);
-  font-size: 12px;
   font-weight: 800;
-  padding: 6px 10px;
+  font-size: 14px;
+  padding: 11px 14px;
   text-decoration: none;
-  box-shadow: 3px 3px 0 rgba(0, 0, 0, 0.55);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.55);
 }
 
-.ai-link:active {
+.ai-choice-btn:active {
   transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.55);
+  box-shadow: 2px 2px 0 rgba(0, 0, 0, 0.55);
+}
+
+.ai-choice-btn img {
+  border-radius: 4px;
+}
+
+.ai-choice-name {
+  flex: 1;
+}
+
+.site-footer .ai-choice-ext,
+.ai-choice-ext {
+  font-size: 11px;
+  font-weight: 700;
+  color: #666;
 }
 
 /* URL仕様ページ */

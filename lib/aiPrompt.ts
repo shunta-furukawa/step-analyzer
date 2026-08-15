@@ -19,20 +19,50 @@ const URL_SPEC = `# Step Analyzer URL仕様
 - フリーズ (↓を1拍伸ばす): 0200 の行の後、終わりたい行を 0300
 - 完成形: ${SITE_ORIGIN}/?n=1000010000100001-1001000001000010&b=150&t=Practice`;
 
-const TASK = `あなたはDDR (Dance Dance Revolution) の譜面を作るアシスタントです。上の仕様に従って、ユーザーの要望 (雰囲気・BPM・長さ・難易度など) を聞き、踏める自然な譜面を設計して、最後にStep Analyzerで開けるURLを1本プレーンテキストで出力してください。同時押しは2枚まで、同じ足が連続しすぎない交互踏みを基本にすること。まず「どんな譜面を作りますか？」と聞いてください。`;
+const TASK_COMMON = `あなたはDDR (Dance Dance Revolution) の譜面を作るアシスタントです。上の仕様に従って踏める自然な譜面を設計し、最後にStep Analyzerで開けるURLを1本プレーンテキストで出力してください。同時押しは2枚まで、同じ足が連続しすぎない交互踏みを基本にすること。`;
 
-export const AI_PROMPT = `${URL_SPEC}\n\n${TASK}`;
+/** 要望テキスト入りのプロンプトを組む (空なら要望をAI側で聞いてもらう) */
+export function buildAiPrompt(wish: string): string {
+  const w = wish.trim();
+  const task = w
+    ? `${TASK_COMMON}\nユーザーの要望: 「${w}」\n追加の質問はせず、この要望で譜面を作ってURLを出力してください。`
+    : `${TASK_COMMON}\nまず「どんな譜面を作りますか？ (雰囲気・BPM・長さ・難易度など)」と聞いてください。`;
+  return `${URL_SPEC}\n\n${task}`;
+}
 
-export const AI_SERVICES: { key: string; label: string; url: (p: string) => string }[] = [
-  { key: "chatgpt", label: "ChatGPT", url: (p) => `https://chatgpt.com/?prompt=${p}` },
-  { key: "claude", label: "Claude", url: (p) => `https://claude.ai/new?q=${p}` },
+export interface AiService {
+  key: string;
+  label: string;
+  host: string; // ファビコン取得用
+  url: (p: string) => string;
+}
+
+export const AI_SERVICES: AiService[] = [
+  {
+    key: "chatgpt",
+    label: "ChatGPT",
+    host: "chatgpt.com",
+    url: (p) => `https://chatgpt.com/?prompt=${p}`,
+  },
+  {
+    key: "claude",
+    label: "Claude",
+    host: "claude.ai",
+    url: (p) => `https://claude.ai/new?q=${p}`,
+  },
   {
     key: "perplexity",
     label: "Perplexity",
+    host: "www.perplexity.ai",
     url: (p) => `https://www.perplexity.ai/search?q=${p}`,
   },
 ];
 
-export function aiPromptUrl(service: (typeof AI_SERVICES)[number]): string {
-  return service.url(encodeURIComponent(AI_PROMPT));
+export function aiPromptUrl(service: AiService, wish = ""): string {
+  return service.url(encodeURIComponent(buildAiPrompt(wish)));
+}
+
+/** サービスのアイコンURL (Googleのfaviconプロキシ経由) */
+export function aiServiceIcon(service: AiService): string {
+  return `https://www.google.com/s2/favicons?domain=${service.host}&sz=64`;
 }

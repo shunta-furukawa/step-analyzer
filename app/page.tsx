@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import AiGen from "@/components/AiGen";
 import Viewer from "@/components/Viewer";
 import { decompressCompact } from "@/lib/codec-server";
 import { STRINGS, normalizeLang } from "@/lib/i18n";
@@ -150,10 +151,13 @@ export default async function Page({
         lang={lang}
         transform={tr}
       />
-      <footer className="site-footer">
-        {STRINGS[lang].footerContact}
-        {" · "}
-        <a href="/spec">{STRINGS[lang].specLink}</a>
+      <footer className="site-footer footer-split">
+        <span>
+          {STRINGS[lang].footerContact}
+          {" · "}
+          <a href="/spec">{STRINGS[lang].specLink}</a>
+        </span>
+        <AiGen lang={lang} />
       </footer>
     </main>
   );
