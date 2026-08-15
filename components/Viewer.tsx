@@ -2045,6 +2045,9 @@ export default function Viewer({
           onApply={(next, timing, smTitle, smArtist, smDiff) => {
             applyEdit(next);
             setOverrides(new Map());
+            // 譜面を丸ごと差し替えるので注目・コメントも前の譜面のものを残さない
+            setHighlights(new Set());
+            setNoteComments(new Map());
             if (timing?.b) setBpm(timing.b);
             if (timing?.s !== undefined) setStops(timing.s);
             if (smTitle) setTitle(smTitle);

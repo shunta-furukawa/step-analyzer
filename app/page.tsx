@@ -3,7 +3,14 @@ import Viewer from "@/components/Viewer";
 import { decompressCompact } from "@/lib/codec-server";
 import { STRINGS, normalizeLang } from "@/lib/i18n";
 import { parseTransform } from "@/lib/transform";
-import { SAMPLE_BPM, SAMPLE_COMPACT, SAMPLE_TITLE } from "@/lib/sample";
+import {
+  SAMPLE_BPM,
+  SAMPLE_COMMENTS,
+  SAMPLE_COMPACT,
+  SAMPLE_HIGHLIGHTS,
+  SAMPLE_SUBTITLE,
+  SAMPLE_TITLE,
+} from "@/lib/sample";
 
 type SearchParams = Promise<{ [key: string]: string | string[] | undefined }>;
 
@@ -130,13 +137,13 @@ export default async function Page({
         key={n ?? "default"}
         compact={n ?? SAMPLE_COMPACT}
         title={isDefault ? SAMPLE_TITLE : t}
-        subtitle={isDefault ? undefined : st}
+        subtitle={isDefault ? SAMPLE_SUBTITLE : st}
         difficulty={isDefault ? undefined : df}
         bpm={isDefault ? SAMPLE_BPM : b}
         stops={isDefault ? undefined : s}
         overrides={f}
-        highlights={hl}
-        comments={hc}
+        highlights={isDefault ? SAMPLE_HIGHLIGHTS : hl}
+        comments={isDefault ? SAMPLE_COMMENTS : hc}
         hispeed={hs}
         speed={spd}
         bg={bg}
