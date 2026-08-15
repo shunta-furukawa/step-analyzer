@@ -67,10 +67,27 @@ function renderJumpClapSamples(gain: number, sr: number): Float32Array {
   return out;
 }
 
+// メトロノームの短いティック音 (高めのサイン2音+速い減衰)。
+// クラップより控えめな音量で、小節頭のアクセントは付けない
+function renderTickSamples(gain: number, sr: number): Float32Array {
+  const len = Math.floor(sr * 0.045);
+  const out = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    const env = Math.exp(-t * 160);
+    out[i] =
+      (Math.sin(2 * Math.PI * 1760 * t) * 0.7 + Math.sin(2 * Math.PI * 3520 * t) * 0.3) *
+      env *
+      gain;
+  }
+  return out;
+}
+
 /**
  * 譜面全体のクラップトラックをWAVにレンダリングし、Blob URLを返す。
  * eventTimes は各ノーツの発音時刻 (秒、ソフラン・停止込み)。
- * ghostTimes には空打ち (ストンプ音) の発音時刻を渡す。
+ * ghostTimes には空打ち (ストンプ音)、metroTimes には4つ打ちの
+ * メトロノームティックの発音時刻を渡す。
  * 使い終わったURLは呼び出し側で URL.revokeObjectURL すること。
  */
 /** クラップトラックの生波形を生成する (動画書き出しでの音声ミックスにも使う) */
@@ -78,7 +95,8 @@ export function renderClapTrackSamples(
   eventTimes: number[],
   accents: boolean[],
   durationSec: number,
-  ghostTimes: number[] = []
+  ghostTimes: number[] = [],
+  metroTimes: number[] = []
 ): { samples: Float32Array; sr: number } {
   const sr = 44100;
   const len = Math.max(sr, Math.ceil((durationSec + 0.6) * sr));
@@ -86,6 +104,7 @@ export function renderClapTrackSamples(
   const normal = renderClapSamples(0.6, sr);
   const accent = renderJumpClapSamples(0.75, sr);
   const stomp = renderStompSamples(0.9, sr);
+  const tick = renderTickSamples(0.32, sr);
 
   for (let i = 0; i < eventTimes.length; i++) {
     const off = Math.round(eventTimes[i] * sr);
@@ -100,6 +119,12 @@ export function renderClapTrackSamples(
     const end = Math.min(stomp.length, len - off);
     for (let j = 0; j < end; j++) mix[off + j] += stomp[j];
   }
+  for (const t of metroTimes) {
+    const off = Math.round(t * sr);
+    if (off < 0 || off >= len) continue;
+    const end = Math.min(tick.length, len - off);
+    for (let j = 0; j < end; j++) mix[off + j] += tick[j];
+  }
   return { samples: mix, sr };
 }
 
@@ -107,13 +132,15 @@ export function buildClapTrackUrl(
   eventTimes: number[],
   accents: boolean[],
   durationSec: number,
-  ghostTimes: number[] = []
+  ghostTimes: number[] = [],
+  metroTimes: number[] = []
 ): string {
   const { samples: mix, sr } = renderClapTrackSamples(
     eventTimes,
     accents,
     durationSec,
-    ghostTimes
+    ghostTimes,
+    metroTimes
   );
   const len = mix.length;
 

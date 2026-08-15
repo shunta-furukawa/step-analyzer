@@ -343,6 +343,8 @@ export default function Viewer({
   const [hsText, setHsText] = useState(() => String(hispeed));
   const [muted, setMuted] = useState(false);
   const [ghostSound, setGhostSound] = useState(true); // 空打ちのストンプ音
+  // 4つ打ちメトロノーム (デフォルトOFF)。小節頭のアクセントは付けない
+  const [metronome, setMetronome] = useState(false);
   const [bgColor, setBgColor] = useState(() =>
     initialBg && /^[0-9a-fA-F]{6}$/.test(initialBg) ? initialBg.toLowerCase() : DEFAULT_BG
   );
@@ -569,7 +571,7 @@ export default function Viewer({
   const prepareClapTrack = useCallback(() => {
     if (!chart || timeline.length === 0) return null;
     setPlaybackAudioSession();
-    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}|${serializeOverrides(overrides)}`;
+    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}|${metronome ? 1 : 0}|${serializeOverrides(overrides)}`;
     if (clapTrackRef.current?.key === key) return clapTrackRef.current.el;
     if (clapTrackRef.current) {
       clapTrackRef.current.el.pause();
@@ -587,18 +589,26 @@ export default function Viewer({
           .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
           .map((e) => timeAtBeat(timeline, e.row.beat) / speed)
       : [];
+    // メトロノーム: 4分ごとのティック (小節頭のアクセントなし)
+    const metroTimes: number[] = [];
+    if (metronome) {
+      for (let b = 0; b < chart.totalBeats - 1e-9; b++) {
+        metroTimes.push(timeAtBeat(timeline, b) / speed);
+      }
+    }
     const url = buildClapTrackUrl(
       times,
       accents,
       timeAtBeat(timeline, chart.totalBeats) / speed,
-      ghostTimes
+      ghostTimes,
+      metroTimes
     );
     const el = new Audio(url);
     el.preload = "auto";
     el.setAttribute("playsinline", "");
     clapTrackRef.current = { key, el, url };
     return el;
-  }, [chart, timeline, compact, bpm, stops, speed, ghostSound, overrides, footsteps]);
+  }, [chart, timeline, compact, bpm, stops, speed, ghostSound, metronome, overrides, footsteps]);
 
   // 再生開始 (ユーザー操作の文脈で呼ぶこと: audio.play()の許可が必要)
   const startPlayback = useCallback(() => {
@@ -2627,6 +2637,17 @@ export default function Viewer({
                   ◇{ghostSound ? "♪" : "🔇"}
                 </button>
               )}
+              <button
+                className={metronome ? "" : "secondary"}
+                onClick={() => {
+                  setMetronome(!metronome);
+                  // トラックはキー違いで次回prepare時に作り直される
+                  clapTrackRef.current?.el.pause();
+                }}
+                title={S.metronomeTitle}
+              >
+                ♩{metronome ? "♪" : "🔇"}
+              </button>
               <button
                 className="secondary"
                 onClick={enterFs}

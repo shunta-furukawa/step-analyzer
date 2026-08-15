@@ -128,6 +128,7 @@ export interface Strings {
   rangePaste: string;
   addMeasure: string;
   addMeasureTitle: string;
+  metronomeTitle: string;
   spotlightBtn: string;
   spotlightTitle: string;
   // コントロール
@@ -305,6 +306,7 @@ const ja: Strings = {
   rangePaste: "貼り付け",
   addMeasure: "小節追加",
   addMeasureTitle: "末尾に空の小節を1つ追加",
+  metronomeTitle: "メトロノーム (4分のティック音)",
   spotlightBtn: "注目",
   spotlightTitle: "注目ノーツにする (黄色い枠で強調され、URLや画像に反映)",
   toStartTitle: "最初に戻る",
@@ -484,6 +486,7 @@ const en: Strings = {
   rangePaste: "Paste",
   addMeasure: "Add bar",
   addMeasureTitle: "Append an empty measure at the end",
+  metronomeTitle: "Metronome (quarter-note ticks)",
   spotlightBtn: "Spotlight",
   spotlightTitle: "Mark as a spotlight note (yellow frame, saved to URL and images)",
   toStartTitle: "Back to start",
@@ -662,6 +665,7 @@ const ko: Strings = {
   rangePaste: "붙여넣기",
   addMeasure: "마디 추가",
   addMeasureTitle: "끝에 빈 마디를 1개 추가",
+  metronomeTitle: "메트로놈 (4분 틱 사운드)",
   spotlightBtn: "주목",
   spotlightTitle: "주목 노트로 표시 (노란 테두리로 강조, URL·이미지에 반영)",
   toStartTitle: "처음으로",
