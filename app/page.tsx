@@ -151,15 +151,15 @@ export default async function Page({
         lang={lang}
         transform={tr}
       />
-      {/* AI生成ボタンはフッター帯の外 (右寄せ) に置く */}
-      <div className="ai-gen-row">
+      {/* フッター帯 (文字ぶんの幅) とAI生成ボタンを同じ行に横並び */}
+      <div className="footer-row">
+        <footer className="site-footer">
+          {STRINGS[lang].footerContact}
+          {" · "}
+          <a href="/spec">{STRINGS[lang].specLink}</a>
+        </footer>
         <AiGen lang={lang} />
       </div>
-      <footer className="site-footer">
-        {STRINGS[lang].footerContact}
-        {" · "}
-        <a href="/spec">{STRINGS[lang].specLink}</a>
-      </footer>
     </main>
   );
 }

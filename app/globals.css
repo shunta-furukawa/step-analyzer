@@ -640,11 +640,18 @@ select {
   margin-top: -4px;
 }
 
-/* AI生成ボタン: フッター帯の外に右寄せで置く */
-.ai-gen-row {
+/* フッター帯とAI生成ボタンを同じ行に (帯は文字幅のまま、ボタンは右端) */
+.footer-row {
   display: flex;
-  justify-content: flex-end;
-  margin: 4px 0 10px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 18px 0 10px;
+}
+
+.footer-row .site-footer {
+  margin: 0;
 }
 
 .ai-gen-btn {
