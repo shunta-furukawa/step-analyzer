@@ -30,6 +30,7 @@ export interface VideoExportOptions {
   diff: { cls: number | null; lvl: string } | null; // 難易度 (クラス色+レベル)
   bpmLabel: string; // "175" や "154-308" など表示用
   bgColor: string; // 6桁hex ('#'なし)
+  bgColor2?: string | null; // グラデーション右下の色 (なければ単色)
   hispeed: number;
   audio: AudioBuffer | null; // 音源 (なければハンクラのみ)
   jacket: HTMLImageElement | null; // ジャケット (なければアプリアイコン風)
@@ -48,11 +49,16 @@ const INTRO_SEC = 0.5; // 冒頭のサムネ向けイントロカード表示時
 const TAIL = 1.2;
 const FOOT_TRAVEL = 0.25;
 
-function fgFor(bgHex: string): string {
-  const r = parseInt(bgHex.slice(0, 2), 16);
-  const g = parseInt(bgHex.slice(2, 4), 16);
-  const b = parseInt(bgHex.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45 ? "#17181c" : "#ffffff";
+function fgFor(bgHex: string, bgHex2?: string | null): string {
+  // グラデーション時は2色の平均輝度で判定する
+  const lum = (hex: string) => {
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  };
+  const v = bgHex2 ? (lum(bgHex) + lum(bgHex2)) / 2 : lum(bgHex);
+  return v > 0.45 ? "#17181c" : "#ffffff";
 }
 
 function pickMime(): { mime: string; ext: string } {
@@ -145,7 +151,7 @@ export async function recordChartVideo(
 
   const segs = holdSegmentsOf(chart, footsteps);
   const pxPerBeat = NOTE * 1.8 * Math.max(0.25, o.hispeed);
-  const fg = fgFor(o.bgColor);
+  const fg = fgFor(o.bgColor, o.bgColor2);
   // アプリのステップ数などと同じ縦長フォント (next/fontのAnton)。
   // 実フォント名はCSS変数から実行時に解決し、無ければ太字系にフォールバック
   const logoFont =
@@ -300,7 +306,11 @@ export async function recordChartVideo(
 
   // 背景 (ページと同じ斜めストライプ: 115deg・18px相当を動画スケールに拡大)
   const drawStripedBg = () => {
-    ctx.fillStyle = `#${o.bgColor}`;
+    // 左上→右下グラデーション (単色時は同色)
+    const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+    bgGrad.addColorStop(0, `#${o.bgColor}`);
+    bgGrad.addColorStop(1, `#${o.bgColor2 ?? o.bgColor}`);
+    ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, W, H);
     ctx.save();
     ctx.rotate((-25 * Math.PI) / 180);

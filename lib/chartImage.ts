@@ -32,6 +32,7 @@ export interface ChartImageOptions {
   subtitle?: string; // サブキャプション (アーティスト名など)
   diff?: { cls: number | null; lvl: string } | null; // 難易度 (クラス色+レベル)
   bgColor: string; // 6桁hex ('#'なし)
+  bgColor2?: string | null; // グラデーション右下の色 (なければ単色)
   measuresPerColumn?: number;
   hispeed?: number; // 縦の縮尺 (アプリのハイスピ設定に追従)
   highlights?: Set<number>; // 注目ノーツのtick集合 (黄色い枠で強調)
@@ -175,11 +176,16 @@ export function drawSiteLogo(
   ctx.restore();
 }
 
-function fgFor(bgHex: string): string {
-  const r = parseInt(bgHex.slice(0, 2), 16);
-  const g = parseInt(bgHex.slice(2, 4), 16);
-  const b = parseInt(bgHex.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45 ? INK : "#ffffff";
+function fgFor(bgHex: string, bgHex2?: string | null): string {
+  // グラデーション時は2色の平均輝度で判定する
+  const lum = (hex: string) => {
+    const r = parseInt(hex.slice(0, 2), 16);
+    const g = parseInt(hex.slice(2, 4), 16);
+    const b = parseInt(hex.slice(4, 6), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  };
+  const v = bgHex2 ? (lum(bgHex) + lum(bgHex2)) / 2 : lum(bgHex);
+  return v > 0.45 ? INK : "#ffffff";
 }
 
 // 64x64ビューボックスのパスを (cx, cy) 中心・size幅・rotation度で描く準備
@@ -377,8 +383,11 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   const ctx = canvas.getContext("2d")!;
   ctx.scale(scale, scale);
 
-  // 背景 (ページCSSと同じ斜めストライプ: 115deg・18px)
-  ctx.fillStyle = `#${o.bgColor}`;
+  // 背景 (左上→右下グラデーション。単色時は同色) + ページCSSと同じ斜めストライプ
+  const bgGrad = ctx.createLinearGradient(0, 0, width, totalH);
+  bgGrad.addColorStop(0, `#${o.bgColor}`);
+  bgGrad.addColorStop(1, `#${o.bgColor2 ?? o.bgColor}`);
+  ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, totalH);
   ctx.save();
   ctx.rotate((-25 * Math.PI) / 180);
@@ -390,7 +399,7 @@ export function renderChartImage(o: ChartImageOptions): HTMLCanvasElement {
   ctx.restore();
 
   // ヘッダ: タイトル (縦長フォント) + 難易度 (右上) + アーティスト名・範囲
-  const fg = fgFor(o.bgColor);
+  const fg = fgFor(o.bgColor, o.bgColor2);
   const logoFont =
     (typeof getComputedStyle !== "undefined"
       ? getComputedStyle(document.documentElement).getPropertyValue("--font-logo").trim()

@@ -345,9 +345,17 @@ export default function Viewer({
   const [ghostSound, setGhostSound] = useState(true); // 空打ちのストンプ音
   // 4つ打ちメトロノーム (デフォルトOFF)。小節頭のアクセントは付けない
   const [metronome, setMetronome] = useState(false);
-  const [bgColor, setBgColor] = useState(() =>
-    initialBg && /^[0-9a-fA-F]{6}$/.test(initialBg) ? initialBg.toLowerCase() : DEFAULT_BG
-  );
+  // テーマカラー。単色 "rrggbb" または2色グラデ "rrggbb-rrggbb" (左上-右下)
+  const [bgColor, setBgColor] = useState(() => {
+    const m = initialBg?.match(/^([0-9a-fA-F]{6})(?:-[0-9a-fA-F]{6})?$/);
+    return m ? m[1].toLowerCase() : DEFAULT_BG;
+  });
+  const [bgColor2, setBgColor2] = useState<string | null>(() => {
+    const m = initialBg?.match(/^[0-9a-fA-F]{6}-([0-9a-fA-F]{6})$/);
+    return m ? m[1].toLowerCase() : null;
+  });
+  // URLに載せる形 (2色目があればハイフン連結)
+  const bgParam = bgColor2 ? `${bgColor}-${bgColor2}` : bgColor;
   const [editMode, setEditMode] = useState(false);
   const [editRes, setEditRes] = useState(16);
   const [editShock, setEditShock] = useState(false);
@@ -379,12 +387,14 @@ export default function Viewer({
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
 
-  // 背景色をページ全体とブラウザUI (theme-color) に反映
+  // 背景色をページ全体とブラウザUI (theme-color) に反映。
+  // 2色目がないときは同色を入れてグラデを実質単色にする
   useEffect(() => {
     document.documentElement.style.setProperty("--page-bg", `#${bgColor}`);
+    document.documentElement.style.setProperty("--page-bg2", `#${bgColor2 ?? bgColor}`);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) meta.setAttribute("content", `#${bgColor}`);
-  }, [bgColor]);
+  }, [bgColor, bgColor2]);
 
   // 画面幅に応じて譜面の描画サイズを切り替える (スマホ縦持ち最優先)
   useEffect(() => {
@@ -521,11 +531,11 @@ export default function Viewer({
     if (hc) parts.push(`hc=${hc}`);
     if (hispeed !== 1) parts.push(`hs=${hispeed}`);
     if (speed !== 1) parts.push(`sp=${speed}`);
-    if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
+    if (bgParam !== DEFAULT_BG) parts.push(`c=${bgParam}`);
     if (lang !== "ja") parts.push(`l=${lang}`);
     if (transform) parts.push(`tr=${transform}`);
     return `/?${parts.join("&")}`;
-  }, [compact, title, subtitle, diffCls, diffLvl, bpm, stops, overrides, highlights, noteComments, hispeed, speed, bgColor, lang, transform]);
+  }, [compact, title, subtitle, diffCls, diffLvl, bpm, stops, overrides, highlights, noteComments, hispeed, speed, bgParam, lang, transform]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -941,11 +951,12 @@ export default function Viewer({
             ))}
           </select>
         </div>
-        {bgColor !== DEFAULT_BG && (
+        {(bgColor !== DEFAULT_BG || bgColor2) && (
           <button
             className="secondary bg-reset"
             onClick={() => {
               setBgColor(DEFAULT_BG);
+              setBgColor2(null);
               setDirty(true);
             }}
             title={S.bgResetTitle}
@@ -953,6 +964,17 @@ export default function Viewer({
             ↺
           </button>
         )}
+        {/* グラデーション切り替え: ONで2色目 (右下) のピッカーが出る */}
+        <button
+          className={`secondary bg-grad-toggle${bgColor2 ? " active" : ""}`}
+          onClick={() => {
+            setBgColor2(bgColor2 ? null : bgColor);
+            setDirty(true);
+          }}
+          title={S.bgGradTitle}
+        >
+          ◧
+        </button>
         <input
           type="color"
           className="bg-picker"
@@ -961,8 +983,20 @@ export default function Viewer({
             setBgColor(e.target.value.slice(1).toLowerCase());
             setDirty(true);
           }}
-          title={S.bgPickerTitle}
+          title={bgColor2 ? S.bgPickerTitleGrad1 : S.bgPickerTitle}
         />
+        {bgColor2 && (
+          <input
+            type="color"
+            className="bg-picker"
+            value={`#${bgColor2}`}
+            onChange={(e) => {
+              setBgColor2(e.target.value.slice(1).toLowerCase());
+              setDirty(true);
+            }}
+            title={S.bgPickerTitleGrad2}
+          />
+        )}
       </div>
       <div className="card head-card">
         <div className="head-row">
@@ -1491,7 +1525,7 @@ export default function Viewer({
                 if (clip.hl) parts.push(`hl=${clip.hl}`);
                 if (hispeed !== 1) parts.push(`hs=${hispeed}`);
                 if (speed !== 1) parts.push(`sp=${speed}`);
-                if (bgColor !== DEFAULT_BG) parts.push(`c=${bgColor}`);
+                if (bgParam !== DEFAULT_BG) parts.push(`c=${bgParam}`);
                 if (lang !== "ja") parts.push(`l=${lang}`);
                 if (transform) parts.push(`tr=${transform}`);
                 try {
@@ -1597,7 +1631,9 @@ export default function Viewer({
                     style={{
                       width: Math.max(6, layout.width * sc),
                       height: Math.max(6, totalH * sc),
-                      background: `#${bgColor}`,
+                      background: bgColor2
+                        ? `linear-gradient(135deg, #${bgColor}, #${bgColor2})`
+                        : `#${bgColor}`,
                     }}
                   >
                     {layout.cols.map((c, i) => (
@@ -1647,6 +1683,7 @@ export default function Viewer({
                         ? { cls: diffCls, lvl: diffLvl }
                         : null,
                     bgColor,
+                    bgColor2,
                     measuresPerColumn:
                       Number.isFinite(perColNum) && perColNum >= 1 ? perColNum : 16,
                     hispeed,
@@ -1796,6 +1833,7 @@ export default function Viewer({
                     diff: diffCls !== null || diffLvl ? { cls: diffCls, lvl: diffLvl } : null,
                     bpmLabel,
                     bgColor,
+                    bgColor2,
                     hispeed,
                     audio,
                     jacket,

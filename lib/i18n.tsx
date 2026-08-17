@@ -32,6 +32,9 @@ export interface Strings {
   titlePlaceholder: string;
   subtitlePlaceholder: string;
   bgPickerTitle: string;
+  bgPickerTitleGrad1: string;
+  bgPickerTitleGrad2: string;
+  bgGradTitle: string;
   bgResetTitle: string;
   // ツールバー
   edit: string;
@@ -206,6 +209,9 @@ const ja: Strings = {
   titlePlaceholder: "タイトルを入力",
   subtitlePlaceholder: "アーティスト名など (任意)",
   bgPickerTitle: "背景色をカスタマイズ",
+  bgPickerTitleGrad1: "グラデーション左上の色",
+  bgPickerTitleGrad2: "グラデーション右下の色",
+  bgGradTitle: "2色グラデーションに切り替え",
   bgResetTitle: "デフォルト色に戻す",
   edit: "編集",
   editing: "編集中",
@@ -394,6 +400,9 @@ const en: Strings = {
   titlePlaceholder: "Enter a title",
   subtitlePlaceholder: "Artist name etc. (optional)",
   bgPickerTitle: "Customize background color",
+  bgPickerTitleGrad1: "Gradient top-left color",
+  bgPickerTitleGrad2: "Gradient bottom-right color",
+  bgGradTitle: "Toggle two-color gradient",
   bgResetTitle: "Reset to default color",
   edit: "Edit",
   editing: "Editing",
@@ -581,6 +590,9 @@ const ko: Strings = {
   titlePlaceholder: "제목 입력",
   subtitlePlaceholder: "아티스트명 등 (선택)",
   bgPickerTitle: "배경색 변경",
+  bgPickerTitleGrad1: "그라데이션 왼쪽 위 색",
+  bgPickerTitleGrad2: "그라데이션 오른쪽 아래 색",
+  bgGradTitle: "2색 그라데이션 전환",
   bgResetTitle: "기본 색상으로 되돌리기",
   edit: "편집",
   editing: "편집 중",

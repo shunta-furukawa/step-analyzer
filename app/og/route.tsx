@@ -81,12 +81,16 @@ function loadGoogleFont(family: string, text?: string): Promise<ArrayBuffer | nu
   return fontCache.get(key)!;
 }
 
-// 背景色の明度から前景色 (黒/白) を選ぶ
-function fgFor(bgHex: string): string {
-  const r = parseInt(bgHex.slice(1, 3), 16);
-  const g = parseInt(bgHex.slice(3, 5), 16);
-  const b = parseInt(bgHex.slice(5, 7), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.45 ? INK : "#ffffff";
+// 背景色の明度から前景色 (黒/白) を選ぶ (グラデーション時は平均輝度)
+function fgFor(bgHex: string, bgHex2?: string | null): string {
+  const lum = (hex: string) => {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  };
+  const v = bgHex2 ? (lum(bgHex) + lum(bgHex2)) / 2 : lum(bgHex);
+  return v > 0.45 ? INK : "#ffffff";
 }
 
 function OgArrow({
@@ -384,8 +388,11 @@ export async function GET(request: Request) {
   const rawTitle = searchParams.get("t") ?? "";
   const overrides = parseOverrides(searchParams.get("f") ?? undefined);
   const cRaw = searchParams.get("c");
-  const bg = cRaw && /^[0-9a-fA-F]{6}$/.test(cRaw) ? `#${cRaw.toLowerCase()}` : DEFAULT_BG;
-  const fg = fgFor(bg);
+  // 単色 "rrggbb" または2色グラデ "rrggbb-rrggbb" (左上-右下)
+  const cOk = cRaw && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(cRaw);
+  const bg = cOk ? `#${cRaw.slice(0, 6).toLowerCase()}` : DEFAULT_BG;
+  const bg2 = cOk && cRaw.length > 6 ? `#${cRaw.slice(7).toLowerCase()}` : null;
+  const fg = fgFor(bg, bg2);
 
   let chart: ParsedChart | null = null;
   try {
@@ -412,8 +419,7 @@ export async function GET(request: Request) {
     width: W,
     height: H,
     backgroundColor: bg,
-    backgroundImage:
-      "repeating-linear-gradient(115deg, rgba(255,255,255,0.07) 0px, rgba(255,255,255,0.07) 22px, rgba(0,0,0,0.05) 22px, rgba(0,0,0,0.05) 44px)",
+    backgroundImage: `repeating-linear-gradient(115deg, rgba(255,255,255,0.07) 0px, rgba(255,255,255,0.07) 22px, rgba(0,0,0,0.05) 22px, rgba(0,0,0,0.05) 44px), linear-gradient(135deg, ${bg}, ${bg2 ?? bg})`,
     padding: 36,
     gap: 32,
   };

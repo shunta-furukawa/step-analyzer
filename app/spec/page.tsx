@@ -28,7 +28,10 @@ const PARAMS: { name: string; desc: string }[] = [
   { name: "f", desc: "足の手動指定。「tick+L/R/LL/RR/C/CL/CR」を-区切り" },
   { name: "hs", desc: "ハイスピード (0.25〜6、0.05刻み)" },
   { name: "sp", desc: "再生速度 (0.25 / 0.5 / 0.75 / 1)" },
-  { name: "c", desc: "背景色 (6桁hex、#なし)" },
+  {
+    name: "c",
+    desc: "背景色 (6桁hex、#なし)。c=1a2a6c-e94560 のように2色をハイフンで繋ぐと左上→右下のグラデーション",
+  },
   { name: "l", desc: "言語 (ja / en / ko)" },
   { name: "tr", desc: "変形 (mirror / left / right / 4桁の並べ替え)" },
   { name: "d", desc: "nのdeflate圧縮版 (base64url)。共有URLの短縮用で、手書きする場合はnを使う" },

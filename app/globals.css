@@ -34,11 +34,19 @@ html {
 
 body {
   background-color: var(--page-bg, #29d6a2);
+  /* ストライプの下に左上→右下のグラデーション層。
+     2色目未指定時は同色になり実質単色 */
   background-image: repeating-linear-gradient(
-    115deg,
-    rgba(255, 255, 255, 0.07) 0 18px,
-    rgba(0, 0, 0, 0.045) 18px 36px
-  );
+      115deg,
+      rgba(255, 255, 255, 0.07) 0 18px,
+      rgba(0, 0, 0, 0.045) 18px 36px
+    ),
+    linear-gradient(
+      135deg,
+      var(--page-bg, #29d6a2),
+      var(--page-bg2, var(--page-bg, #29d6a2))
+    );
+  background-attachment: scroll, fixed;
   color: var(--ink);
   font-family: "Hiragino Sans", "Noto Sans JP", system-ui, -apple-system, sans-serif;
   min-height: 100vh;
@@ -638,6 +646,17 @@ select {
 
 .hs-bpm-hint {
   margin-top: -4px;
+}
+
+/* グラデーション切り替えボタン */
+.bg-grad-toggle {
+  font-size: 14px;
+  padding: 4px 8px;
+}
+
+.bg-grad-toggle.active {
+  outline: 2px solid var(--mint, #00e0a0);
+  outline-offset: -1px;
 }
 
 /* フッター帯とAI生成ボタンを同じ行に (帯は文字幅のまま、ボタンは右端) */

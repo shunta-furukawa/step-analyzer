@@ -51,7 +51,11 @@ export async function generateMetadata({
   const c = pick(sp.c);
   const tr = pick(sp.tr);
   // 背景色カスタム時はファビコン/ホーム画面アイコンも同じ色にする
-  const bgOk = c && /^[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : undefined;
+  // (グラデーション指定 "rrggbb-rrggbb" のときは1色目を使う)
+  const bgOk =
+    c && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(c)
+      ? c.slice(0, 6).toLowerCase()
+      : undefined;
   const icons = bgOk
     ? {
         icon: [
@@ -80,7 +84,7 @@ export async function generateMetadata({
   qs.set(ogParam.key, ogParam.value);
   if (t) qs.set("t", t);
   if (f) qs.set("f", f);
-  if (c && /^[0-9a-fA-F]{6}$/.test(c)) qs.set("c", c.toLowerCase());
+  if (c && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(c)) qs.set("c", c.toLowerCase());
   if (tr && parseTransform(tr)) qs.set("tr", tr);
   const ogUrl = `/og?${qs.toString()}`;
 
@@ -120,7 +124,10 @@ export default async function Page({
   const hs = pick(sp.hs);
   const spd = pick(sp.sp);
   const c = pick(sp.c);
-  const bg = c && /^[0-9a-fA-F]{6}$/.test(c) ? c.toLowerCase() : undefined;
+  const bg =
+    c && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(c) ? c.toLowerCase() : undefined;
+  const bg1 = bg?.slice(0, 6);
+  const bg2 = bg && bg.length > 6 ? bg.slice(7) : bg1;
   const lang = normalizeLang(pick(sp.l));
   const tr = pick(sp.tr);
   const isDefault = !n;
@@ -128,7 +135,7 @@ export default async function Page({
   return (
     <main className="container">
       {/* SSR時から背景色を適用してチラつきを防ぐ */}
-      {bg && <style>{`:root{--page-bg:#${bg};}`}</style>}
+      {bg && <style>{`:root{--page-bg:#${bg1};--page-bg2:#${bg2};}`}</style>}
       <header className="site-header">
         <h1>
           <a href="/">Step Analyzer</a>
