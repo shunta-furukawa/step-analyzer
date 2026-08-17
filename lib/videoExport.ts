@@ -35,7 +35,8 @@ export interface VideoExportOptions {
   audio: AudioBuffer | null; // 音源 (なければハンクラのみ)
   jacket: HTMLImageElement | null; // ジャケット (なければアプリアイコン風)
   offsetSec: number; // 譜面1小節目の頭が音源の何秒目か (音源なしなら無視)
-  landscape?: boolean; // 横長 (1920x1080・0.5倍速) で書き出す
+  landscape?: boolean; // 横長 (1920x1080) で書き出す
+  landscapeSpeed?: number; // 横長の収録速度 (0.5=じっくり既定 / 1=等倍)
   stats?: { label: string; value: number }[]; // 統計カード (横長のみ表示)
   // 注目ノーツのコメント (横長のみ)。該当ノーツが判定線に達したら
   // 効果音と共に停止し、字送りでコメントを表示してから再開する
@@ -127,7 +128,8 @@ export async function recordChartVideo(
 
   // モード別レイアウト。縦=ショート向け1カラム、横=左レーン+右情報ペーンの2カラム
   const L = !!o.landscape;
-  const vSpeed = L ? 0.5 : 1; // 横長はじっくり観察用に0.5倍速
+  // 横長はじっくり観察用に0.5倍速が既定 (等倍オプションあり)。縦は常に等倍
+  const vSpeed = L ? o.landscapeSpeed ?? 0.5 : 1;
   const W = L ? 1920 : 720;
   const H = L ? 1080 : 1280;
   const HEADER_H = L ? 24 : 160; // レーン上端 (横はヘッダーなし)

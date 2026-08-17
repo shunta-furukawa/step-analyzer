@@ -270,8 +270,10 @@ export default function Viewer({
   // 動画書き出しモーダル
   const [showVideo, setShowVideo] = useState(false);
   const [vTplCopied, setVTplCopied] = useState(false);
-  // 動画の向き: 縦=ショート (等速) / 横=じっくり観察用 (0.5倍速)
+  // 動画の向き: 縦=ショート (等速) / 横=じっくり観察用 (0.5倍速が既定)
   const [vMode, setVMode] = useState<"portrait" | "landscape">("portrait");
+  // 横長の収録速度 (0.5=じっくり / 1=等倍)
+  const [vLandSpeed, setVLandSpeed] = useState<0.5 | 1>(0.5);
   const [vUseMedia, setVUseMedia] = useState(false);
   const [vOgg, setVOgg] = useState("");
   const [vJacket, setVJacket] = useState("");
@@ -1766,6 +1768,26 @@ export default function Viewer({
                 </button>
               </div>
             </div>
+            {/* 横長のみ: 収録速度の選択 */}
+            {vMode === "landscape" && (
+              <div className="opt-row">
+                <span className="opt-label">{S.videoSpeedLabel}</span>
+                <div className="opt-btns">
+                  <button
+                    className={vLandSpeed === 0.5 ? "" : "secondary"}
+                    onClick={() => setVLandSpeed(0.5)}
+                  >
+                    {S.videoSpeedHalf}
+                  </button>
+                  <button
+                    className={vLandSpeed === 1 ? "" : "secondary"}
+                    onClick={() => setVLandSpeed(1)}
+                  >
+                    {S.videoSpeedFull}
+                  </button>
+                </div>
+              </div>
+            )}
             <label className="toggle-row">
               <input
                 type="checkbox"
@@ -1839,6 +1861,7 @@ export default function Viewer({
                     jacket,
                     offsetSec: Number.isFinite(off) ? off : 0,
                     landscape: vMode === "landscape",
+                    landscapeSpeed: vLandSpeed,
                     stats: [
                       { label: S.steps, value: stats.steps },
                       { label: S.jumps, value: stats.jumps },

@@ -120,6 +120,9 @@ export interface Strings {
   hlCommentPlaceholder: string;
   videoModePortrait: string;
   videoModeLandscape: string;
+  videoSpeedLabel: string;
+  videoSpeedHalf: string;
+  videoSpeedFull: string;
   videoCancel: string;
   // 小節番号タップの範囲選択
   rangePending: (p: string) => string;
@@ -307,7 +310,10 @@ const ja: Strings = {
   videoTplCopied: "✓ コピーしました",
   hlCommentPlaceholder: "コメント (動画の注目シーンで表示)",
   videoModePortrait: "縦 (ショート・等速)",
-  videoModeLandscape: "横 (じっくり0.5倍速)",
+  videoModeLandscape: "横 (じっくり解説向け)",
+  videoSpeedLabel: "収録速度",
+  videoSpeedHalf: "0.5倍速 (じっくり)",
+  videoSpeedFull: "等倍",
   videoCancel: "中止",
   rangePending: (p) => `始点: ${p} — 終点の位置をタップ`,
   rangeActive: (a, b) => `選択範囲: ${a}〜${b} (小節.拍)`,
@@ -498,7 +504,10 @@ const en: Strings = {
   videoTplCopied: "✓ Copied",
   hlCommentPlaceholder: "Comment (shown at spotlight scenes in videos)",
   videoModePortrait: "Portrait (Shorts, 1×)",
-  videoModeLandscape: "Landscape (study, 0.5×)",
+  videoModeLandscape: "Landscape (study)",
+  videoSpeedLabel: "Recording speed",
+  videoSpeedHalf: "0.5× (study)",
+  videoSpeedFull: "1×",
   videoCancel: "Cancel",
   rangePending: (p) => `Start: ${p} — tap the end position`,
   rangeActive: (a, b) => `Selection: ${a}–${b} (measure.beat)`,
@@ -688,7 +697,10 @@ const ko: Strings = {
   videoTplCopied: "✓ 복사했습니다",
   hlCommentPlaceholder: "코멘트 (동영상 주목 장면에 표시)",
   videoModePortrait: "세로 (쇼트·1배속)",
-  videoModeLandscape: "가로 (관찰용 0.5배속)",
+  videoModeLandscape: "가로 (관찰용)",
+  videoSpeedLabel: "녹화 속도",
+  videoSpeedHalf: "0.5배속 (관찰)",
+  videoSpeedFull: "1배속",
   videoCancel: "중지",
   rangePending: (p) => `시작: ${p} — 끝 위치를 탭`,
   rangeActive: (a, b) => `선택 범위: ${a}〜${b} (마디.박)`,
