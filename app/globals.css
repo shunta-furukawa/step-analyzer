@@ -140,6 +140,16 @@ select,
   padding: 3px;
 }
 
+/* グラデーション時は2つ並ぶので真円に絞る */
+.bg-picker.round {
+  width: 27px;
+  border-radius: 50%;
+}
+
+.bg-picker.round::-webkit-color-swatch {
+  border-radius: 50%;
+}
+
 .bg-picker::-webkit-color-swatch {
   border: none;
 }

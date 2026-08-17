@@ -977,7 +977,7 @@ export default function Viewer({
         </button>
         <input
           type="color"
-          className="bg-picker"
+          className={`bg-picker${bgColor2 ? " round" : ""}`}
           value={`#${bgColor}`}
           onChange={(e) => {
             setBgColor(e.target.value.slice(1).toLowerCase());
@@ -988,7 +988,7 @@ export default function Viewer({
         {bgColor2 && (
           <input
             type="color"
-            className="bg-picker"
+            className="bg-picker round"
             value={`#${bgColor2}`}
             onChange={(e) => {
               setBgColor2(e.target.value.slice(1).toLowerCase());
