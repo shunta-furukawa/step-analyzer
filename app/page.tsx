@@ -54,6 +54,15 @@ export async function generateMetadata({
   // (グラデーション指定 "rrggbb-rrggbb" はアイコン側もグラデ描画)
   const bgOk =
     c && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(c) ? c.toLowerCase() : undefined;
+  // ホーム画面追加でクエリ (=譜面データ) が失われないよう、
+  // 現在ページのクエリをそのまま埋め込んだ動的マニフェストを参照させる
+  const mqs = new URLSearchParams();
+  for (const [k, v] of Object.entries(sp)) {
+    if (typeof v === "string" && v.length > 0) mqs.set(k, v);
+  }
+  const manifest = mqs.toString()
+    ? `/api/manifest?${mqs.toString()}`
+    : "/api/manifest";
   const icons = bgOk
     ? {
         icon: [
@@ -68,6 +77,7 @@ export async function generateMetadata({
       title: "Step Analyzer — DDR読譜トレーナー",
       description:
         "DDRの譜面の一部をURLで共有し、左右どちらの足でどのパネルを踏むべきかを可視化するツール",
+      manifest,
       ...(icons ? { icons } : {}),
     };
   }
@@ -89,6 +99,7 @@ export async function generateMetadata({
   return {
     title,
     description,
+    manifest,
     ...(icons ? { icons } : {}),
     openGraph: {
       title,
