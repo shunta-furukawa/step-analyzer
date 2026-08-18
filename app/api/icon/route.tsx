@@ -18,7 +18,10 @@ const DEFAULT_BG = "#0b0e1a";
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const c = searchParams.get("c");
-  const bg = c && /^[0-9a-fA-F]{6}$/.test(c) ? `#${c.toLowerCase()}` : DEFAULT_BG;
+  // 単色 "rrggbb" または2色グラデ "rrggbb-rrggbb" (左上-右下)
+  const cOk = c && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(c);
+  const bg = cOk ? `#${c.slice(0, 6).toLowerCase()}` : DEFAULT_BG;
+  const bg2 = cOk && c.length > 6 ? `#${c.slice(7).toLowerCase()}` : null;
   const sizeRaw = Number(searchParams.get("s") ?? 180);
   const size = Number.isFinite(sizeRaw) ? Math.max(32, Math.min(1024, sizeRaw)) : 180;
   // ファビコン用の小サイズは角丸、apple/PWA用はiOS側でマスクされるため全面塗り
@@ -35,6 +38,7 @@ export async function GET(request: Request) {
           alignItems: "center",
           justifyContent: "center",
           backgroundColor: bg,
+          backgroundImage: `linear-gradient(135deg, ${bg}, ${bg2 ?? bg})`,
           borderRadius: radius,
         }}
       >

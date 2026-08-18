@@ -51,11 +51,9 @@ export async function generateMetadata({
   const c = pick(sp.c);
   const tr = pick(sp.tr);
   // 背景色カスタム時はファビコン/ホーム画面アイコンも同じ色にする
-  // (グラデーション指定 "rrggbb-rrggbb" のときは1色目を使う)
+  // (グラデーション指定 "rrggbb-rrggbb" はアイコン側もグラデ描画)
   const bgOk =
-    c && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(c)
-      ? c.slice(0, 6).toLowerCase()
-      : undefined;
+    c && /^[0-9a-fA-F]{6}(-[0-9a-fA-F]{6})?$/.test(c) ? c.toLowerCase() : undefined;
   const icons = bgOk
     ? {
         icon: [
