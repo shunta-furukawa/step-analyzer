@@ -15,9 +15,14 @@ export async function GET(request: Request) {
   const theme = cOk ? `#${c.slice(0, 6).toLowerCase()}` : DEFAULT_BG;
   const iconC = cOk ? `&c=${c.toLowerCase()}` : "";
 
+  // 曲名 (t=) があればホーム画面のアプリ名を曲名にする
+  const t = searchParams.get("t");
+  const st = searchParams.get("st");
   const manifest = {
-    name: "Step Analyzer — DDR読譜トレーナー",
-    short_name: "StepAnalyzer",
+    name: t
+      ? `${t}${st ? ` — ${st}` : ""} | Step Analyzer`
+      : "Step Analyzer — DDR読譜トレーナー",
+    short_name: t || "StepAnalyzer",
     description:
       "DDRの譜面の一部をURLで共有し、左右どちらの足でどのパネルを踏むべきかを可視化するツール",
     start_url: qs ? `/?${qs}` : "/",

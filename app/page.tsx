@@ -100,6 +100,8 @@ export async function generateMetadata({
     title,
     description,
     manifest,
+    // ホーム画面追加時の既定アプリ名を曲名にする (iOSはこのmetaを優先)
+    ...(t ? { appleWebApp: { title: t } } : {}),
     ...(icons ? { icons } : {}),
     openGraph: {
       title,
