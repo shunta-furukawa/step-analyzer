@@ -2,6 +2,7 @@
 // 変速・停止・足の手動指定をクリップの座標系 (先頭=0拍) にシフトする。
 
 import { parseCompact, tickOf, type FootOverride } from "./chart";
+import { serializeComments } from "./edit";
 import {
   bpmAtBeat,
   serializeBpmParam,
@@ -16,6 +17,7 @@ export interface ClipResult {
   s?: string;
   f?: string;
   hl?: string;
+  hc?: string;
 }
 
 function setChar(row: string, i: number, ch: string): string {
@@ -34,7 +36,8 @@ export function buildClipData(
   overrides: Map<number, FootOverride>,
   startMeasure: number,
   endMeasure: number,
-  highlights: Set<number> = new Set()
+  highlights: Set<number> = new Set(),
+  comments: Map<number, string> = new Map()
 ): ClipResult {
   const measures = compact.split("-");
   const start = Math.max(1, Math.min(startMeasure, measures.length));
@@ -98,5 +101,12 @@ export function buildClipData(
     .map((tick) => String(tick - tickStart));
   const hl = hlParts.length > 0 ? hlParts.join("-") : undefined;
 
-  return { compact: clipped.join("-"), b, s, f, hl };
+  // 注目コメント: 範囲内のtickをシフト
+  const clippedComments = new Map<number, string>();
+  for (const [tick, text] of comments) {
+    if (tick >= tickStart && tick < tickEnd) clippedComments.set(tick - tickStart, text);
+  }
+  const hc = clippedComments.size > 0 ? serializeComments(clippedComments) : undefined;
+
+  return { compact: clipped.join("-"), b, s, f, hl, hc };
 }

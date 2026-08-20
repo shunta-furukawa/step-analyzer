@@ -1511,7 +1511,8 @@ export default function Viewer({
                   overrides,
                   range.start,
                   range.end,
-                  highlights
+                  highlights,
+                  noteComments
                 );
                 const enc = (v: string) =>
                   encodeURIComponent(v).replace(/%2C/gi, ",").replace(/%3A/gi, ":");
@@ -1521,10 +1522,14 @@ export default function Viewer({
                   parts.push(`d=${encoded}`);
                 else parts.push(`n=${clip.compact}`);
                 if (clipName) parts.push(`t=${encodeURIComponent(clipName)}`);
+                if (subtitle) parts.push(`st=${encodeURIComponent(subtitle)}`);
+                const clipDf = serializeDiff(diffCls, diffLvl);
+                if (clipDf) parts.push(`df=${clipDf}`);
                 if (clip.b) parts.push(`b=${enc(clip.b)}`);
                 if (clip.s) parts.push(`s=${enc(clip.s)}`);
                 if (clip.f) parts.push(`f=${clip.f}`);
                 if (clip.hl) parts.push(`hl=${clip.hl}`);
+                if (clip.hc) parts.push(`hc=${clip.hc}`);
                 if (hispeed !== 1) parts.push(`hs=${hispeed}`);
                 if (speed !== 1) parts.push(`sp=${speed}`);
                 if (bgParam !== DEFAULT_BG) parts.push(`c=${bgParam}`);
