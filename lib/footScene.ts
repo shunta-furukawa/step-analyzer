@@ -42,8 +42,17 @@ const STAGE_CENTERS = [
   { x: 1.5, y: 1.5 },
 ];
 
-const TRAVEL_MS = 250; // 足の移動時間 (CSS版のtransitionと同じ)
+const TRAVEL_MS = 250; // 足の移動時間の上限 (CSS版のtransitionと同じ)
+const TRAVEL_MS_MIN = 90; // 高密度時の移動時間の下限
 const HOP_MS = 220;
+
+// ノーツ間隔に応じた足の移動時間。間隔が250msを切る高密度地帯では
+// 足が目標に着く前に次の目標へ切り替わって中間でうろつくため、
+// 片足の持ち時間 (≒間隔の2倍) に収まる速さまでトゥイーンを縮める
+function travelMsOf(gapSec: number | null | undefined): number {
+  if (gapSec == null) return TRAVEL_MS;
+  return Math.max(TRAVEL_MS_MIN, Math.min(TRAVEL_MS, gapSec * 2 * 1000 * 0.9));
+}
 
 // 表示用の足の角度 (Viewerと同じ圧縮 + かかと正面の折り返し)
 function displayFootRot(facing: number): number {
@@ -199,6 +208,7 @@ interface FootRig {
   from: { x: number; z: number; rot: number; lift: number };
   target: { x: number; z: number; rot: number; lift: number };
   tweenT0: number;
+  tweenDur: number; // このトゥイーンの所要時間 (高密度時は短くなる)
   tweenMoves: boolean; // このトゥイーンが位置移動を含むか (空中の弧を描くか)
   hopT0: number;
 }
@@ -261,6 +271,7 @@ function makeFoot(color: string, label: string): FootRig {
     from: { x: 0, z: 0, rot: 0, lift: 0 },
     target: { x: 0, z: 0, rot: 0, lift: 0 },
     tweenT0: 0,
+    tweenDur: TRAVEL_MS,
     tweenMoves: false,
     hopT0: -1,
   };
@@ -272,20 +283,34 @@ function makeFoot(color: string, label: string): FootRig {
 // 詰まっているほど濃く短く残り、間隔が空くほど薄く長く漂って消える
 const TRAIL_MAX = 120; // 保持するサンプル数の上限
 const TRAIL_HALF_W = 0.13; // 頭側の帯の半幅 (ワールド単位)
-const TRAIL_LIFE_REF = 300; // 基準の減衰時間ms (このとき濃さが基準値)
-const TRAIL_ALPHA_REF = 0.5; // 基準の濃さ (濃さ×寿命 = REF同士の積で一定)
-const TRAIL_LIFE_MIN = 150; // 寿命の下限ms (これ以上詰まっても濃さ上限で頭打ち)
+// 寿命の下限。頭側 (最も濃い部分) は足の下に隠れるため、
+// 高速時でも尻尾が足の外へはみ出して見える長さを確保する
+const TRAIL_LIFE_MIN = 350;
 const TRAIL_LIFE_MAX = 1500; // 寿命の上限ms (超スカスカでも一応視認できる程度)
-const TRAIL_ALPHA_CAP = 0.85; // 濃さの上限 (パネルを潰さない)
+// 不透明度100%に達するノーツ間隔 (BPM200の16分 = 75ms)。
+// 濃さ×間隔=一定の反比例で、これより間隔が空くほど薄くなる
+const TRAIL_FULL_MS = 75;
+// 完全に白へ振り切るノーツ間隔 (BPM240の16分 = 62.5ms、現場観測の最速)。
+// FULL〜WHITEの間は足色→白へ線形に近づく
+const TRAIL_WHITE_MS = 62.5;
+const TRAIL_ALPHA_MIN = 0.05; // 濃さの下限 (休符明けでも痕跡は残す)
+const TRAIL_GAP_DEFAULT = 0.3; // 間隔不明時の既定 (秒)
 
-// ノーツ間隔 (物理秒) → そのステップのトレイルパラメータ
-function trailParamsOf(gapSec: number | null | undefined): { life: number; a0: number } {
-  const life = Math.max(
-    TRAIL_LIFE_MIN,
-    Math.min(TRAIL_LIFE_MAX, (gapSec ?? TRAIL_LIFE_REF / 1000) * 1000)
-  );
-  const a0 = Math.min(TRAIL_ALPHA_CAP, (TRAIL_ALPHA_REF * TRAIL_LIFE_REF) / life);
-  return { life, a0 };
+// ノーツ間隔 (物理秒) → そのステップのトレイルパラメータ。
+// whiteは0=足色そのまま、1=真っ白 (100%を超える速さの表現)
+function trailParamsOf(gapSec: number | null | undefined): {
+  life: number;
+  a0: number;
+  white: number;
+} {
+  const gapMs = (gapSec ?? TRAIL_GAP_DEFAULT) * 1000;
+  const life = Math.max(TRAIL_LIFE_MIN, Math.min(TRAIL_LIFE_MAX, gapMs));
+  const a0 = Math.max(TRAIL_ALPHA_MIN, Math.min(1, TRAIL_FULL_MS / Math.max(1, gapMs)));
+  const white =
+    gapMs >= TRAIL_FULL_MS
+      ? 0
+      : Math.min(1, (TRAIL_FULL_MS - gapMs) / (TRAIL_FULL_MS - TRAIL_WHITE_MS));
+  return { life, a0, white };
 }
 
 interface TrailRig {
@@ -294,7 +319,7 @@ interface TrailRig {
   pos: Float32Array;
   col: Float32Array;
   rgb: [number, number, number];
-  samples: { x: number; z: number; t: number; life: number; a0: number }[];
+  samples: { x: number; z: number; t: number; life: number; a0: number; white: number }[];
 }
 
 function makeTrail(color: string, y: number): TrailRig {
@@ -339,19 +364,22 @@ function updateTrail(
   while (s.length > 0 && now - s[0].t > s[0].life) s.shift();
   const last = s[s.length - 1];
   if (!last || Math.hypot(x - last.x, z - last.z) > 0.012) {
-    const { life, a0 } = trailParamsOf(gapSec);
-    s.push({ x, z, t: now, life, a0 });
+    const { life, a0, white } = trailParamsOf(gapSec);
+    s.push({ x, z, t: now, life, a0, white });
     if (s.length > TRAIL_MAX - 1) s.shift();
   }
   // 描画点列 = サンプル (古→新) + 現在位置 (頭)。2点未満なら非表示
-  const pts: { x: number; z: number; fade: number; a0: number }[] = s.map((p) => ({
-    x: p.x,
-    z: p.z,
-    fade: Math.max(0, 1 - (now - p.t) / p.life),
-    a0: p.a0,
-  }));
-  const headA0 = s.length > 0 ? s[s.length - 1].a0 : trailParamsOf(gapSec).a0;
-  pts.push({ x, z, fade: 1, a0: headA0 });
+  const pts: { x: number; z: number; fade: number; a0: number; white: number }[] = s.map(
+    (p) => ({
+      x: p.x,
+      z: p.z,
+      fade: Math.max(0, 1 - (now - p.t) / p.life),
+      a0: p.a0,
+      white: p.white,
+    })
+  );
+  const head = s.length > 0 ? s[s.length - 1] : trailParamsOf(gapSec);
+  pts.push({ x, z, fade: 1, a0: head.a0, white: head.white });
   if (pts.length < 2) {
     tr.geo.setDrawRange(0, 0);
     return;
@@ -378,12 +406,16 @@ function updateTrail(
     tr.pos[vi + 3] = p.x - px;
     tr.pos[vi + 4] = 0;
     tr.pos[vi + 5] = p.z - pz;
-    const a = p.a0 * p.fade * p.fade; // 尾側の消え際をなめらかに
+    const a = p.a0 * p.fade * Math.sqrt(p.fade); // 尾側の消え際をなめらかに (fade^1.5)
+    // 100%超の速さは足色→白へ振る (whiteが混合率)
+    const r = tr.rgb[0] + (1 - tr.rgb[0]) * p.white;
+    const g = tr.rgb[1] + (1 - tr.rgb[1]) * p.white;
+    const bl = tr.rgb[2] + (1 - tr.rgb[2]) * p.white;
     const ci = i * 8;
     for (const base of [ci, ci + 4]) {
-      tr.col[base] = tr.rgb[0];
-      tr.col[base + 1] = tr.rgb[1];
-      tr.col[base + 2] = tr.rgb[2];
+      tr.col[base] = r;
+      tr.col[base + 1] = g;
+      tr.col[base + 2] = bl;
       tr.col[base + 3] = a;
     }
   }
@@ -549,6 +581,7 @@ export function createFootScene(): FootScene | null {
         rig.from = { ...rig.cur };
         rig.target = { x: tx, z: tz, rot, lift };
         rig.tweenT0 = now;
+        rig.tweenDur = travelMsOf(p.trailGapSec);
         rig.tweenMoves = Math.hypot(tx - rig.from.x, tz - rig.from.z) > 0.05;
       }
     };
@@ -565,7 +598,7 @@ export function createFootScene(): FootScene | null {
       // 移動の着地弧が「踏み」そのものなので、直後の着地バウンドは重ねない。
       // 先読みの早着地ぶん (FOOT_EARLY) + 状態反映ラグでもはみ出さない窓にする
       const justTraveled = (rig: FootRig) =>
-        rig.tweenMoves && now - rig.tweenT0 < TRAVEL_MS + 200;
+        rig.tweenMoves && now - rig.tweenT0 < rig.tweenDur + 200;
       if ((lStep || p.oneFoot?.foot === "L") && !justTraveled(feet.L)) feet.L.hopT0 = now;
       if ((rStep || p.oneFoot?.foot === "R") && !justTraveled(feet.R)) feet.R.hopT0 = now;
     }
@@ -574,7 +607,7 @@ export function createFootScene(): FootScene | null {
   const frame = (nowMs?: number) => {
     const now = nowMs ?? performance.now();
     const applyFoot = (rig: FootRig, foot: Foot) => {
-      const t = Math.min(1, (now - rig.tweenT0) / TRAVEL_MS);
+      const t = Math.min(1, (now - rig.tweenT0) / rig.tweenDur);
       const e = t * (2 - t); // ease-out
       rig.cur.x = rig.from.x + (rig.target.x - rig.from.x) * e;
       rig.cur.z = rig.from.z + (rig.target.z - rig.from.z) * e;

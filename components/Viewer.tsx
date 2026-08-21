@@ -919,11 +919,11 @@ export default function Viewer({
   const curStep = footsteps[current];
   // 再生中の足の描画位置は先読みインデックスから取る (ジャスト到着)
   const footStep = (playing ? footsteps[footIdx] : curStep) ?? curStep;
-  // トレイル用: このステップと直前ノーツの物理的な間隔秒 (再生速度換算込み)。
-  // 間隔が詰まっているほど濃く短い軌跡になる
+  // このステップと直前ノーツの物理的な間隔秒 (再生速度換算込み)。
+  // トレイルの濃さ・減衰時間と、高密度時の足の移動速度の算出に使う
   const trailIdx = playing ? footIdx : current;
   const trailGapSec =
-    footTrail && trailIdx > 0 && chart.events[trailIdx]
+    trailIdx > 0 && chart.events[trailIdx]
       ? (timeAtBeat(timeline, chart.events[trailIdx].row.beat) -
           timeAtBeat(timeline, chart.events[trailIdx - 1].row.beat)) /
         speed
