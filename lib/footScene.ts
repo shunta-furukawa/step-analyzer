@@ -25,6 +25,8 @@ export interface FootScene {
   setProps(p: FootSceneProps, nowMs?: number): void;
   /** 毎フレーム呼ぶ (トゥイーンを進めて描画する) */
   frame(nowMs?: number): void;
+  /** 足の軌跡 (トレイル) 表示の切り替え */
+  setTrail(on: boolean): void;
   dispose(): void;
 }
 
@@ -261,6 +263,107 @@ function makeFoot(color: string, label: string): FootRig {
   };
 }
 
+// 足の軌跡 (トレイル)。スネークゲームのしっぽのように、床に敷いた
+// 帯が実時間で消えていく。寿命が絶対時間 (TRAIL_MS) 固定なので、
+// 足が速く動くフレーズほど自然に長く伸びる = 速さがそのまま見える
+const TRAIL_MS = 700; // 軌跡の寿命 (実時間)
+const TRAIL_MAX = 120; // 保持するサンプル数の上限
+const TRAIL_HALF_W = 0.13; // 頭側の帯の半幅 (ワールド単位)
+const TRAIL_ALPHA = 0.5; // 頭側の不透明度 (控えめにして主張しすぎない)
+
+interface TrailRig {
+  mesh: THREE.Mesh;
+  geo: THREE.BufferGeometry;
+  pos: Float32Array;
+  col: Float32Array;
+  rgb: [number, number, number];
+  samples: { x: number; z: number; t: number }[];
+}
+
+function makeTrail(color: string, y: number): TrailRig {
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(TRAIL_MAX * 2 * 3);
+  const col = new Float32Array(TRAIL_MAX * 2 * 4);
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  // itemSize=4のcolor属性で頂点ごとのアルファを渡す (three対応済み)
+  geo.setAttribute("color", new THREE.BufferAttribute(col, 4));
+  const idx: number[] = [];
+  for (let i = 0; i < TRAIL_MAX - 1; i++) {
+    const a = i * 2;
+    idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+  }
+  geo.setIndex(idx);
+  geo.setDrawRange(0, 0);
+  const mat = new THREE.MeshBasicMaterial({
+    vertexColors: true,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = y;
+  mesh.frustumCulled = false;
+  mesh.renderOrder = 1;
+  const c = new THREE.Color(color);
+  return { mesh, geo, pos, col, rgb: [c.r, c.g, c.b], samples: [] };
+}
+
+// 現在の足位置を取り込み、古いサンプルを捨ててリボンを組み立てる
+function updateTrail(tr: TrailRig, x: number, z: number, now: number) {
+  const s = tr.samples;
+  while (s.length > 0 && now - s[0].t > TRAIL_MS) s.shift();
+  const last = s[s.length - 1];
+  if (!last || Math.hypot(x - last.x, z - last.z) > 0.012) {
+    s.push({ x, z, t: now });
+    if (s.length > TRAIL_MAX - 1) s.shift();
+  }
+  // 描画点列 = サンプル (古→新) + 現在位置 (頭)。2点未満なら非表示
+  const pts: { x: number; z: number; fade: number }[] = s.map((p) => ({
+    x: p.x,
+    z: p.z,
+    fade: Math.max(0, 1 - (now - p.t) / TRAIL_MS),
+  }));
+  pts.push({ x, z, fade: 1 });
+  if (pts.length < 2) {
+    tr.geo.setDrawRange(0, 0);
+    return;
+  }
+  const n = Math.min(pts.length, TRAIL_MAX);
+  const off = pts.length - n;
+  for (let i = 0; i < n; i++) {
+    const p = pts[off + i];
+    const prev = pts[Math.max(off, off + i - 1)];
+    const next = pts[Math.min(pts.length - 1, off + i + 1)];
+    let dx = next.x - prev.x;
+    let dz = next.z - prev.z;
+    const len = Math.hypot(dx, dz) || 1;
+    dx /= len;
+    dz /= len;
+    // 進行方向の左右へ張り出す (尾に向かって細く・薄く)
+    const hw = TRAIL_HALF_W * (0.25 + 0.75 * p.fade);
+    const px = -dz * hw;
+    const pz = dx * hw;
+    const vi = i * 6;
+    tr.pos[vi] = p.x + px;
+    tr.pos[vi + 1] = 0;
+    tr.pos[vi + 2] = p.z + pz;
+    tr.pos[vi + 3] = p.x - px;
+    tr.pos[vi + 4] = 0;
+    tr.pos[vi + 5] = p.z - pz;
+    const a = TRAIL_ALPHA * p.fade * p.fade; // 尾側の消え際をなめらかに
+    const ci = i * 8;
+    for (const base of [ci, ci + 4]) {
+      tr.col[base] = tr.rgb[0];
+      tr.col[base + 1] = tr.rgb[1];
+      tr.col[base + 2] = tr.rgb[2];
+      tr.col[base + 3] = a;
+    }
+  }
+  tr.geo.attributes.position.needsUpdate = true;
+  tr.geo.attributes.color.needsUpdate = true;
+  tr.geo.setDrawRange(0, (n - 1) * 6);
+}
+
 function lerpAngleDeg(a: number, b: number, t: number): number {
   let d = b - a;
   while (d > 180) d -= 360;
@@ -349,6 +452,15 @@ export function createFootScene(): FootScene | null {
   const feet = { L: makeFoot(FOOT_COLORS.L, "L"), R: makeFoot(FOOT_COLORS.R, "R") };
   scene.add(feet.L.group);
   scene.add(feet.R.group);
+
+  // 足の軌跡 (オプション。yを僅かにずらして左右のZファイトを防ぐ)
+  let trailOn = false;
+  const trails = {
+    L: makeTrail(FOOT_COLORS.L, 0.014),
+    R: makeTrail(FOOT_COLORS.R, 0.018),
+  };
+  scene.add(trails.L.mesh);
+  scene.add(trails.R.mesh);
 
   // 体の向きマーカー (▲)
   const triShape = new THREE.Shape();
@@ -466,6 +578,12 @@ export function createFootScene(): FootScene | null {
     applyFoot(feet.L, "L");
     applyFoot(feet.R, "R");
 
+    // 足の軌跡 (床への投影。ホップの高さは含めず移動経路だけを描く)
+    if (trailOn) {
+      updateTrail(trails.L, feet.L.cur.x, feet.L.cur.z, now);
+      updateTrail(trails.R, feet.R.cur.x, feet.R.cur.z, now);
+    }
+
     // パネルの発光 (選択中のノーツのパネル)
     for (let p = 0; p < 4; p++) {
       const active = props.stepping.includes(p);
@@ -496,6 +614,15 @@ export function createFootScene(): FootScene | null {
     },
     setProps,
     frame,
+    setTrail(on: boolean) {
+      if (on === trailOn) return;
+      trailOn = on;
+      for (const tr of [trails.L, trails.R]) {
+        tr.samples.length = 0;
+        tr.geo.setDrawRange(0, 0);
+        tr.mesh.visible = on;
+      }
+    },
     dispose() {
       renderer.dispose();
       renderer.domElement.remove();

@@ -355,6 +355,8 @@ export default function Viewer({
   const [ghostSound, setGhostSound] = useState(true); // 空打ちのストンプ音
   // 4つ打ちメトロノーム (デフォルトOFF)。小節頭のアクセントは付けない
   const [metronome, setMetronome] = useState(false);
+  // 足の軌跡 (トレイル) 表示。実時間で消えるので速い動きほど長く伸びる
+  const [footTrail, setFootTrail] = useState(false);
   // テーマカラー。単色 "rrggbb" または2色グラデ "rrggbb-rrggbb" (左上-右下)
   const [bgColor, setBgColor] = useState(() => {
     const m = initialBg?.match(/^([0-9a-fA-F]{6})(?:-[0-9a-fA-F]{6})?$/);
@@ -1876,6 +1878,7 @@ export default function Viewer({
                     offsetSec: Number.isFinite(off) ? off : 0,
                     landscape: vMode === "landscape",
                     landscapeSpeed: vLandSpeed,
+                    trail: footTrail,
                     stats: [
                       { label: S.steps, value: stats.steps },
                       { label: S.jumps, value: stats.jumps },
@@ -2679,6 +2682,7 @@ export default function Viewer({
                 heldFeet={footStep?.heldFeet ?? []}
                 oneFoot={stageOneFoot}
                 liftedFoot={footStep?.liftedFoot ?? null}
+                trail={footTrail}
               />
             ) : (
               <FootStage
@@ -2785,6 +2789,15 @@ export default function Viewer({
               >
                 ♩{metronome ? "♪" : "🔇"}
               </button>
+              {webglOk && (
+                <button
+                  className={footTrail ? "" : "secondary"}
+                  onClick={() => setFootTrail(!footTrail)}
+                  title={S.trailTitle}
+                >
+                  🐾
+                </button>
+              )}
               <button
                 className="secondary"
                 onClick={enterFs}

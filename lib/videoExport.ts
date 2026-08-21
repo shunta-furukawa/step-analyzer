@@ -38,6 +38,7 @@ export interface VideoExportOptions {
   landscape?: boolean; // 横長 (1920x1080) で書き出す
   landscapeSpeed?: number; // 横長の収録速度 (0.5=じっくり既定 / 1=等倍)
   stats?: { label: string; value: number }[]; // 統計カード (横長のみ表示)
+  trail?: boolean; // 足の軌跡 (トレイル) を表示する
   // 注目ノーツのコメント (横長のみ)。該当ノーツが判定線に達したら
   // 効果音と共に停止し、字送りでコメントを表示してから再開する
   spotlights?: { beat: number; text: string }[];
@@ -449,6 +450,7 @@ export async function recordChartVideo(
   // 足パッド (アプリと同じThree.jsシーン)
   const footScene = createFootScene();
   footScene?.setSize(PAD_W, PAD_H, 1);
+  footScene?.setTrail(!!o.trail);
   const evTimes = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
   let lastCurIdx = -2;
   let lastFootIdx = -2;

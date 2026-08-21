@@ -137,6 +137,7 @@ export interface Strings {
   addMeasure: string;
   addMeasureTitle: string;
   metronomeTitle: string;
+  trailTitle: string;
   aiGenBtn: string;
   aiModalTitle: string;
   aiModalDesc: string;
@@ -329,6 +330,7 @@ const ja: Strings = {
   addMeasure: "小節追加",
   addMeasureTitle: "末尾に空の小節を1つ追加",
   metronomeTitle: "メトロノーム (4分のティック音)",
+  trailTitle: "足の軌跡 (速い動きほど長く伸びる)",
   aiGenBtn: "AIで譜面作成",
   aiModalTitle: "AIで譜面を作成",
   aiModalDesc:
@@ -525,6 +527,7 @@ const en: Strings = {
   addMeasure: "Add bar",
   addMeasureTitle: "Append an empty measure at the end",
   metronomeTitle: "Metronome (quarter-note ticks)",
+  trailTitle: "Foot trails (faster moves leave longer trails)",
   aiGenBtn: "Build with AI",
   aiModalTitle: "Build a chart with AI",
   aiModalDesc:
@@ -720,6 +723,7 @@ const ko: Strings = {
   addMeasure: "마디 추가",
   addMeasureTitle: "끝에 빈 마디를 1개 추가",
   metronomeTitle: "메트로놈 (4분 틱 사운드)",
+  trailTitle: "발 궤적 (빠른 움직임일수록 길게 늘어남)",
   aiGenBtn: "AI 채보 생성",
   aiModalTitle: "AI로 채보 만들기",
   aiModalDesc:

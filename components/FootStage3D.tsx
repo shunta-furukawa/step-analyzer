@@ -6,11 +6,16 @@
 import { useEffect, useRef } from "react";
 import { createFootScene, type FootScene, type FootSceneProps } from "@/lib/footScene";
 
-export default function FootStage3D(props: FootSceneProps) {
+export default function FootStage3D({
+  trail = false,
+  ...props
+}: FootSceneProps & { trail?: boolean }) {
   const holderRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<FootScene | null>(null);
   const propsRef = useRef(props);
   propsRef.current = props;
+  const trailRef = useRef(trail);
+  trailRef.current = trail;
 
   // シーン構築 (マウント時に1回)
   useEffect(() => {
@@ -24,6 +29,7 @@ export default function FootStage3D(props: FootSceneProps) {
     fs.canvas.style.height = "100%";
     fs.canvas.style.display = "block";
     fs.setProps(propsRef.current); // 初期ポーズを即時反映
+    fs.setTrail(trailRef.current);
 
     const resize = () => {
       fs.setSize(
@@ -58,6 +64,10 @@ export default function FootStage3D(props: FootSceneProps) {
   useEffect(() => {
     sceneRef.current?.setProps(props);
   }, [props]);
+
+  useEffect(() => {
+    sceneRef.current?.setTrail(trail);
+  }, [trail]);
 
   return (
     <div className="stage3d stage3d-gl">
