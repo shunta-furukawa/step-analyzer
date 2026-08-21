@@ -919,6 +919,15 @@ export default function Viewer({
   const curStep = footsteps[current];
   // 再生中の足の描画位置は先読みインデックスから取る (ジャスト到着)
   const footStep = (playing ? footsteps[footIdx] : curStep) ?? curStep;
+  // トレイル用: このステップと直前ノーツの物理的な間隔秒 (再生速度換算込み)。
+  // 間隔が詰まっているほど濃く短い軌跡になる
+  const trailIdx = playing ? footIdx : current;
+  const trailGapSec =
+    footTrail && trailIdx > 0 && chart.events[trailIdx]
+      ? (timeAtBeat(timeline, chart.events[trailIdx].row.beat) -
+          timeAtBeat(timeline, chart.events[trailIdx - 1].row.beat)) /
+        speed
+      : null;
   const curEvent = chart.events[current];
   // 2枚抜き・フリーズ保持しながらのつま先拾いでは、
   // 踏み足を2パネルの中間にまたがせて表示する
@@ -2691,6 +2700,7 @@ export default function Viewer({
                 oneFoot={stageOneFoot}
                 liftedFoot={footStep?.liftedFoot ?? null}
                 trail={footTrail}
+                trailGapSec={trailGapSec}
               />
             ) : (
               <FootStage

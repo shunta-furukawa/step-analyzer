@@ -16,6 +16,9 @@ export interface FootSceneProps {
   heldFeet: Foot[];
   oneFoot: { foot: Foot; panels: number[] } | null;
   liftedFoot: Foot | null;
+  /** このステップと直前ノーツ (LR問わず) の物理的な間隔秒。
+      トレイルの濃さ・減衰時間の算出に使う (省略時は既定値) */
+  trailGapSec?: number | null;
 }
 
 export interface FootScene {
@@ -264,12 +267,26 @@ function makeFoot(color: string, label: string): FootRig {
 }
 
 // 足の軌跡 (トレイル)。スネークゲームのしっぽのように、床に敷いた
-// 帯が実時間で消えていく。寿命が絶対時間 (TRAIL_MS) 固定なので、
-// 足が速く動くフレーズほど自然に長く伸びる = 速さがそのまま見える
-const TRAIL_MS = 300; // 軌跡の寿命 (実時間)
+// 帯が消えていく。足の移動アニメーション自体は等速 (250ms) なので、
+// 速さの表現は「濃さ×減衰時間=一定」で行う: ノーツ間隔 (物理時間) が
+// 詰まっているほど濃く短く残り、間隔が空くほど薄く長く漂って消える
 const TRAIL_MAX = 120; // 保持するサンプル数の上限
 const TRAIL_HALF_W = 0.13; // 頭側の帯の半幅 (ワールド単位)
-const TRAIL_ALPHA = 0.5; // 頭側の不透明度 (控えめにして主張しすぎない)
+const TRAIL_LIFE_REF = 300; // 基準の減衰時間ms (このとき濃さが基準値)
+const TRAIL_ALPHA_REF = 0.5; // 基準の濃さ (濃さ×寿命 = REF同士の積で一定)
+const TRAIL_LIFE_MIN = 150; // 寿命の下限ms (これ以上詰まっても濃さ上限で頭打ち)
+const TRAIL_LIFE_MAX = 1500; // 寿命の上限ms (超スカスカでも一応視認できる程度)
+const TRAIL_ALPHA_CAP = 0.85; // 濃さの上限 (パネルを潰さない)
+
+// ノーツ間隔 (物理秒) → そのステップのトレイルパラメータ
+function trailParamsOf(gapSec: number | null | undefined): { life: number; a0: number } {
+  const life = Math.max(
+    TRAIL_LIFE_MIN,
+    Math.min(TRAIL_LIFE_MAX, (gapSec ?? TRAIL_LIFE_REF / 1000) * 1000)
+  );
+  const a0 = Math.min(TRAIL_ALPHA_CAP, (TRAIL_ALPHA_REF * TRAIL_LIFE_REF) / life);
+  return { life, a0 };
+}
 
 interface TrailRig {
   mesh: THREE.Mesh;
@@ -277,7 +294,7 @@ interface TrailRig {
   pos: Float32Array;
   col: Float32Array;
   rgb: [number, number, number];
-  samples: { x: number; z: number; t: number }[];
+  samples: { x: number; z: number; t: number; life: number; a0: number }[];
 }
 
 function makeTrail(color: string, y: number): TrailRig {
@@ -308,22 +325,33 @@ function makeTrail(color: string, y: number): TrailRig {
   return { mesh, geo, pos, col, rgb: [c.r, c.g, c.b], samples: [] };
 }
 
-// 現在の足位置を取り込み、古いサンプルを捨ててリボンを組み立てる
-function updateTrail(tr: TrailRig, x: number, z: number, now: number) {
+// 現在の足位置を取り込み、古いサンプルを捨ててリボンを組み立てる。
+// gapSecはこのステップのノーツ間隔 (物理秒): サンプルごとに追加時点の
+// 寿命・濃さを焼き込むので、密集地帯と休符明けが混在しても正しく残る
+function updateTrail(
+  tr: TrailRig,
+  x: number,
+  z: number,
+  now: number,
+  gapSec: number | null | undefined
+) {
   const s = tr.samples;
-  while (s.length > 0 && now - s[0].t > TRAIL_MS) s.shift();
+  while (s.length > 0 && now - s[0].t > s[0].life) s.shift();
   const last = s[s.length - 1];
   if (!last || Math.hypot(x - last.x, z - last.z) > 0.012) {
-    s.push({ x, z, t: now });
+    const { life, a0 } = trailParamsOf(gapSec);
+    s.push({ x, z, t: now, life, a0 });
     if (s.length > TRAIL_MAX - 1) s.shift();
   }
   // 描画点列 = サンプル (古→新) + 現在位置 (頭)。2点未満なら非表示
-  const pts: { x: number; z: number; fade: number }[] = s.map((p) => ({
+  const pts: { x: number; z: number; fade: number; a0: number }[] = s.map((p) => ({
     x: p.x,
     z: p.z,
-    fade: Math.max(0, 1 - (now - p.t) / TRAIL_MS),
+    fade: Math.max(0, 1 - (now - p.t) / p.life),
+    a0: p.a0,
   }));
-  pts.push({ x, z, fade: 1 });
+  const headA0 = s.length > 0 ? s[s.length - 1].a0 : trailParamsOf(gapSec).a0;
+  pts.push({ x, z, fade: 1, a0: headA0 });
   if (pts.length < 2) {
     tr.geo.setDrawRange(0, 0);
     return;
@@ -350,7 +378,7 @@ function updateTrail(tr: TrailRig, x: number, z: number, now: number) {
     tr.pos[vi + 3] = p.x - px;
     tr.pos[vi + 4] = 0;
     tr.pos[vi + 5] = p.z - pz;
-    const a = TRAIL_ALPHA * p.fade * p.fade; // 尾側の消え際をなめらかに
+    const a = p.a0 * p.fade * p.fade; // 尾側の消え際をなめらかに
     const ci = i * 8;
     for (const base of [ci, ci + 4]) {
       tr.col[base] = tr.rgb[0];
@@ -582,8 +610,8 @@ export function createFootScene(): FootScene | null {
 
     // 足の軌跡 (床への投影。ホップの高さは含めず移動経路だけを描く)
     if (trailOn) {
-      updateTrail(trails.L, feet.L.cur.x, feet.L.cur.z, now);
-      updateTrail(trails.R, feet.R.cur.x, feet.R.cur.z, now);
+      updateTrail(trails.L, feet.L.cur.x, feet.L.cur.z, now, props.trailGapSec);
+      updateTrail(trails.R, feet.R.cur.x, feet.R.cur.z, now, props.trailGapSec);
     }
 
     // パネルの発光 (選択中のノーツのパネル)
