@@ -439,6 +439,10 @@ button.secondary {
   background: var(--paper);
   border: 2px solid var(--ink);
   color: var(--ink);
+  /* 枠2pxぶんpaddingを減らし、primary⇔secondaryの切り替えで
+     ボタンの総寸法が変わらないようにする (トグルで行の折り返しが
+     変わるのを防ぐ) */
+  padding: 7px 12px;
 }
 
 button:disabled {
