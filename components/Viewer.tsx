@@ -360,8 +360,8 @@ export default function Viewer({
   const [ghostSound, setGhostSound] = useState(true); // 空打ちのストンプ音
   // 4つ打ちメトロノーム (デフォルトOFF)。小節頭のアクセントは付けない
   const [metronome, setMetronome] = useState(false);
-  // 足の軌跡 (トレイル) 表示。実時間で消えるので速い動きほど長く伸びる
-  const [footTrail, setFootTrail] = useState(false);
+  // 足の軌跡 (トレイル) 表示。密度で濃さが変わり速さが見えるためデフォルトON
+  const [footTrail, setFootTrail] = useState(true);
   // テーマカラー。単色 "rrggbb" または2色グラデ "rrggbb-rrggbb" (左上-右下)
   const [bgColor, setBgColor] = useState(() => {
     const m = initialBg?.match(/^([0-9a-fA-F]{6})(?:-[0-9a-fA-F]{6})?$/);
