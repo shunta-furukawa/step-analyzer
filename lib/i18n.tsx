@@ -115,6 +115,8 @@ export interface Strings {
   videoExport: string;
   videoRecording: (pct: number) => string;
   videoDone: string;
+  videoThumb: string;
+  videoThumbDone: string;
   videoTplCopy: string;
   videoTplCopied: string;
   hlCommentPlaceholder: string;
@@ -306,6 +308,8 @@ const ja: Strings = {
   videoExport: "動画を書き出し",
   videoRecording: (pct) => `録画中… ${pct}%`,
   videoDone: "✓ 書き出しました",
+  videoThumb: "サムネ画像を書き出し",
+  videoThumbDone: "✓ サムネを書き出しました",
   videoTplCopy: "動画概要をテキストでコピー",
   videoTplCopied: "✓ コピーしました",
   hlCommentPlaceholder: "コメント (動画の注目シーンで表示)",
@@ -500,6 +504,8 @@ const en: Strings = {
   videoExport: "Export video",
   videoRecording: (pct) => `Recording… ${pct}%`,
   videoDone: "✓ Exported",
+  videoThumb: "Export thumbnail image",
+  videoThumbDone: "✓ Thumbnail exported",
   videoTplCopy: "Copy video summary as text",
   videoTplCopied: "✓ Copied",
   hlCommentPlaceholder: "Comment (shown at spotlight scenes in videos)",
@@ -693,6 +699,8 @@ const ko: Strings = {
   videoExport: "동영상 내보내기",
   videoRecording: (pct) => `녹화 중… ${pct}%`,
   videoDone: "✓ 내보냈습니다",
+  videoThumb: "썸네일 이미지 내보내기",
+  videoThumbDone: "✓ 썸네일을 내보냈습니다",
   videoTplCopy: "동영상 개요를 텍스트로 복사",
   videoTplCopied: "✓ 복사했습니다",
   hlCommentPlaceholder: "코멘트 (동영상 주목 장면에 표시)",

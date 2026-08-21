@@ -22,7 +22,12 @@ import {
   measureChartComments,
   renderChartImage,
 } from "@/lib/chartImage";
-import { loadAudioFromUrl, loadImageFromUrl, recordChartVideo } from "@/lib/videoExport";
+import {
+  loadAudioFromUrl,
+  loadImageFromUrl,
+  recordChartVideo,
+  renderVideoThumbnail,
+} from "@/lib/videoExport";
 
 // Three.js版の足ステージ (WebGL)。バンドルを分けるため遅延読み込みし、
 // ロード中と非対応環境はCSS版FootStageで表示する
@@ -282,6 +287,9 @@ export default function Viewer({
   const [vProgress, setVProgress] = useState(0);
   const [vError, setVError] = useState<string | null>(null);
   const [vDone, setVDone] = useState(false);
+  // サムネ画像書き出し (横動画用。YouTubeのカスタムサムネは別画像が必要)
+  const [vThumbBusy, setVThumbBusy] = useState(false);
+  const [vThumbDone, setVThumbDone] = useState(false);
   const vSignal = useRef({ cancelled: false });
 
   // WebGLが使えるかどうか (不可ならCSS版FootStageにフォールバック)
@@ -1241,6 +1249,7 @@ export default function Viewer({
           onClick={() => {
             if (!chart) return;
             setVDone(false);
+            setVThumbDone(false);
             setVError(null);
             setVTplCopied(false);
             setShowVideo(true);
@@ -1925,6 +1934,65 @@ export default function Viewer({
                 }}
               >
                 {S.videoCancel}
+              </button>
+            )}
+            {vMode === "landscape" && (
+              // 横動画はYouTubeのサムネを別画像でアップする必要があるため、
+              // イントロカードと同じ絵を1280x720のJPEGとして書き出す
+              <button
+                className="secondary"
+                disabled={vBusy || vThumbBusy}
+                onClick={async () => {
+                  if (vThumbBusy) return;
+                  setVError(null);
+                  setVThumbBusy(true);
+                  try {
+                    const jacket =
+                      vUseMedia && vJacket.trim()
+                        ? await loadImageFromUrl(vJacket.trim())
+                        : null;
+                    const bpmLabel =
+                      bpms.length > 1
+                        ? `${+Math.min(...bpms.map((x) => x.bpm)).toFixed(1)}-${+Math.max(
+                            ...bpms.map((x) => x.bpm)
+                          ).toFixed(1)}`
+                        : `${+bpms[0].bpm.toFixed(1)}`;
+                    const blob = await renderVideoThumbnail({
+                      title: title || S.untitled,
+                      subtitle,
+                      diff:
+                        diffCls !== null || diffLvl ? { cls: diffCls, lvl: diffLvl } : null,
+                      bpmLabel,
+                      bgColor,
+                      bgColor2,
+                      jacket,
+                    });
+                    const base = (title || S.untitled).replace(/[\\/:*?"<>|]/g, "_");
+                    const file = new File([blob], `${base}_thumb.jpg`, { type: blob.type });
+                    if (navigator.canShare?.({ files: [file] })) {
+                      try {
+                        await navigator.share({ files: [file] });
+                        setVThumbDone(true);
+                        return;
+                      } catch (err) {
+                        if ((err as DOMException)?.name === "AbortError") return;
+                      }
+                    }
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = file.name;
+                    a.click();
+                    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+                    setVThumbDone(true);
+                  } catch (e) {
+                    setVError(e instanceof Error ? e.message : String(e));
+                  } finally {
+                    setVThumbBusy(false);
+                  }
+                }}
+              >
+                {vThumbDone ? S.videoThumbDone : S.videoThumb}
               </button>
             )}
             {/* 投稿用テンプレ (タイトル+概要欄) をクリップボードへ。控えめに */}

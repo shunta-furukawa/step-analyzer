@@ -98,6 +98,171 @@ function roundRectPath(
   ctx.closePath();
 }
 
+// イントロカード (=サムネ) の描画に必要なメタ情報。
+// 動画書き出しとサムネ画像書き出しで共用する
+export interface IntroCardOptions {
+  title: string;
+  subtitle: string;
+  diff: { cls: number | null; lvl: string } | null;
+  bpmLabel: string;
+  bgColor: string;
+  bgColor2?: string | null;
+  jacket: HTMLImageElement | null;
+}
+
+// ページと同じ斜めストライプ背景 (グラデーション対応)
+function drawStripedBgOn(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  bg1: string,
+  bg2?: string | null
+) {
+  const bgGrad = ctx.createLinearGradient(0, 0, W, H);
+  bgGrad.addColorStop(0, `#${bg1}`);
+  bgGrad.addColorStop(1, `#${bg2 ?? bg1}`);
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.rotate((-25 * Math.PI) / 180);
+  const stripeW = 34;
+  let stripeI = 0;
+  for (let x = -H; x < W + H; x += stripeW, stripeI++) {
+    ctx.fillStyle = stripeI % 2 === 0 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)";
+    ctx.fillRect(x, -W, stripeW, W * 2 + H * 2);
+  }
+  ctx.restore();
+}
+
+// イントロカード (ショートのサムネはほぼ先頭フレームが使われる)。
+// ジャケット大 + 難易度チップ + 曲名 + BPM を1枚絵として見せる
+function drawIntroCard(
+  ctx: CanvasRenderingContext2D,
+  o: IntroCardOptions,
+  W: number,
+  H: number,
+  L: boolean,
+  titleFont: string,
+  fg: string
+) {
+  drawStripedBgOn(ctx, W, H, o.bgColor, o.bgColor2);
+  // サムネの上に大きなサイトロゴ (イントロカードだけの特別配置)
+  drawSiteLogo(ctx, W / 2, L ? 84 : 100, L ? 60 : 54, "center");
+  // ジャケットは直角 (サイトのカードと同じ様式)。難易度クラス色の枠 +
+  // ぼかしなしの黒ハードシャドウで、枠色が背景色と近くても浮かせる
+  // 横長はジャケット左+テキスト右の2カラム
+  const jSize = L ? 560 : 540;
+  const jx = L ? 300 : (W - jSize) / 2;
+  const jy = L ? 260 : 215;
+  const frameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
+  const frameW = 10;
+  ctx.fillStyle = "#17181c";
+  ctx.fillRect(jx - frameW + 14, jy - frameW + 14, jSize + frameW * 2, jSize + frameW * 2);
+  if (o.jacket) {
+    ctx.drawImage(o.jacket, jx, jy, jSize, jSize);
+  } else {
+    ctx.fillStyle = "#0b0e1a";
+    ctx.fillRect(jx, jy, jSize, jSize);
+    drawArrow(ctx, jx + jSize / 2, jy + jSize / 2, jSize * 0.72, 90, "#ff5262");
+  }
+  ctx.strokeStyle = frameColor;
+  ctx.lineWidth = frameW;
+  ctx.strokeRect(jx - frameW / 2, jy - frameW / 2, jSize + frameW, jSize + frameW);
+  // 難易度チップ (白地にハードシャドウ、ジャケット下辺に重ねる)
+  const cls = o.diff?.cls ?? null;
+  const lvl = o.diff?.lvl ?? "";
+  if (cls !== null || lvl) {
+    ctx.font = `400 66px ${titleFont}`;
+    // actualBoundingBoxは計測時のtextBaseline基準 (Safari)。alphabeticで統一
+    ctx.textBaseline = "alphabetic";
+    const lm = lvl ? ctx.measureText(lvl) : null;
+    const footSize = cls !== null ? 78 : 0;
+    const innerW = footSize + (footSize && lm ? 14 : 0) + (lm?.width ?? 0);
+    const chipW2 = innerW + 60;
+    const chipH = 106;
+    const cx0 = jx + (jSize - chipW2) / 2; // ジャケット中央に重ねる
+    const cy0 = jy + jSize - chipH / 2;
+    // チップも直角 (白 + 黒ハードシャドウ + 黒枠)
+    ctx.fillStyle = "#17181c";
+    ctx.fillRect(cx0 + 7, cy0 + 7, chipW2, chipH);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(cx0, cy0, chipW2, chipH);
+    ctx.strokeStyle = "#17181c";
+    ctx.lineWidth = 5;
+    ctx.strokeRect(cx0, cy0, chipW2, chipH);
+    let dx = cx0 + 30;
+    if (cls !== null) {
+      drawDiffFoot(ctx, dx, cy0 + (chipH - footSize) / 2, footSize, DIFF_COLORS[cls]);
+      dx += footSize + 14;
+    }
+    if (lm) {
+      ctx.fillStyle = "#17181c";
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      const asc = lm.actualBoundingBoxAscent || 46;
+      const desc = lm.actualBoundingBoxDescent || 0;
+      ctx.fillText(lvl, dx, cy0 + chipH / 2 + (asc - desc) / 2);
+    }
+  }
+  // 曲名 + アーティスト + BPM (縦=下部中央 / 横=右カラム中央)
+  const tcx = L ? (jx + jSize + 80 + (W - 100)) / 2 : W / 2;
+  const tMaxW = L ? W - (jx + jSize + 80) - 100 : W - 80;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = fg;
+  ctx.font = `400 ${L ? 64 : 58}px ${titleFont}`;
+  ctx.fillText(o.title, tcx, L ? 460 : 920, tMaxW);
+  if (o.subtitle) {
+    ctx.globalAlpha = 0.75;
+    ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
+    ctx.fillText(o.subtitle, tcx, L ? 535 : 982, tMaxW);
+    ctx.globalAlpha = 1;
+  }
+  ctx.globalAlpha = 0.8;
+  ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
+  ctx.fillText("BPM", tcx, L ? 690 : 1086);
+  ctx.globalAlpha = 1;
+  ctx.font = `400 ${L ? 88 : 76}px ${titleFont}`;
+  ctx.fillText(o.bpmLabel, tcx, L ? 790 : 1172, tMaxW);
+  ctx.textAlign = "left";
+}
+
+// 実行時にCSS変数からロゴフォント (Anton) を解決する
+function resolveTitleFont(): string {
+  const logoFont =
+    getComputedStyle(document.documentElement).getPropertyValue("--font-logo").trim() ||
+    '"Arial Black"';
+  return `${logoFont}, "Arial Black", system-ui, sans-serif`;
+}
+
+/**
+ * 動画のイントロカードと同じ絵をサムネ画像 (1280x720 JPEG) として書き出す。
+ * YouTubeのカスタムサムネは2MB制限があるため、1920x1080で描いてから
+ * 1280x720へ縮小しJPEGで出力する
+ */
+export async function renderVideoThumbnail(o: IntroCardOptions): Promise<Blob> {
+  const W = 1920;
+  const H = 1080;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  drawIntroCard(ctx, o, W, H, true, resolveTitleFont(), fgFor(o.bgColor, o.bgColor2));
+  const out = document.createElement("canvas");
+  out.width = 1280;
+  out.height = 720;
+  const octx = out.getContext("2d")!;
+  octx.imageSmoothingQuality = "high";
+  octx.drawImage(canvas, 0, 0, 1280, 720);
+  return await new Promise<Blob>((resolve, reject) => {
+    out.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("サムネ画像の生成に失敗しました"))),
+      "image/jpeg",
+      0.92
+    );
+  });
+}
+
 /** フリーズを保持足ごとの区間に分割 (chartImageと同じ規則) */
 function holdSegmentsOf(chart: ParsedChart, footsteps: FootStep[]) {
   const segs: { panel: number; start: number; end: number; foot: Foot | null; roll: boolean }[] =
@@ -156,10 +321,7 @@ export async function recordChartVideo(
   const fg = fgFor(o.bgColor, o.bgColor2);
   // アプリのステップ数などと同じ縦長フォント (next/fontのAnton)。
   // 実フォント名はCSS変数から実行時に解決し、無ければ太字系にフォールバック
-  const logoFont =
-    getComputedStyle(document.documentElement).getPropertyValue("--font-logo").trim() ||
-    '"Arial Black"';
-  const titleFont = `${logoFont}, "Arial Black", system-ui, sans-serif`;
+  const titleFont = resolveTitleFont();
   const offsetSec = o.audio ? o.offsetSec : LEAD_IN; // 音源なしはハンクラのみで頭から
   const songEnd = offsetSec + timeAtBeat(timeline, chart.totalBeats) + TAIL;
   const recStart = Math.max(0, offsetSec - LEAD_IN);
@@ -307,108 +469,10 @@ export async function recordChartVideo(
   };
 
   // 背景 (ページと同じ斜めストライプ: 115deg・18px相当を動画スケールに拡大)
-  const drawStripedBg = () => {
-    // 左上→右下グラデーション (単色時は同色)
-    const bgGrad = ctx.createLinearGradient(0, 0, W, H);
-    bgGrad.addColorStop(0, `#${o.bgColor}`);
-    bgGrad.addColorStop(1, `#${o.bgColor2 ?? o.bgColor}`);
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, W, H);
-    ctx.save();
-    ctx.rotate((-25 * Math.PI) / 180);
-    const stripeW = 34;
-    let stripeI = 0;
-    for (let x = -H; x < W + H; x += stripeW, stripeI++) {
-      ctx.fillStyle = stripeI % 2 === 0 ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.045)";
-      ctx.fillRect(x, -W, stripeW, W * 2 + H * 2);
-    }
-    ctx.restore();
-  };
+  const drawStripedBg = () => drawStripedBgOn(ctx, W, H, o.bgColor, o.bgColor2);
 
-  // 冒頭のイントロカード (ショートのサムネはほぼ先頭フレームが使われる)。
-  // ジャケット大 + 難易度チップ + 曲名 + BPM を1枚絵として見せる
-  const drawIntro = () => {
-    drawStripedBg();
-    // サムネの上に大きなサイトロゴ (イントロカードだけの特別配置)
-    drawSiteLogo(ctx, W / 2, L ? 84 : 100, L ? 60 : 54, "center");
-    // ジャケットは直角 (サイトのカードと同じ様式)。難易度クラス色の枠 +
-    // ぼかしなしの黒ハードシャドウで、枠色が背景色と近くても浮かせる
-    // 横長はジャケット左+テキスト右の2カラム
-    const jSize = L ? 560 : 540;
-    const jx = L ? 300 : (W - jSize) / 2;
-    const jy = L ? 260 : 215;
-    const frameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
-    const frameW = 10;
-    ctx.fillStyle = "#17181c";
-    ctx.fillRect(jx - frameW + 14, jy - frameW + 14, jSize + frameW * 2, jSize + frameW * 2);
-    if (o.jacket) {
-      ctx.drawImage(o.jacket, jx, jy, jSize, jSize);
-    } else {
-      ctx.fillStyle = "#0b0e1a";
-      ctx.fillRect(jx, jy, jSize, jSize);
-      drawArrow(ctx, jx + jSize / 2, jy + jSize / 2, jSize * 0.72, 90, "#ff5262");
-    }
-    ctx.strokeStyle = frameColor;
-    ctx.lineWidth = frameW;
-    ctx.strokeRect(jx - frameW / 2, jy - frameW / 2, jSize + frameW, jSize + frameW);
-    // 難易度チップ (白地にハードシャドウ、ジャケット下辺に重ねる)
-    const cls = o.diff?.cls ?? null;
-    const lvl = o.diff?.lvl ?? "";
-    if (cls !== null || lvl) {
-      ctx.font = `400 66px ${titleFont}`;
-      // actualBoundingBoxは計測時のtextBaseline基準 (Safari)。alphabeticで統一
-      ctx.textBaseline = "alphabetic";
-      const lm = lvl ? ctx.measureText(lvl) : null;
-      const footSize = cls !== null ? 78 : 0;
-      const innerW = footSize + (footSize && lm ? 14 : 0) + (lm?.width ?? 0);
-      const chipW2 = innerW + 60;
-      const chipH = 106;
-      const cx0 = jx + (jSize - chipW2) / 2; // ジャケット中央に重ねる
-      const cy0 = jy + jSize - chipH / 2;
-      // チップも直角 (白 + 黒ハードシャドウ + 黒枠)
-      ctx.fillStyle = "#17181c";
-      ctx.fillRect(cx0 + 7, cy0 + 7, chipW2, chipH);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(cx0, cy0, chipW2, chipH);
-      ctx.strokeStyle = "#17181c";
-      ctx.lineWidth = 5;
-      ctx.strokeRect(cx0, cy0, chipW2, chipH);
-      let dx = cx0 + 30;
-      if (cls !== null) {
-        drawDiffFoot(ctx, dx, cy0 + (chipH - footSize) / 2, footSize, DIFF_COLORS[cls]);
-        dx += footSize + 14;
-      }
-      if (lm) {
-        ctx.fillStyle = "#17181c";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "alphabetic";
-        const asc = lm.actualBoundingBoxAscent || 46;
-        const desc = lm.actualBoundingBoxDescent || 0;
-        ctx.fillText(lvl, dx, cy0 + chipH / 2 + (asc - desc) / 2);
-      }
-    }
-    // 曲名 + アーティスト + BPM (縦=下部中央 / 横=右カラム中央)
-    const tcx = L ? (jx + jSize + 80 + (W - 100)) / 2 : W / 2;
-    const tMaxW = L ? W - (jx + jSize + 80) - 100 : W - 80;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = fg;
-    ctx.font = `400 ${L ? 64 : 58}px ${titleFont}`;
-    ctx.fillText(o.title, tcx, L ? 460 : 920, tMaxW);
-    if (o.subtitle) {
-      ctx.globalAlpha = 0.75;
-      ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
-      ctx.fillText(o.subtitle, tcx, L ? 535 : 982, tMaxW);
-      ctx.globalAlpha = 1;
-    }
-    ctx.globalAlpha = 0.8;
-    ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
-    ctx.fillText("BPM", tcx, L ? 690 : 1086);
-    ctx.globalAlpha = 1;
-    ctx.font = `400 ${L ? 88 : 76}px ${titleFont}`;
-    ctx.fillText(o.bpmLabel, tcx, L ? 790 : 1172, tMaxW);
-    ctx.textAlign = "left";
-  };
+  // 冒頭のイントロカード (サムネ画像書き出しと共通の1枚絵)
+  const drawIntro = () => drawIntroCard(ctx, o, W, H, L, titleFont, fg);
 
   // 直角ジャケット+難易度色枠+黒ハードシャドウ (縦ヘッダー/横右ペーン共通)
   const drawFramedJacket = (jx: number, jy: number, jSize: number, fw: number) => {
