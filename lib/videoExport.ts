@@ -50,6 +50,9 @@ const LEAD_IN = 1.5; // 録画開始から1ノーツ目までの助走秒数 (�
 const INTRO_SEC = 0.5; // 冒頭のサムネ向けイントロカード表示時間
 const TAIL = 1.2;
 const FOOT_TRAVEL = 0.25;
+// アプリ再生と同じく、パネルが光る瞬間に確実に乗っているよう
+// 少し早めに着地させる余裕 (実時間)
+const FOOT_EARLY = 0.08;
 
 function fgFor(bgHex: string, bgHex2?: string | null): string {
   // グラデーション時は2色の平均輝度で判定する
@@ -852,7 +855,7 @@ export async function recordChartVideo(
     if (footScene) {
       let footIdx = -1;
       // 足の移動アニメーション(実時間0.25秒)ぶんだけ先読みする
-      const tLead = tSong + FOOT_TRAVEL * vSpeed;
+      const tLead = tSong + (FOOT_TRAVEL + FOOT_EARLY) * vSpeed;
       for (let k = 0; k < chart.events.length; k++) {
         if (evTimes[k] <= tLead + 1e-6) footIdx = k;
         else break;

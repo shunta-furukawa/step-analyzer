@@ -111,6 +111,10 @@ const RECEPTOR_Y = 90;
 
 // 足の移動トランジションにかかる実時間 (.foot3d の transition と揃える)
 const FOOT_TRAVEL_SEC = 0.25;
+// ジャスト到着狙いだとReactの状態反映ラグ (1〜2フレーム) ぶん着地が
+// 遅れて「パネルが光ったのにまだ乗っていない」ように見えるため、
+// 少し早めに着地させる余裕 (実時間)
+const FOOT_EARLY_SEC = 0.08;
 
 // 背景色のデフォルト (DDR WORLDミントグリーン)
 const DEFAULT_BG = "29d6a2";
@@ -793,7 +797,10 @@ export default function Viewer({
 
       // 足の位置は移動時間ぶん先読み: ジャストの瞬間に次のパネルへ到着させる。
       // timeRefは譜面内時刻なので、実時間の先読みはspeed倍して換算する
-      const leadBeat = beatAtTime(timeline, timeRef.current + FOOT_TRAVEL_SEC * speed);
+      const leadBeat = beatAtTime(
+        timeline,
+        timeRef.current + (FOOT_TRAVEL_SEC + FOOT_EARLY_SEC) * speed
+      );
       let fIdx = idx;
       for (let k = Math.max(0, idx); k < chart.events.length; k++) {
         if (chart.events[k].row.beat <= leadBeat + 1e-6) fIdx = k;
