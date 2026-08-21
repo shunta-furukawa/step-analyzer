@@ -266,7 +266,7 @@ function makeFoot(color: string, label: string): FootRig {
 // 足の軌跡 (トレイル)。スネークゲームのしっぽのように、床に敷いた
 // 帯が実時間で消えていく。寿命が絶対時間 (TRAIL_MS) 固定なので、
 // 足が速く動くフレーズほど自然に長く伸びる = 速さがそのまま見える
-const TRAIL_MS = 700; // 軌跡の寿命 (実時間)
+const TRAIL_MS = 300; // 軌跡の寿命 (実時間)
 const TRAIL_MAX = 120; // 保持するサンプル数の上限
 const TRAIL_HALF_W = 0.13; // 頭側の帯の半幅 (ワールド単位)
 const TRAIL_ALPHA = 0.5; // 頭側の不透明度 (控えめにして主張しすぎない)
