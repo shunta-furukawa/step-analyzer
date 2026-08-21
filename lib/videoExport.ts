@@ -51,8 +51,8 @@ const INTRO_SEC = 0.5; // 冒頭のサムネ向けイントロカード表示時
 const TAIL = 1.2;
 const FOOT_TRAVEL = 0.25;
 // アプリ再生と同じく、パネルが光る瞬間に確実に乗っているよう
-// 少し早めに着地させる余裕 (実時間)
-const FOOT_EARLY = 0.08;
+// フレーム量子化ぶんだけ早めに着地させる余裕 (実時間)
+const FOOT_EARLY = 0.04;
 
 function fgFor(bgHex: string, bgHex2?: string | null): string {
   // グラデーション時は2色の平均輝度で判定する

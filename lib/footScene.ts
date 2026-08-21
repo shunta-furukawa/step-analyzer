@@ -534,8 +534,10 @@ export function createFootScene(): FootScene | null {
         p.stepping.includes(p.leftPos) && (p.leftPos === 4 || p.feet[p.leftPos] === "L");
       const rStep =
         p.stepping.includes(p.rightPos) && (p.rightPos === 4 || p.feet[p.rightPos] === "R");
+      // 移動の着地弧が「踏み」そのものなので、直後の着地バウンドは重ねない。
+      // 先読みの早着地ぶん (FOOT_EARLY) + 状態反映ラグでもはみ出さない窓にする
       const justTraveled = (rig: FootRig) =>
-        rig.tweenMoves && now - rig.tweenT0 < TRAVEL_MS + 80;
+        rig.tweenMoves && now - rig.tweenT0 < TRAVEL_MS + 200;
       if ((lStep || p.oneFoot?.foot === "L") && !justTraveled(feet.L)) feet.L.hopT0 = now;
       if ((rStep || p.oneFoot?.foot === "R") && !justTraveled(feet.R)) feet.R.hopT0 = now;
     }
