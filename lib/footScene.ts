@@ -303,13 +303,16 @@ function trailParamsOf(gapSec: number | null | undefined): {
   a0: number;
   white: number;
 } {
-  const gapMs = (gapSec ?? TRAIL_GAP_DEFAULT) * 1000;
+  const gapMs = Math.max(1, (gapSec ?? TRAIL_GAP_DEFAULT) * 1000);
   const life = Math.max(TRAIL_LIFE_MIN, Math.min(TRAIL_LIFE_MAX, gapMs));
-  const a0 = Math.max(TRAIL_ALPHA_MIN, Math.min(1, TRAIL_FULL_MS / Math.max(1, gapMs)));
-  const white =
-    gapMs >= TRAIL_FULL_MS
-      ? 0
-      : Math.min(1, (TRAIL_FULL_MS - gapMs) / (TRAIL_FULL_MS - TRAIL_WHITE_MS));
+  const a0 = Math.max(TRAIL_ALPHA_MIN, Math.min(1, TRAIL_FULL_MS / gapMs));
+  // 白へのブレンドはノーツレート (1/間隔 ∝ BPM) 軸で線形に補間する。
+  // 16分換算でBPM200=0%, BPM220=50%, BPM240=100% と段階的に白くなる
+  const rate = 1 / gapMs;
+  const white = Math.max(
+    0,
+    Math.min(1, (rate - 1 / TRAIL_FULL_MS) / (1 / TRAIL_WHITE_MS - 1 / TRAIL_FULL_MS))
+  );
   return { life, a0, white };
 }
 
