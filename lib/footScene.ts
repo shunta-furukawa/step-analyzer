@@ -16,9 +16,12 @@ export interface FootSceneProps {
   heldFeet: Foot[];
   oneFoot: { foot: Foot; panels: number[] } | null;
   liftedFoot: Foot | null;
-  /** このステップと直前ノーツ (LR問わず) の物理的な間隔秒。
+  /** このステップと直前ノーツ (LR問わず) の等速換算の間隔秒。
       トレイルの濃さ・減衰時間の算出に使う (省略時は既定値) */
   trailGapSec?: number | null;
+  /** 再生速度 (0.5=半分の速さ)。トレイルの見え方が等速時と同じに
+      なるよう、減衰時間と足の移動時間をこの逆数で引き伸ばす */
+  playSpeed?: number;
 }
 
 export interface FootScene {
@@ -48,10 +51,10 @@ const HOP_MS = 220;
 
 // ノーツ間隔に応じた足の移動時間。間隔が250msを切る高密度地帯では
 // 足が目標に着く前に次の目標へ切り替わって中間でうろつくため、
-// 片足の持ち時間 (≒間隔の2倍) に収まる速さまでトゥイーンを縮める
-function travelMsOf(gapSec: number | null | undefined): number {
-  if (gapSec == null) return TRAVEL_MS;
-  return Math.max(TRAVEL_MS_MIN, Math.min(TRAVEL_MS, gapSec * 2 * 1000 * 0.9));
+// 片足の持ち時間 (≒物理間隔の2倍) に収まる速さまでトゥイーンを縮める
+function travelMsOf(physGapSec: number | null | undefined): number {
+  if (physGapSec == null) return TRAVEL_MS;
+  return Math.max(TRAVEL_MS_MIN, Math.min(TRAVEL_MS, physGapSec * 2 * 1000 * 0.9));
 }
 
 // 表示用の足の角度 (Viewerと同じ圧縮 + かかと正面の折り返し)
@@ -361,14 +364,17 @@ function updateTrail(
   x: number,
   z: number,
   now: number,
-  gapSec: number | null | undefined
+  gapSec: number | null | undefined,
+  playSpeed: number
 ) {
   const s = tr.samples;
   while (s.length > 0 && now - s[0].t > s[0].life) s.shift();
   const last = s[s.length - 1];
   if (!last || Math.hypot(x - last.x, z - last.z) > 0.012) {
     const { life, a0, white } = trailParamsOf(gapSec);
-    s.push({ x, z, t: now, life, a0, white });
+    // 濃さ・白ブレンドは等速換算の間隔で決め、減衰の実時間だけ
+    // 再生速度の逆数で伸ばす (0.5倍再生でも等速と同じ残り方に見える)
+    s.push({ x, z, t: now, life: life / playSpeed, a0, white });
     if (s.length > TRAIL_MAX - 1) s.shift();
   }
   // 描画点列 = サンプル (古→新) + 現在位置 (頭)。2点未満なら非表示
@@ -584,7 +590,9 @@ export function createFootScene(): FootScene | null {
         rig.from = { ...rig.cur };
         rig.target = { x: tx, z: tz, rot, lift };
         rig.tweenT0 = now;
-        rig.tweenDur = travelMsOf(p.trailGapSec);
+        rig.tweenDur = travelMsOf(
+          p.trailGapSec != null ? p.trailGapSec / (p.playSpeed || 1) : null
+        );
         rig.tweenMoves = Math.hypot(tx - rig.from.x, tz - rig.from.z) > 0.05;
       }
     };
@@ -646,8 +654,9 @@ export function createFootScene(): FootScene | null {
 
     // 足の軌跡 (床への投影。ホップの高さは含めず移動経路だけを描く)
     if (trailOn) {
-      updateTrail(trails.L, feet.L.cur.x, feet.L.cur.z, now, props.trailGapSec);
-      updateTrail(trails.R, feet.R.cur.x, feet.R.cur.z, now, props.trailGapSec);
+      const sp = props.playSpeed || 1;
+      updateTrail(trails.L, feet.L.cur.x, feet.L.cur.z, now, props.trailGapSec, sp);
+      updateTrail(trails.R, feet.R.cur.x, feet.R.cur.z, now, props.trailGapSec, sp);
     }
 
     // パネルの発光 (選択中のノーツのパネル)

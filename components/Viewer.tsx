@@ -919,14 +919,14 @@ export default function Viewer({
   const curStep = footsteps[current];
   // 再生中の足の描画位置は先読みインデックスから取る (ジャスト到着)
   const footStep = (playing ? footsteps[footIdx] : curStep) ?? curStep;
-  // このステップと直前ノーツの物理的な間隔秒 (再生速度換算込み)。
-  // トレイルの濃さ・減衰時間と、高密度時の足の移動速度の算出に使う
+  // このステップと直前ノーツの等速換算の間隔秒。トレイルの濃さは
+  // 再生速度に関係なく譜面本来の速さで決め、減衰時間・足の移動速度の
+  // 実時間換算はfootScene側でplaySpeedから行う
   const trailIdx = playing ? footIdx : current;
   const trailGapSec =
     trailIdx > 0 && chart.events[trailIdx]
-      ? (timeAtBeat(timeline, chart.events[trailIdx].row.beat) -
-          timeAtBeat(timeline, chart.events[trailIdx - 1].row.beat)) /
-        speed
+      ? timeAtBeat(timeline, chart.events[trailIdx].row.beat) -
+        timeAtBeat(timeline, chart.events[trailIdx - 1].row.beat)
       : null;
   const curEvent = chart.events[current];
   // 2枚抜き・フリーズ保持しながらのつま先拾いでは、
@@ -2701,6 +2701,7 @@ export default function Viewer({
                 liftedFoot={footStep?.liftedFoot ?? null}
                 trail={footTrail}
                 trailGapSec={trailGapSec}
+                playSpeed={speed}
               />
             ) : (
               <FootStage

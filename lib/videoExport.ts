@@ -878,9 +878,10 @@ export async function recordChartVideo(
               heldFeet: fstep.heldFeet,
               oneFoot: fstep.stretch,
               liftedFoot: fstep.liftedFoot,
-              // 直前ノーツとの物理的な間隔秒 (収録速度換算込み)
+              // 直前ノーツとの等速換算の間隔秒 (収録速度はplaySpeedで渡す)
               trailGapSec:
-                footIdx > 0 ? (evTimes[footIdx] - evTimes[footIdx - 1]) / vSpeed : null,
+                footIdx > 0 ? evTimes[footIdx] - evTimes[footIdx - 1] : null,
+              playSpeed: vSpeed,
             },
             nowMs
           );
