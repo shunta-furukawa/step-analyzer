@@ -436,82 +436,71 @@ export async function recordChartVideo(
   // 番組構成 (OP/ED/リプレイ/カウントダウン)。plain指定なら素の再生のみ
   const program = L && !o.plain;
 
-  // 注目シーンのリプレイ (横長のみ)。対象小節列を通常再生で弾き切ったあと、
-  // 音楽を止めてクラップ音のみで収録速度の半分に落として順にプレイバック
-  // しながらコメントを字送りする。停止時間はリプレイ周回の整数倍に揃える
-  const replayRate = vSpeed * 0.5; // リプレイは収録速度の0.5掛け
-  const pauses = (program ? o.spotlights ?? [] : [])
+  // 注目ポイントの解説 (横長のみ)。再生は止めず、対象小節群がレーンを
+  // 流れる間だけ色付きの囲いをレーンに重ね、引き出し線でつないだ
+  // 解説カードを右側に出す。表示期間が重なるカードはスロット (縦位置) と
+  // 色を分けて、どのカードがどの領域の指摘か対応が分かるようにする
+  const CALLOUT_COLORS = ["#ffd400", "#ff5ca8", "#38bdf8", "#00e0a0"];
+  const laneBeats = (LANE_BOTTOM - RECEPTOR_Y) / pxPerBeat; // レーンに映る拍数
+  const spots = (program ? o.spotlights ?? [] : [])
     .map((sp) => {
       const mlist = (
         sp.measures && sp.measures.length > 0 ? sp.measures : [Math.floor(sp.beat / 4)]
       )
         .slice()
         .sort((a, b) => a - b);
-      // 各小節のリプレイ区間 (譜面内時刻) と1周の実時間
-      const segs = mlist.map((m) => {
-        const rs = offsetSec + timeAtBeat(timeline, m * 4);
-        const re = offsetSec + timeAtBeat(timeline, Math.min(chart.totalBeats, m * 4 + 4));
-        return { rs, re, real: Math.max(0.25, (re - rs) / replayRate) };
-      });
-      const onePass = segs.reduce((s, x) => s + x.real, 0);
-      const lastRe = segs[segs.length - 1].re;
-      const textDur = Math.min(8, 2.0 + sp.text.length * 0.06);
-      const loops = Math.max(1, Math.min(2, Math.ceil(textDur / onePass)));
+      const b0 = mlist[0] * 4;
+      const b1 = Math.min(chart.totalBeats, (mlist[mlist.length - 1] + 1) * 4);
+      // 領域の頭がレーン下端に現れたら表示開始、抜けて少し経ったら消す
+      const tShow = offsetSec + timeAtBeat(timeline, Math.max(0, b0 - laneBeats));
+      const tHide =
+        offsetSec + timeAtBeat(timeline, Math.min(chart.totalBeats, b1 + 1)) +
+        0.6 * vSpeed;
       const m0 = mlist[0] + 1;
       const m1 = mlist[mlist.length - 1] + 1;
       return {
-        // 塊の最後の小節を弾き切った瞬間に停止する
-        t: lastRe - 0.02,
+        b0,
+        b1,
+        tShow,
+        tHide,
         text: sp.text,
-        dur: loops * onePass,
-        segs,
-        onePass,
-        loops,
         label: m0 === m1 ? `${m0}小節目` : `${m0}〜${m1}小節目`, // 表示用
-        starBeat: ((mlist[0] + mlist[mlist.length - 1]) / 2) * 4 + 2, // グラフの★位置
+        starBeat: (b0 + b1) / 2, // グラフ・進行バーの★位置
+        starT: offsetSec + timeAtBeat(timeline, (b0 + b1) / 2),
+        slot: 0,
+        color: CALLOUT_COLORS[0],
       };
     })
-    .filter((p) => p.t >= recStart && p.segs[0].rs >= recStart - 1e-6)
-    .sort((a, b) => a.t - b.t);
-  const pausesTotal = pauses.reduce((s, p) => s + p.dur, 0);
+    .filter((s) => s.tHide > recStart)
+    .sort((a, b) => a.tShow - b.tShow);
+  // スロット割当: 表示期間が重なるカードは下の段+別の色へ
+  {
+    const busyUntil: number[] = [];
+    for (const s of spots) {
+      let slot = 0;
+      while ((busyUntil[slot] ?? -Infinity) > s.tShow + 1e-6) slot++;
+      busyUntil[slot] = s.tHide;
+      s.slot = slot;
+      s.color = CALLOUT_COLORS[slot % CALLOUT_COLORS.length];
+    }
+  }
   // オープニング (横のみ): サムネカード2秒 + 見どころ予告3秒 (解説がある場合)。
   // 縦は従来どおり0.5秒のイントロカードが冒頭の譜面再生に重なる
   const INTRO_CARD_SEC = 2.0;
   // 予告は件数に応じて少し長く見せる (最大5秒)
   const PREVIEW_SEC =
-    pauses.length > 0 ? Math.min(5, 2.2 + 0.7 * Math.min(4, pauses.length)) : 0;
+    spots.length > 0 ? Math.min(5, 2.2 + 0.7 * Math.min(4, spots.length)) : 0;
   const introTotal = program ? INTRO_CARD_SEC + PREVIEW_SEC : 0;
   // エンディング (番組構成のみ): まとめカード4秒。音源はその手前でフェードアウト
   const endingTotal = program ? 4.0 : 0;
-  const realDuration = introTotal + durationSec / vSpeed + pausesTotal; // 譜面終了までの実時間
+  const realDuration = introTotal + durationSec / vSpeed; // 譜面終了までの実時間
   const totalReal = realDuration + endingTotal;
 
-  // 譜面内時刻 → 実時間 (イントロと停止分を加算)。クラップの発音時刻計算に使う
-  const songToReal = (t: number) => {
-    let real = introTotal + (t - recStart) / vSpeed;
-    for (const p of pauses) if (p.t < t) real += p.dur;
-    return real;
-  };
+  // 譜面内時刻 → 実時間 (イントロ分を加算)。クラップの発音時刻計算に使う
+  const songToReal = (t: number) => introTotal + (t - recStart) / vSpeed;
 
-  // 実時間 → 譜面内時刻。停止中はその停止イベントと経過秒も返す
-  const realToSong = (
-    r: number
-  ): { t: number; pauseIdx: number; pauseElapsed: number } => {
-    const rr = r - introTotal; // イントロを除いた譜面部分の実時間
-    if (rr <= 0) return { t: recStart, pauseIdx: -1, pauseElapsed: 0 };
-    let rAcc = 0; // 消費済みの実時間
-    let sAcc = recStart; // rAccに対応する譜面内時刻
-    for (let i = 0; i < pauses.length; i++) {
-      const p = pauses[i];
-      const rAtPause = rAcc + (p.t - sAcc) / vSpeed;
-      if (rr < rAtPause) break;
-      if (rr < rAtPause + p.dur)
-        return { t: p.t, pauseIdx: i, pauseElapsed: rr - rAtPause };
-      rAcc = rAtPause + p.dur;
-      sAcc = p.t;
-    }
-    return { t: sAcc + (rr - rAcc) * vSpeed, pauseIdx: -1, pauseElapsed: 0 };
-  };
+  // 実時間 → 譜面内時刻 (再生は止まらないので線形)
+  const realToSong = (r: number) => recStart + Math.max(0, r - introTotal) * vSpeed;
 
   // 音声グラフ (スピーカーにも出して進行がわかるように)
   const actx = new AudioContext();
@@ -535,25 +524,8 @@ export async function recordChartVideo(
   const judged = chart.events.filter(
     (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
   );
-  // 停止分も織り込んだ実時間で発音する (停止中のノーツはない前提)
   const clapTimes = judged.map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
   const clapAccents = judged.map((e) => e.panels.length >= 2);
-  // リプレイ中のノーツはクラップ音のみで鳴らす (音楽は停止したまま)
-  for (const p of pauses) {
-    const pauseStartReal = songToReal(p.t);
-    for (let n = 0; n < p.loops; n++) {
-      let segOffset = 0;
-      for (const seg of p.segs) {
-        for (const e of judged) {
-          const te = offsetSec + timeAtBeat(timeline, e.row.beat);
-          if (te < seg.rs - 1e-6 || te >= seg.re - 1e-6) continue;
-          clapTimes.push(pauseStartReal + n * p.onePass + segOffset + (te - seg.rs) / replayRate);
-          clapAccents.push(e.panels.length >= 2);
-        }
-        segOffset += seg.real;
-      }
-    }
-  }
   const ghostTimes = chart.events
     .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
     .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
@@ -578,9 +550,9 @@ export async function recordChartVideo(
     countdownTimes
   );
   // 字送りに合わせたデジタル音 (矩形波の短いブリップ) をトラックへ焼き込む。
-  // 文字の出現時刻は事前に確定しているので、波形に直接書けばズレない
-  for (const p of pauses) {
-    const startReal = songToReal(p.t) + 0.35; // drawSpotlightCardの字送り開始と同期
+  // カードの出現時刻は事前に確定しているので、波形に直接書けばズレない
+  for (const p of spots) {
+    const startReal = Math.max(introTotal + 0.2, songToReal(p.tShow)) + 0.35;
     const chars = [...p.text];
     for (let k = 0; k < chars.length; k++) {
       if (/\s/.test(chars[k])) continue; // 空白は無音 (セリフ送りらしい間になる)
@@ -919,10 +891,10 @@ export async function recordChartVideo(
         gx + gw - 10,
         gy + 24
       );
-      // ★ 解説地点 (リプレイ対象範囲の中央。番組構成OFFなら出ない)
+      // ★ 解説地点 (対象範囲の中央。番組構成OFFなら出ない)
       ctx.font = "400 22px system-ui, sans-serif";
       ctx.textAlign = "center";
-      for (const p of pauses) {
+      for (const p of spots) {
         const px = xOf(p.starBeat);
         ctx.lineWidth = 3;
         ctx.strokeStyle = "#17181c";
@@ -936,29 +908,6 @@ export async function recordChartVideo(
       ctx.fillRect(cx - 1.5, gy + 4, 3, gh - 8);
       ctx.textAlign = "left";
     }
-  };
-
-  // 注目シーンのコメントカード (横のみ)。統計カードと足パッドの間に
-  // 白カードを重ね、経過時間ぶんの文字数だけ字送りで表示する
-  // リプレイ中のバッジ (レーン上部に重ねる)。点滅で「巻き戻し中」を示す
-  const drawReplayBadge = () => {
-    const label = "⟲ REPLAY";
-    ctx.font = `400 34px ${titleFont}`;
-    ctx.textBaseline = "alphabetic";
-    const w = ctx.measureText(label).width + 44;
-    const h = 54;
-    const x = LANE_X + (LANE_W * 4 - w) / 2;
-    const y = HEADER_H + 18;
-    ctx.fillStyle = "#17181c";
-    ctx.fillRect(x + 5, y + 5, w, h);
-    ctx.fillStyle = "#ffd400";
-    ctx.fillRect(x, y, w, h);
-    ctx.strokeStyle = "#17181c";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(x, y, w, h);
-    ctx.fillStyle = "#17181c";
-    ctx.textAlign = "left";
-    ctx.fillText(label, x + 22, y + h - 16);
   };
 
   // テキストを最大幅に収まるよう末尾を省略する
@@ -975,7 +924,7 @@ export async function recordChartVideo(
     drawStripedBg();
     drawSiteLogo(ctx, W / 2, 92, 72, "center");
     drawHeavyText(ctx, "この譜面のポイント", W / 2, 296, 84, jpFont);
-    const rows = pauses.slice(0, 4);
+    const rows = spots.slice(0, 4);
     const cardW = Math.min(1560, W - 240);
     const cardX = (W - cardW) / 2;
     const cardH = 118;
@@ -1004,13 +953,13 @@ export async function recordChartVideo(
         y + cardH / 2 + 14
       );
     });
-    if (pauses.length > rows.length) {
+    if (spots.length > rows.length) {
       ctx.textAlign = "center";
       ctx.fillStyle = fg;
       ctx.globalAlpha = 0.8;
       ctx.font = '700 34px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
       ctx.fillText(
-        `…ほか${pauses.length - rows.length}箇所`,
+        `…ほか${spots.length - rows.length}箇所`,
         W / 2,
         372 + rows.length * (cardH + gap) + 28
       );
@@ -1104,61 +1053,133 @@ export async function recordChartVideo(
     ctx.textAlign = "left";
   };
 
-  const drawSpotlightCard = (p: { text: string }, elapsed: number) => {
-    const cardX = paneX;
-    const cardW = W - paneX - 40;
-    const font = '700 34px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
-    ctx.font = font;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "alphabetic";
-    // 全文を折り返してから字送り (行の途中で改行位置が動かないように)
-    const maxW = cardW - 190;
-    const lines: string[] = [];
-    let line = "";
-    for (const chr of p.text) {
-      if (line && ctx.measureText(line + chr).width > maxW) {
-        lines.push(line);
-        line = chr;
-      } else {
-        line += chr;
-      }
+  // レーン上の注目領域の囲い (レーンのクリップ内で呼ぶ。ノーツと一緒に流れる)
+  const drawSpotBoxes = (audioT: number, curBeat: number) => {
+    for (const s of spots) {
+      if (audioT < s.tShow || audioT > s.tHide) continue;
+      const yTop = RECEPTOR_Y + (s.b0 - curBeat) * pxPerBeat - NOTE * 0.62;
+      const yBot = RECEPTOR_Y + (s.b1 - curBeat) * pxPerBeat - NOTE * 0.35;
+      if (yBot < HEADER_H || yTop > LANE_BOTTOM) continue;
+      // 黒の細縁 → 色の太枠の順で、背景から浮かせる
+      roundRectPath(ctx, LANE_X - 8, yTop - 4, LANE_W * 4 + 16, yBot - yTop + 8, 22);
+      ctx.lineWidth = 13;
+      ctx.strokeStyle = "#17181c";
+      ctx.stroke();
+      roundRectPath(ctx, LANE_X - 8, yTop - 4, LANE_W * 4 + 16, yBot - yTop + 8, 22);
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = s.color;
+      ctx.stroke();
     }
-    if (line) lines.push(line);
-    const lineH = 50;
-    const cardH = 52 + lines.length * lineH;
-    const cardY = 460 - cardH / 2;
-    ctx.fillStyle = "#17181c";
-    ctx.fillRect(cardX + 8, cardY + 8, cardW, cardH);
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(cardX, cardY, cardW, cardH);
-    ctx.strokeStyle = "#17181c";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(cardX, cardY, cardW, cardH);
-    // リアクション絵文字の顔。カードの左肩から大きくはみ出す主役サイズで、
-    // 「顔からカードが生えている」見た目にする。しゃべりに合わせて揺れる
-    const face = spotEmoji(p.text);
-    const faceCx = cardX + 30;
-    const faceCy = cardY + 14 + Math.sin(elapsed * 7) * 3.5;
-    ctx.beginPath();
-    ctx.arc(faceCx, faceCy, 68, 0, Math.PI * 2);
-    ctx.fillStyle = "#f2f5ff";
-    ctx.fill();
-    ctx.lineWidth = 5;
-    ctx.strokeStyle = "#17181c";
-    ctx.stroke();
-    ctx.font =
-      '100px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
-    ctx.textAlign = "center";
-    ctx.fillText(face, faceCx, faceCy + 36);
-    ctx.textAlign = "left";
-    // 字送り本文
-    ctx.font = font;
-    ctx.fillStyle = "#17181c";
-    let remain = Math.max(0, Math.floor((elapsed - 0.35) / 0.05));
-    for (let i = 0; i < lines.length && remain > 0; i++) {
-      const seg = lines[i].slice(0, remain);
-      ctx.fillText(seg, cardX + 130, cardY + 64 + i * lineH);
-      remain -= lines[i].length;
+  };
+
+  // 解説カード (右側にスロット積み)。囲いへ同色の引き出し線でつなぎ、
+  // 出現時に字送りで本文を表示する。再生は止めない
+  const drawCallouts = (audioT: number, curBeat: number) => {
+    const cardW = 660;
+    const cardX = W - cardW - 36;
+    const slotY = [356, 556, 756];
+    const font = '700 28px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    const laneRight = LANE_X + LANE_W * 4 + 12;
+    for (const s of spots) {
+      if (audioT < s.tShow || audioT > s.tHide) continue;
+      const elapsed = (audioT - s.tShow) / vSpeed; // 実時間の経過秒
+      // 折り返し (ラベルを先頭に含める)
+      ctx.font = font;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "alphabetic";
+      const fullText = `${s.label}：${s.text}`;
+      const maxW = cardW - 150;
+      const lines: string[] = [];
+      let line = "";
+      for (const chr of fullText) {
+        if (line && ctx.measureText(line + chr).width > maxW) {
+          lines.push(line);
+          line = chr;
+        } else {
+          line += chr;
+        }
+      }
+      if (line) lines.push(line);
+      const lineH = 40;
+      const cardH = Math.max(104, 40 + lines.length * lineH);
+      const cardY = slotY[s.slot % slotY.length];
+      const cardCy = cardY + cardH / 2;
+      // 引き出し線: カード左端 → 囲いの右端中央 (画面外へ出た分はクランプ)
+      const boxCy = Math.max(
+        HEADER_H + 34,
+        Math.min(
+          LANE_BOTTOM - 34,
+          RECEPTOR_Y + ((s.b0 + s.b1) / 2 - curBeat) * pxPerBeat
+        )
+      );
+      ctx.lineCap = "round";
+      ctx.lineWidth = 11;
+      ctx.strokeStyle = "#17181c";
+      ctx.beginPath();
+      ctx.moveTo(cardX + 10, cardCy);
+      ctx.lineTo(laneRight + 30, boxCy);
+      ctx.stroke();
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = s.color;
+      ctx.beginPath();
+      ctx.moveTo(cardX + 10, cardCy);
+      ctx.lineTo(laneRight + 30, boxCy);
+      ctx.stroke();
+      ctx.lineCap = "butt";
+      // 矢頭 (レーン側)
+      const ang = Math.atan2(boxCy - cardCy, laneRight + 30 - (cardX + 10));
+      ctx.beginPath();
+      ctx.moveTo(laneRight + 4, boxCy);
+      ctx.lineTo(
+        laneRight + 4 + 34 * Math.cos(ang + 0.42),
+        boxCy + 34 * Math.sin(ang + 0.42)
+      );
+      ctx.lineTo(
+        laneRight + 4 + 34 * Math.cos(ang - 0.42),
+        boxCy + 34 * Math.sin(ang - 0.42)
+      );
+      ctx.closePath();
+      ctx.fillStyle = s.color;
+      ctx.fill();
+      ctx.lineWidth = 3.5;
+      ctx.strokeStyle = "#17181c";
+      ctx.stroke();
+      // カード (白 + 色枠 + ハードシャドウ)
+      ctx.fillStyle = "#17181c";
+      ctx.fillRect(cardX + 8, cardY + 8, cardW, cardH);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(cardX, cardY, cardW, cardH);
+      ctx.lineWidth = 7;
+      ctx.strokeStyle = s.color;
+      ctx.strokeRect(cardX, cardY, cardW, cardH);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "#17181c";
+      ctx.strokeRect(cardX - 4.5, cardY - 4.5, cardW + 9, cardH + 9);
+      // 絵文字の顔 (カード左肩からはみ出す。字送りに合わせて揺れる)
+      const face = spotEmoji(s.text);
+      const faceCx = cardX + 16;
+      const faceCy = cardY + 8 + Math.sin(elapsed * 7) * 3;
+      ctx.beginPath();
+      ctx.arc(faceCx, faceCy, 52, 0, Math.PI * 2);
+      ctx.fillStyle = "#f2f5ff";
+      ctx.fill();
+      ctx.lineWidth = 4.5;
+      ctx.strokeStyle = "#17181c";
+      ctx.stroke();
+      ctx.font =
+        '76px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
+      ctx.textAlign = "center";
+      ctx.fillText(face, faceCx, faceCy + 27);
+      ctx.textAlign = "left";
+      // 字送り本文
+      ctx.font = font;
+      ctx.fillStyle = "#17181c";
+      let remain = Math.max(0, Math.floor((elapsed - 0.35) / 0.05));
+      for (let i = 0; i < lines.length && remain > 0; i++) {
+        const seg = lines[i].slice(0, remain);
+        ctx.fillText(seg, cardX + 92, cardY + 52 + i * lineH);
+        remain -= lines[i].length;
+      }
     }
   };
 
@@ -1283,6 +1304,8 @@ export async function recordChartVideo(
         }
       }
     });
+    // 注目領域の囲い (ノーツと一緒に流れる。レーンのクリップ内で描く)
+    if (L) drawSpotBoxes(audioTime, curBeat);
     ctx.restore();
 
     // 受け皿 (直近で踏んだパネルは足の色で光る)
@@ -1341,6 +1364,9 @@ export async function recordChartVideo(
       ctx.drawImage(footScene.canvas, padX, padY, PAD_W, PAD_H);
     }
 
+    // 解説カード + 引き出し線 (パッドの上に重ねる)
+    if (L) drawCallouts(audioTime, curBeat);
+
     // フッター: 進行バー + サイトロゴ風クレジット
     ctx.textAlign = "left";
     drawSiteLogo(ctx, W - 14, H - 32, 22);
@@ -1349,15 +1375,14 @@ export async function recordChartVideo(
     ctx.fillRect(0, H - 8, W, 8);
     ctx.fillStyle = "#00e0a0";
     ctx.fillRect(0, H - 8, W * ratio, 8);
-    // 注目停止の位置を★で予告する (通過済みは薄く)。急に止まって
-    // 驚かないよう、どこで止まるかをタイムライン上で見せておく
-    if (pauses.length > 0) {
+    // 解説地点を★で予告する (通過済みは薄く)
+    if (spots.length > 0) {
       ctx.font = "700 24px system-ui, sans-serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
-      for (const p of pauses) {
-        const px = Math.max(16, Math.min(W - 16, (W * (p.t - recStart)) / durationSec));
-        ctx.globalAlpha = audioTime > p.t + 1e-6 ? 0.35 : 1;
+      for (const p of spots) {
+        const px = Math.max(16, Math.min(W - 16, (W * (p.starT - recStart)) / durationSec));
+        ctx.globalAlpha = audioTime > p.starT + 1e-6 ? 0.35 : 1;
         ctx.strokeStyle = "#17181c";
         ctx.lineWidth = 3;
         ctx.strokeText("★", px, H - 14);
@@ -1445,60 +1470,39 @@ export async function recordChartVideo(
     }
     clapSrc.start(0);
     rec.start(1000);
-    let lastPauseIdx = -1;
+    const pinged = new Set<number>(); // 出現の合図音を鳴らした解説カード
     const tick = () => {
       if (o.signal?.cancelled) {
         rec.stop();
         return;
       }
-      // 実時間 r → 譜面内時刻 (0.5倍速なら半分の速さで進む。注目停止中は凍結)
+      // 実時間 r → 譜面内時刻 (0.5倍速なら半分の速さで進む)
       const r = actx.currentTime - t0;
-      const m = realToSong(r);
-      if (m.pauseIdx !== lastPauseIdx) {
-        // 停止への出入りで音源を止める/再開する (クラップは停止込みの
-        // タイムラインで合成済みなので触らない)
-        if (m.pauseIdx >= 0) {
-          musicSrc?.playbackRate.setValueAtTime(0.0001, actx.currentTime);
-          playPing();
-        } else {
-          musicSrc?.playbackRate.setValueAtTime(vSpeed, actx.currentTime);
-        }
-        lastPauseIdx = m.pauseIdx;
-      }
+      const t = realToSong(r);
       if (program ? r < introTotal : r < INTRO_SEC) {
         // オープニング: サムネカード → 見どころ予告 (解説がある場合)
-        if (!program || r < INTRO_CARD_SEC || pauses.length === 0) drawIntro();
+        if (!program || r < INTRO_CARD_SEC || spots.length === 0) drawIntro();
         else drawPreviewCard();
-      } else if (program && m.t >= songEnd - 1e-6 && r >= realDuration - 1e-6) {
+      } else if (program && t >= songEnd - 1e-6 && r >= realDuration - 1e-6) {
         // エンディング: まとめカード (音源はフェードアウト済み)
         drawEndingCard(Math.min(1, (r - realDuration) / 0.6));
         if (r >= totalReal) {
           rec.stop();
           return;
         }
-      } else if (m.pauseIdx >= 0) {
-        // リプレイ: 停止中は対象小節列を0.5掛けで順にプレイバック
-        const p = pauses[m.pauseIdx];
-        const pos = m.pauseElapsed % p.onePass;
-        let acc = 0;
-        let seg = p.segs[0];
-        for (const s of p.segs) {
-          if (pos < acc + s.real) {
-            seg = s;
-            break;
-          }
-          acc += s.real;
-        }
-        const replayT = Math.min(seg.re - 1e-3, seg.rs + (pos - acc) * replayRate);
-        drawFrame(replayT, performance.now());
-        drawReplayBadge();
-        drawSpotlightCard(p, m.pauseElapsed);
       } else {
-        drawFrame(m.t, performance.now());
+        // 解説カードの出現に合わせて合図音 (再生は止めない)
+        spots.forEach((s, i) => {
+          if (!pinged.has(i) && t >= s.tShow && t < s.tHide) {
+            pinged.add(i);
+            playPing();
+          }
+        });
+        drawFrame(t, performance.now());
         if (program) drawCountdown(r);
       }
       o.onProgress?.(Math.max(0, Math.min(1, r / totalReal)));
-      if (!program && m.t >= songEnd) {
+      if (!program && t >= songEnd) {
         rec.stop();
         return;
       }

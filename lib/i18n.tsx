@@ -130,7 +130,7 @@ export interface Strings {
   videoSpotFew: string;
   videoSpotNormal: string;
   videoSpotMany: string;
-  videoSpotInfo: (n: number, measures: string, sec: number) => string;
+  videoSpotInfo: (n: number, measures: string) => string;
   videoSpotNone: string;
   videoSpotManual: (n: number) => string;
   videoCancel: string;
@@ -309,7 +309,7 @@ const ja: Strings = {
   videoBtnTitle: "譜面再生をショート動画で書き出し",
   videoTitle: "動画を書き出し (β)",
   videoDesc:
-    "譜面の自動再生を動画にします。縦はショート向け (720×1280・等速)、横はじっくり観察向け (1920×1080・0.5倍速、注目コメントで一時停止)。録画は再生時間ぶんかかります。",
+    "譜面の自動再生を動画にします。縦はショート向け (720×1280・等速)、横はじっくり観察向け (1920×1080・0.5倍速、難所を囲いと解説カードで指摘)。録画は再生時間ぶんかかります。",
   videoUseMedia: "曲とジャケットを使う",
   videoAudioUrl: "音源 (ogg/mp3) のURL",
   videoJacketUrl: "ジャケット画像のURL (任意)",
@@ -327,14 +327,13 @@ const ja: Strings = {
   videoSpeedLabel: "収録速度",
   videoSpeedHalf: "0.5倍速 (じっくり)",
   videoSpeedFull: "等倍",
-  videoProgram: "番組構成 (見どころ予告・解説リプレイ・まとめ)",
+  videoProgram: "番組構成 (見どころ予告・解説カード・まとめ)",
   videoSpotAmount: "解説の量",
   videoSpotFew: "少なめ",
   videoSpotNormal: "標準",
   videoSpotMany: "多め",
-  videoSpotInfo: (n, m, sec) =>
-    `★ 自動解説 ${n}箇所 (${m}小節目) — リプレイで約+${sec}秒`,
-  videoSpotNone: "★ 自動解説: 難所が見つからないためリプレイなし",
+  videoSpotInfo: (n, m) => `★ 自動解説 ${n}箇所 (${m}小節目)`,
+  videoSpotNone: "★ 自動解説: 難所は見つかりませんでした",
   videoSpotManual: (n) => `★ 手動コメント ${n}箇所を解説に使います`,
   videoCancel: "中止",
   rangePending: (p) => `始点: ${p} — 終点の位置をタップ`,
@@ -515,7 +514,7 @@ const en: Strings = {
   videoBtnTitle: "Export playback as a short video",
   videoTitle: "Export video (beta)",
   videoDesc:
-    "Renders the auto-play as a video. Portrait for Shorts (720×1280, 1×), landscape for study (1920×1080, 0.5× with spotlight comment pauses). Recording takes as long as the playback.",
+    "Renders the auto-play as a video. Portrait for Shorts (720×1280, 1×), landscape for study (1920×1080, 0.5× with highlighted callouts). Recording takes as long as the playback.",
   videoUseMedia: "Use song & jacket",
   videoAudioUrl: "Audio URL (ogg/mp3)",
   videoJacketUrl: "Jacket image URL (optional)",
@@ -533,13 +532,12 @@ const en: Strings = {
   videoSpeedLabel: "Recording speed",
   videoSpeedHalf: "0.5× (study)",
   videoSpeedFull: "1×",
-  videoProgram: "Show format (preview, replay breakdowns, outro)",
+  videoProgram: "Show format (preview, callouts, outro)",
   videoSpotAmount: "Commentary",
   videoSpotFew: "Less",
   videoSpotNormal: "Normal",
   videoSpotMany: "More",
-  videoSpotInfo: (n, m, sec) =>
-    `★ ${n} auto breakdowns (measures ${m}) — replays add ~${sec}s`,
+  videoSpotInfo: (n, m) => `★ ${n} auto callouts (measures ${m})`,
   videoSpotNone: "★ Auto commentary: no tricky sections found",
   videoSpotManual: (n) => `★ Using your ${n} manual comment(s)`,
   videoCancel: "Cancel",
@@ -720,7 +718,7 @@ const ko: Strings = {
   videoBtnTitle: "재생을 쇼트 동영상으로 내보내기",
   videoTitle: "동영상 내보내기 (β)",
   videoDesc:
-    "자동 재생을 동영상으로 만듭니다. 세로는 쇼트용 (720×1280·1배속), 가로는 관찰용 (1920×1080·0.5배속, 주목 코멘트에서 일시정지). 녹화는 재생 시간만큼 걸립니다.",
+    "자동 재생을 동영상으로 만듭니다. 세로는 쇼트용 (720×1280·1배속), 가로는 관찰용 (1920×1080·0.5배속, 난소를 테두리와 해설 카드로 표시). 녹화는 재생 시간만큼 걸립니다.",
   videoUseMedia: "곡·재킷 사용",
   videoAudioUrl: "음원 (ogg/mp3) URL",
   videoJacketUrl: "재킷 이미지 URL (선택)",
@@ -738,14 +736,13 @@ const ko: Strings = {
   videoSpeedLabel: "녹화 속도",
   videoSpeedHalf: "0.5배속 (관찰)",
   videoSpeedFull: "1배속",
-  videoProgram: "방송 구성 (미리보기·해설 리플레이·마무리)",
+  videoProgram: "방송 구성 (미리보기·해설·마무리)",
   videoSpotAmount: "해설 분량",
   videoSpotFew: "적게",
   videoSpotNormal: "표준",
   videoSpotMany: "많이",
-  videoSpotInfo: (n, m, sec) =>
-    `★ 자동 해설 ${n}곳 (${m}마디) — 리플레이로 약 +${sec}초`,
-  videoSpotNone: "★ 자동 해설: 난소가 없어 리플레이 없음",
+  videoSpotInfo: (n, m) => `★ 자동 해설 ${n}곳 (${m}마디)`,
+  videoSpotNone: "★ 자동 해설: 난소를 찾지 못했습니다",
   videoSpotManual: (n) => `★ 수동 코멘트 ${n}곳을 해설로 사용합니다`,
   videoCancel: "중지",
   rangePending: (p) => `시작: ${p} — 끝 위치를 탭`,

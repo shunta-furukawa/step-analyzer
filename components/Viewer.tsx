@@ -537,24 +537,6 @@ export default function Viewer({
     const minScore = vSpotAmount === "few" ? 6 : vSpotAmount === "many" ? 3 : 4;
     return detectSpotlights(chart, footsteps, timeline, Infinity, minScore);
   }, [chart, footsteps, timeline, vSpotAmount]);
-  // リプレイで増える実時間の見積り (videoExportと同じ式: 収録速度の0.5掛けで
-  // グループの小節列を順にプレイバック)
-  const autoSpotExtraSec = useMemo(() => {
-    if (!chart || timeline.length === 0) return 0;
-    const replayRate = vLandSpeed * 0.5;
-    let sum = 0;
-    for (const s of autoSpots) {
-      let onePass = 0;
-      for (const m of s.measures) {
-        const rs = timeAtBeat(timeline, m * 4);
-        const re = timeAtBeat(timeline, Math.min(chart.totalBeats, m * 4 + 4));
-        onePass += Math.max(0.25, (re - rs) / replayRate);
-      }
-      const textDur = Math.min(8, 2.0 + s.text.length * 0.06);
-      sum += Math.max(1, Math.min(2, Math.ceil(textDur / onePass))) * onePass;
-    }
-    return sum;
-  }, [chart, timeline, autoSpots, vLandSpeed]);
 
   // 譜面が長い場合はdeflate圧縮したdパラメータを使い、URLを短くする。
   // "," と ":" はクエリ値として合法なのでエンコードせずそのまま残す
@@ -1896,8 +1878,7 @@ export default function Viewer({
                               ? `${s.measures[0] + 1}〜${s.measures[s.measures.length - 1] + 1}`
                               : `${s.measures[0] + 1}`
                           )
-                          .join("・") + (autoSpots.length > 6 ? "…" : ""),
-                        Math.round(autoSpotExtraSec)
+                          .join("・") + (autoSpots.length > 6 ? "…" : "")
                       )
                     : S.videoSpotNone}
                 </p>
