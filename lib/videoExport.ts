@@ -352,16 +352,25 @@ export async function recordChartVideo(
         re,
         replayReal,
         loops,
+        measureNo: Math.floor(mb0 / 4) + 1, // 表示用 (1始まり)
       };
     })
     .filter((p) => p.t >= recStart && p.rs >= recStart - 1e-6)
     .sort((a, b) => a.t - b.t);
   const pausesTotal = pauses.reduce((s, p) => s + p.dur, 0);
-  const realDuration = durationSec / vSpeed + pausesTotal; // 実時間 (0.5倍速なら2倍+停止分)
+  // オープニング (横のみ): サムネカード2秒 + 見どころ予告3秒 (解説がある場合)。
+  // 縦は従来どおり0.5秒のイントロカードが冒頭の譜面再生に重なる
+  const INTRO_CARD_SEC = 2.0;
+  const PREVIEW_SEC = 3.0;
+  const introTotal = L ? INTRO_CARD_SEC + (pauses.length > 0 ? PREVIEW_SEC : 0) : 0;
+  // エンディング (横のみ): まとめカード4秒。音源はその手前でフェードアウト
+  const endingTotal = L ? 4.0 : 0;
+  const realDuration = introTotal + durationSec / vSpeed + pausesTotal; // 譜面終了までの実時間
+  const totalReal = realDuration + endingTotal;
 
-  // 譜面内時刻 → 実時間 (停止分を加算)。クラップの発音時刻計算に使う
+  // 譜面内時刻 → 実時間 (イントロと停止分を加算)。クラップの発音時刻計算に使う
   const songToReal = (t: number) => {
-    let real = (t - recStart) / vSpeed;
+    let real = introTotal + (t - recStart) / vSpeed;
     for (const p of pauses) if (p.t < t) real += p.dur;
     return real;
   };
@@ -370,17 +379,20 @@ export async function recordChartVideo(
   const realToSong = (
     r: number
   ): { t: number; pauseIdx: number; pauseElapsed: number } => {
+    const rr = r - introTotal; // イントロを除いた譜面部分の実時間
+    if (rr <= 0) return { t: recStart, pauseIdx: -1, pauseElapsed: 0 };
     let rAcc = 0; // 消費済みの実時間
     let sAcc = recStart; // rAccに対応する譜面内時刻
     for (let i = 0; i < pauses.length; i++) {
       const p = pauses[i];
       const rAtPause = rAcc + (p.t - sAcc) / vSpeed;
-      if (r < rAtPause) break;
-      if (r < rAtPause + p.dur) return { t: p.t, pauseIdx: i, pauseElapsed: r - rAtPause };
+      if (rr < rAtPause) break;
+      if (rr < rAtPause + p.dur)
+        return { t: p.t, pauseIdx: i, pauseElapsed: rr - rAtPause };
       rAcc = rAtPause + p.dur;
       sAcc = p.t;
     }
-    return { t: sAcc + (r - rAcc) * vSpeed, pauseIdx: -1, pauseElapsed: 0 };
+    return { t: sAcc + (rr - rAcc) * vSpeed, pauseIdx: -1, pauseElapsed: 0 };
   };
 
   // 音声グラフ (スピーカーにも出して進行がわかるように)
@@ -388,13 +400,15 @@ export async function recordChartVideo(
   await actx.resume();
   const dest = actx.createMediaStreamDestination();
   let musicSrc: AudioBufferSourceNode | null = null;
+  const musicGain = actx.createGain(); // エンディングのフェードアウト用
   if (o.audio) {
     musicSrc = actx.createBufferSource();
     musicSrc.buffer = o.audio;
     // 0.5倍速はテープ遅回し方式 (ピッチも1オクターブ下がる)
     musicSrc.playbackRate.value = vSpeed;
-    musicSrc.connect(dest);
-    musicSrc.connect(actx.destination);
+    musicSrc.connect(musicGain);
+    musicGain.connect(dest);
+    musicGain.connect(actx.destination);
   }
 
   // ハンドクラップ (アプリ再生と同じ判定音を録画開始時刻基準で合成)。
@@ -421,11 +435,25 @@ export async function recordChartVideo(
   const ghostTimes = chart.events
     .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
     .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
+  // カウントダウン (横のみ): 最初のノーツの3秒前から1秒刻みのティック音。
+  // オープニング明けに間に合う分だけ鳴らす
+  const firstNoteReal =
+    judged.length > 0
+      ? songToReal(offsetSec + timeAtBeat(timeline, judged[0].row.beat))
+      : introTotal;
+  const countdownTimes: number[] = [];
+  if (L) {
+    for (let k = 3; k >= 1; k--) {
+      const t = firstNoteReal - k;
+      if (t >= introTotal - 1e-6) countdownTimes.push(t);
+    }
+  }
   const { samples: clapSamples, sr: clapSr } = renderClapTrackSamples(
     clapTimes,
     clapAccents,
-    realDuration,
-    ghostTimes
+    totalReal,
+    ghostTimes,
+    countdownTimes
   );
   // 字送りに合わせたデジタル音 (矩形波の短いブリップ) をトラックへ焼き込む。
   // 文字の出現時刻は事前に確定しているので、波形に直接書けばズレない
@@ -810,6 +838,139 @@ export async function recordChartVideo(
     ctx.fillText(label, x + 22, y + h - 16);
   };
 
+  // テキストを最大幅に収まるよう末尾を省略する
+  const ellipsize = (text: string, maxW: number): string => {
+    if (ctx.measureText(text).width <= maxW) return text;
+    let s = text;
+    while (s.length > 1 && ctx.measureText(s + "…").width > maxW) s = s.slice(0, -1);
+    return s + "…";
+  };
+
+  // オープニングの見どころ予告カード (横のみ)
+  const drawPreviewCard = () => {
+    drawStripedBg();
+    drawSiteLogo(ctx, W / 2, 84, 60, "center");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = fg;
+    ctx.font = `400 60px ${titleFont}`;
+    ctx.fillText("今日の見どころ", W / 2, 250);
+    const rows = pauses.slice(0, 3);
+    const cardW = Math.min(1240, W - 480);
+    const cardX = (W - cardW) / 2;
+    const cardH = 96;
+    const gap = 30;
+    const font = '700 31px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    rows.forEach((p, i) => {
+      const y = 330 + i * (cardH + gap);
+      ctx.fillStyle = "#17181c";
+      ctx.fillRect(cardX + 7, y + 7, cardW, cardH);
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(cardX, y, cardW, cardH);
+      ctx.strokeStyle = "#17181c";
+      ctx.lineWidth = 4;
+      ctx.strokeRect(cardX, y, cardW, cardH);
+      // ★ + 小節番号 + 本文 (1行に収まるよう省略)
+      ctx.textAlign = "left";
+      ctx.font = "400 34px system-ui, sans-serif";
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = "#17181c";
+      ctx.strokeText("★", cardX + 26, y + cardH / 2 + 12);
+      ctx.fillStyle = "#ffd93b";
+      ctx.fillText("★", cardX + 26, y + cardH / 2 + 12);
+      ctx.fillStyle = "#17181c";
+      ctx.font = font;
+      ctx.fillText(
+        ellipsize(`${p.measureNo}小節目：${p.text}`, cardW - 120),
+        cardX + 82,
+        y + cardH / 2 + 11
+      );
+      ctx.textAlign = "center";
+    });
+    ctx.textAlign = "left";
+  };
+
+  // 再生開始前のカウントダウン (レーン中央に3-2-1)
+  const drawCountdown = (r: number) => {
+    const remain = firstNoteReal - r;
+    if (remain <= 0 || remain > 3) return;
+    const n = Math.ceil(remain);
+    const frac = 1 - (remain - Math.floor(remain)); // 0→1で次の数字へ
+    const cx = LANE_X + LANE_W * 2;
+    const cy = (HEADER_H + LANE_BOTTOM) / 2;
+    ctx.font = `400 ${Math.round(170 + 40 * (1 - frac))}px ${titleFont}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.globalAlpha = 0.9 - 0.5 * frac;
+    ctx.lineWidth = 10;
+    ctx.strokeStyle = "#17181c";
+    ctx.strokeText(String(n), cx, cy);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText(String(n), cx, cy);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+  };
+
+  // エンディングのまとめカード (横のみ)。alphaでフェードイン
+  const drawEndingCard = (alpha: number) => {
+    drawStripedBg();
+    ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    drawSiteLogo(ctx, W / 2, 100, 64, "center");
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = fg;
+    ctx.font = `400 54px ${titleFont}`;
+    ctx.fillText(o.title, W / 2, 250, W - 400);
+    if (o.subtitle) {
+      ctx.globalAlpha *= 0.75;
+      ctx.font = `400 32px ${titleFont}`;
+      ctx.fillText(o.subtitle, W / 2, 300, W - 400);
+      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+    }
+    // 統計タイル (エンディングで総括として見せる)
+    if (o.stats && o.stats.length > 0) {
+      const n = o.stats.length;
+      const gap = 16;
+      const rowW = Math.min(1300, W - 400);
+      const cardW = (rowW - gap * (n - 1)) / n;
+      const x0 = (W - rowW) / 2;
+      const cardY = 360;
+      const cardH = 130;
+      for (let i = 0; i < n; i++) {
+        const s = o.stats[i];
+        const x = x0 + i * (cardW + gap);
+        ctx.fillStyle = "rgba(23, 24, 28, 0.92)";
+        ctx.fillRect(x, cardY, cardW, cardH);
+        ctx.fillStyle = "#00e0a0";
+        ctx.font = `400 52px ${titleFont}`;
+        ctx.fillText(String(s.value), x + cardW / 2, cardY + 70);
+        ctx.fillStyle = "rgba(255,255,255,0.82)";
+        ctx.font = "700 20px system-ui, sans-serif";
+        ctx.fillText(s.label, x + cardW / 2, cardY + 106, cardW - 12);
+      }
+    }
+    // CTA: ブラウザで自分のペースで確認できることを伝える
+    ctx.fillStyle = fg;
+    ctx.font = '700 34px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    ctx.fillText("じっくり確認するならブラウザで、自分のペースで再生できます", W / 2, 610);
+    const ctaText = "▶ リンクは概要欄へ";
+    ctx.font = '700 38px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    const ctaW = ctx.measureText(ctaText).width + 80;
+    const ctaX = (W - ctaW) / 2;
+    const ctaY = 660;
+    ctx.fillStyle = "#17181c";
+    ctx.fillRect(ctaX + 6, ctaY + 6, ctaW, 74);
+    ctx.fillStyle = "#ffd400";
+    ctx.fillRect(ctaX, ctaY, ctaW, 74);
+    ctx.strokeStyle = "#17181c";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(ctaX, ctaY, ctaW, 74);
+    ctx.fillStyle = "#17181c";
+    ctx.fillText(ctaText, W / 2, ctaY + 51);
+    ctx.globalAlpha = 1;
+    ctx.textAlign = "left";
+  };
+
   const drawSpotlightCard = (p: { text: string }, elapsed: number) => {
     const cardX = paneX;
     const cardW = W - paneX - 40;
@@ -1099,7 +1260,16 @@ export async function recordChartVideo(
 
     const t0 = actx.currentTime;
     if (musicSrc && o.audio) {
-      musicSrc.start(0, Math.min(recStart, Math.max(0, o.audio.duration - 0.1)));
+      // オープニングカードの間は待ってから音源を開始する
+      musicSrc.start(
+        introTotal > 0 ? t0 + introTotal : 0,
+        Math.min(recStart, Math.max(0, o.audio.duration - 0.1))
+      );
+      // エンディング: 譜面終了に合わせてフェードアウト (プツッと切らない)
+      if (endingTotal > 0) {
+        musicGain.gain.setValueAtTime(1, t0 + realDuration - 0.8);
+        musicGain.gain.linearRampToValueAtTime(0, t0 + realDuration + 1.2);
+      }
     }
     clapSrc.start(0);
     rec.start(1000);
@@ -1123,8 +1293,17 @@ export async function recordChartVideo(
         }
         lastPauseIdx = m.pauseIdx;
       }
-      if (r < INTRO_SEC) {
-        drawIntro();
+      if (L ? r < introTotal : r < INTRO_SEC) {
+        // オープニング: サムネカード → 見どころ予告 (解説がある場合)
+        if (!L || r < INTRO_CARD_SEC || pauses.length === 0) drawIntro();
+        else drawPreviewCard();
+      } else if (L && m.t >= songEnd - 1e-6 && r >= realDuration - 1e-6) {
+        // エンディング: まとめカード (音源はフェードアウト済み)
+        drawEndingCard(Math.min(1, (r - realDuration) / 0.6));
+        if (r >= totalReal) {
+          rec.stop();
+          return;
+        }
       } else if (m.pauseIdx >= 0) {
         // リプレイ: 停止中はその小節を頭から周回再生 (クラップ音は合成済み)
         const p = pauses[m.pauseIdx];
@@ -1137,9 +1316,10 @@ export async function recordChartVideo(
         drawSpotlightCard(p, m.pauseElapsed);
       } else {
         drawFrame(m.t, performance.now());
+        if (L) drawCountdown(r);
       }
-      o.onProgress?.(Math.max(0, Math.min(1, r / realDuration)));
-      if (m.t >= songEnd) {
+      o.onProgress?.(Math.max(0, Math.min(1, r / totalReal)));
+      if (!L && m.t >= songEnd) {
         rec.stop();
         return;
       }
