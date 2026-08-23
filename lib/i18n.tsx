@@ -126,6 +126,13 @@ export interface Strings {
   videoSpeedHalf: string;
   videoSpeedFull: string;
   videoProgram: string;
+  videoSpotAmount: string;
+  videoSpotFew: string;
+  videoSpotNormal: string;
+  videoSpotMany: string;
+  videoSpotInfo: (n: number, measures: string, sec: number) => string;
+  videoSpotNone: string;
+  videoSpotManual: (n: number) => string;
   videoCancel: string;
   // 小節番号タップの範囲選択
   rangePending: (p: string) => string;
@@ -321,6 +328,14 @@ const ja: Strings = {
   videoSpeedHalf: "0.5倍速 (じっくり)",
   videoSpeedFull: "等倍",
   videoProgram: "番組構成 (見どころ予告・解説リプレイ・まとめ)",
+  videoSpotAmount: "解説の量",
+  videoSpotFew: "少なめ",
+  videoSpotNormal: "標準",
+  videoSpotMany: "多め",
+  videoSpotInfo: (n, m, sec) =>
+    `★ 自動解説 ${n}箇所 (${m}小節目) — リプレイで約+${sec}秒`,
+  videoSpotNone: "★ 自動解説: 難所が見つからないためリプレイなし",
+  videoSpotManual: (n) => `★ 手動コメント ${n}箇所を解説に使います`,
   videoCancel: "中止",
   rangePending: (p) => `始点: ${p} — 終点の位置をタップ`,
   rangeActive: (a, b) => `選択範囲: ${a}〜${b} (小節.拍)`,
@@ -519,6 +534,14 @@ const en: Strings = {
   videoSpeedHalf: "0.5× (study)",
   videoSpeedFull: "1×",
   videoProgram: "Show format (preview, replay breakdowns, outro)",
+  videoSpotAmount: "Commentary",
+  videoSpotFew: "Less",
+  videoSpotNormal: "Normal",
+  videoSpotMany: "More",
+  videoSpotInfo: (n, m, sec) =>
+    `★ ${n} auto breakdowns (measures ${m}) — replays add ~${sec}s`,
+  videoSpotNone: "★ Auto commentary: no tricky sections found",
+  videoSpotManual: (n) => `★ Using your ${n} manual comment(s)`,
   videoCancel: "Cancel",
   rangePending: (p) => `Start: ${p} — tap the end position`,
   rangeActive: (a, b) => `Selection: ${a}–${b} (measure.beat)`,
@@ -716,6 +739,14 @@ const ko: Strings = {
   videoSpeedHalf: "0.5배속 (관찰)",
   videoSpeedFull: "1배속",
   videoProgram: "방송 구성 (미리보기·해설 리플레이·마무리)",
+  videoSpotAmount: "해설 분량",
+  videoSpotFew: "적게",
+  videoSpotNormal: "표준",
+  videoSpotMany: "많이",
+  videoSpotInfo: (n, m, sec) =>
+    `★ 자동 해설 ${n}곳 (${m}마디) — 리플레이로 약 +${sec}초`,
+  videoSpotNone: "★ 자동 해설: 난소가 없어 리플레이 없음",
+  videoSpotManual: (n) => `★ 수동 코멘트 ${n}곳을 해설로 사용합니다`,
   videoCancel: "중지",
   rangePending: (p) => `시작: ${p} — 끝 위치를 탭`,
   rangeActive: (a, b) => `선택 범위: ${a}〜${b} (마디.박)`,

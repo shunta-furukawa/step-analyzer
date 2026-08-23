@@ -49,7 +49,8 @@ export function detectSpotlights(
   chart: ParsedChart,
   footsteps: FootStep[],
   timeline: TimingSeg[],
-  maxSpots = Infinity
+  maxSpots = Infinity,
+  minScore = 4
 ): AutoSpot[] {
   const measures = chart.measures.length;
   if (measures === 0) return [];
@@ -169,7 +170,7 @@ export function detectSpotlights(
   // スコア降順に、2小節以上離して選ぶ
   const picked: MeasureFeatures[] = [];
   for (const f of feats.sort((a, b) => b.score - a.score)) {
-    if (f.score < 4) break; // 見どころなし (平坦な譜面は無理に選ばない)
+    if (f.score < minScore) break; // 見どころなし (平坦な譜面は無理に選ばない)
     if (picked.some((p) => Math.abs(p.measure - f.measure) < 2)) continue;
     picked.push(f);
     if (picked.length >= maxSpots) break;

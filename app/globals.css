@@ -2138,3 +2138,10 @@ input[type="range"]:focus {
 .card a {
   color: var(--mint);
 }
+
+/* 動画モーダル: 自動解説のプレビュー行 */
+.video-spot-info {
+  font-size: 13px;
+  opacity: 0.85;
+  margin: 2px 0 6px;
+}

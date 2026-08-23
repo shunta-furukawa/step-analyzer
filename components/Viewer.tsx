@@ -287,6 +287,8 @@ export default function Viewer({
   const [vLandSpeed, setVLandSpeed] = useState<0.5 | 1>(0.5);
   // 番組構成 (OP予告・解説リプレイ・EDまとめ)。OFFで素の横動画
   const [vProgram, setVProgram] = useState(true);
+  // 自動解説の量 (検出スコアの閾値を変える)
+  const [vSpotAmount, setVSpotAmount] = useState<"few" | "normal" | "many">("normal");
   const [vUseMedia, setVUseMedia] = useState(false);
   const [vOgg, setVOgg] = useState("");
   const [vJacket, setVJacket] = useState("");
@@ -528,6 +530,29 @@ export default function Viewer({
     [chart, bpms, stopList]
   );
   const hasSofran = bpms.length > 1 || stopList.length > 0;
+
+  // 横動画の自動解説を事前計算 (モーダルに件数・対象小節・追加時間を表示)
+  const autoSpots = useMemo(() => {
+    if (!chart || footsteps.length === 0 || timeline.length === 0) return [];
+    const minScore = vSpotAmount === "few" ? 6 : vSpotAmount === "many" ? 3 : 4;
+    return detectSpotlights(chart, footsteps, timeline, Infinity, minScore);
+  }, [chart, footsteps, timeline, vSpotAmount]);
+  // リプレイで増える実時間の見積り (videoExportと同じ式)
+  const autoSpotExtraSec = useMemo(() => {
+    if (!chart || timeline.length === 0) return 0;
+    let sum = 0;
+    for (const s of autoSpots) {
+      const mb0 = Math.floor(s.beat / 4) * 4;
+      const mb1 = Math.min(chart.totalBeats, mb0 + 4);
+      const replayReal = Math.max(
+        0.5,
+        (timeAtBeat(timeline, mb1) - timeAtBeat(timeline, mb0)) / vLandSpeed
+      );
+      const textDur = Math.min(8, 2.0 + s.text.length * 0.06);
+      sum += Math.max(1, Math.min(3, Math.ceil(textDur / replayReal))) * replayReal;
+    }
+    return sum;
+  }, [chart, timeline, autoSpots, vLandSpeed]);
 
   // 譜面が長い場合はdeflate圧縮したdパラメータを使い、URLを短くする。
   // "," と ":" はクエリ値として合法なのでエンコードせずそのまま残す
@@ -1835,6 +1860,46 @@ export default function Viewer({
                 <span>{S.videoProgram}</span>
               </label>
             )}
+            {/* 自動解説の量と、書き出し前の件数・追加時間のプレビュー */}
+            {vMode === "landscape" && vProgram && noteComments.size === 0 && (
+              <>
+                <div className="opt-row">
+                  <span className="opt-label">{S.videoSpotAmount}</span>
+                  <div className="opt-btns">
+                    {(
+                      [
+                        ["few", S.videoSpotFew],
+                        ["normal", S.videoSpotNormal],
+                        ["many", S.videoSpotMany],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <button
+                        key={key}
+                        className={vSpotAmount === key ? "" : "secondary"}
+                        onClick={() => setVSpotAmount(key)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <p className="video-spot-info">
+                  {autoSpots.length > 0
+                    ? S.videoSpotInfo(
+                        autoSpots.length,
+                        autoSpots
+                          .slice(0, 6)
+                          .map((s) => s.measure + 1)
+                          .join("・") + (autoSpots.length > 6 ? "…" : ""),
+                        Math.round(autoSpotExtraSec)
+                      )
+                    : S.videoSpotNone}
+                </p>
+              </>
+            )}
+            {vMode === "landscape" && vProgram && noteComments.size > 0 && (
+              <p className="video-spot-info">{S.videoSpotManual(noteComments.size)}</p>
+            )}
             <label className="toggle-row">
               <input
                 type="checkbox"
@@ -1922,17 +1987,14 @@ export default function Viewer({
                         : []),
                     ],
                     // 注目コメント (tick=48分音基準をbeatへ換算)。横長のみ使われる。
-                    // 手動コメントがなければ難所を自動検出して解説を付ける
+                    // 手動コメントがなければ自動検出の解説 (事前計算済み) を使う
                     spotlights:
                       noteComments.size > 0
                         ? [...noteComments.entries()].map(([tick, text]) => ({
                             beat: tick / 48,
                             text,
                           }))
-                        : detectSpotlights(chart, footsteps, timeline).map((s) => ({
-                            beat: s.beat,
-                            text: s.text,
-                          })),
+                        : autoSpots.map((s) => ({ beat: s.beat, text: s.text })),
                     onProgress: setVProgress,
                     signal: vSignal.current,
                   });
