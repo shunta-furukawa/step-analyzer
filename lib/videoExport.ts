@@ -155,13 +155,13 @@ function drawIntroCard(
 ) {
   drawStripedBgOn(ctx, W, H, o.bgColor, o.bgColor2);
   // サムネの上に大きなサイトロゴ (イントロカードだけの特別配置)
-  drawSiteLogo(ctx, W / 2, L ? 84 : 100, L ? 60 : 54, "center");
+  drawSiteLogo(ctx, W / 2, L ? 88 : 100, L ? 68 : 54, "center");
   // ジャケットは直角 (サイトのカードと同じ様式)。難易度クラス色の枠 +
   // ぼかしなしの黒ハードシャドウで、枠色が背景色と近くても浮かせる
-  // 横長はジャケット左+テキスト右の2カラム
-  const jSize = L ? 560 : 540;
-  const jx = L ? 300 : (W - jSize) / 2;
-  const jy = L ? 260 : 215;
+  // 横長はジャケット左+テキスト右の2カラム (余白少なめ・要素大きめ)
+  const jSize = L ? 680 : 540;
+  const jx = L ? 140 : (W - jSize) / 2;
+  const jy = L ? 230 : 215;
   const frameColor = o.diff?.cls != null ? DIFF_COLORS[o.diff.cls] : "#ffffff";
   const frameW = 10;
   ctx.fillStyle = "#17181c";
@@ -180,14 +180,14 @@ function drawIntroCard(
   const cls = o.diff?.cls ?? null;
   const lvl = o.diff?.lvl ?? "";
   if (cls !== null || lvl) {
-    ctx.font = `400 66px ${titleFont}`;
+    ctx.font = `400 ${L ? 78 : 66}px ${titleFont}`;
     // actualBoundingBoxは計測時のtextBaseline基準 (Safari)。alphabeticで統一
     ctx.textBaseline = "alphabetic";
     const lm = lvl ? ctx.measureText(lvl) : null;
-    const footSize = cls !== null ? 78 : 0;
+    const footSize = cls !== null ? (L ? 92 : 78) : 0;
     const innerW = footSize + (footSize && lm ? 14 : 0) + (lm?.width ?? 0);
     const chipW2 = innerW + 60;
-    const chipH = 106;
+    const chipH = L ? 124 : 106;
     const cx0 = jx + (jSize - chipW2) / 2; // ジャケット中央に重ねる
     const cy0 = jy + jSize - chipH / 2;
     // チップも直角 (白 + 黒ハードシャドウ + 黒枠)
@@ -214,21 +214,21 @@ function drawIntroCard(
   }
   // 曲名 + アーティスト + BPM (縦=下部中央 / 横=右カラム中央)。
   // タイトルは極太ゴシック+白抜き縁取りで「タイトル感」を出す
-  const tcx = L ? (jx + jSize + 80 + (W - 100)) / 2 : W / 2;
-  const tMaxW = L ? W - (jx + jSize + 80) - 100 : W - 80;
-  drawHeavyText(ctx, o.title, tcx, L ? 460 : 920, L ? 66 : 58, jpFont, "center", tMaxW);
+  const tcx = L ? (jx + jSize + 60 + (W - 60)) / 2 : W / 2;
+  const tMaxW = L ? W - (jx + jSize + 60) - 60 : W - 80;
+  drawHeavyText(ctx, o.title, tcx, L ? 470 : 920, L ? 88 : 58, jpFont, "center", tMaxW);
   if (o.subtitle) {
-    drawHeavyText(ctx, o.subtitle, tcx, L ? 538 : 984, L ? 34 : 30, jpFont, "center", tMaxW);
+    drawHeavyText(ctx, o.subtitle, tcx, L ? 560 : 984, L ? 44 : 30, jpFont, "center", tMaxW);
   }
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = fg;
   ctx.globalAlpha = 0.8;
-  ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
-  ctx.fillText("BPM", tcx, L ? 690 : 1086);
+  ctx.font = `400 ${L ? 46 : 34}px ${titleFont}`;
+  ctx.fillText("BPM", tcx, L ? 722 : 1086);
   ctx.globalAlpha = 1;
-  ctx.font = `400 ${L ? 88 : 76}px ${titleFont}`;
-  ctx.fillText(o.bpmLabel, tcx, L ? 790 : 1172, tMaxW);
+  ctx.font = `400 ${L ? 124 : 76}px ${titleFont}`;
+  ctx.fillText(o.bpmLabel, tcx, L ? 856 : 1172, tMaxW);
   ctx.textAlign = "left";
 }
 
@@ -953,49 +953,50 @@ export async function recordChartVideo(
     return s + "…";
   };
 
-  // オープニングの見どころ予告カード (横のみ)
+  // オープニングの見どころ予告カード (横のみ)。
+  // 余白少なめ・要素大きめ。絵文字はカードからはみ出す主役サイズ
   const drawPreviewCard = () => {
     drawStripedBg();
-    drawSiteLogo(ctx, W / 2, 84, 60, "center");
-    drawHeavyText(ctx, "この譜面のポイント", W / 2, 258, 62, jpFont);
+    drawSiteLogo(ctx, W / 2, 92, 72, "center");
+    drawHeavyText(ctx, "この譜面のポイント", W / 2, 296, 84, jpFont);
     const rows = pauses.slice(0, 4);
-    const cardW = Math.min(1240, W - 480);
+    const cardW = Math.min(1560, W - 240);
     const cardX = (W - cardW) / 2;
-    const cardH = 96;
-    const gap = 30;
-    const font = '700 31px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    const cardH = 118;
+    const gap = 40;
+    const font = '700 40px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
     rows.forEach((p, i) => {
-      const y = 330 + i * (cardH + gap);
+      const y = 372 + i * (cardH + gap);
       ctx.fillStyle = "#17181c";
-      ctx.fillRect(cardX + 7, y + 7, cardW, cardH);
+      ctx.fillRect(cardX + 8, y + 8, cardW, cardH);
       ctx.fillStyle = "#ffffff";
       ctx.fillRect(cardX, y, cardW, cardH);
       ctx.strokeStyle = "#17181c";
       ctx.lineWidth = 4;
       ctx.strokeRect(cardX, y, cardW, cardH);
-      // リアクション絵文字 + 小節番号 + 本文 (1行に収まるよう省略)
-      ctx.textAlign = "left";
+      // 絵文字の顔からカードが生えているレイアウト (左へ大きくはみ出す)
+      ctx.textAlign = "center";
       ctx.font =
-        '400 44px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
-      ctx.fillText(spotEmoji(p.text), cardX + 18, y + cardH / 2 + 15);
+        '400 108px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
+      ctx.fillText(spotEmoji(p.text), cardX + 8, y + cardH / 2 + 38);
+      ctx.textAlign = "left";
       ctx.fillStyle = "#17181c";
       ctx.font = font;
       ctx.fillText(
-        ellipsize(`${p.measureNo}小節目：${p.text}`, cardW - 120),
-        cardX + 82,
-        y + cardH / 2 + 11
+        ellipsize(`${p.measureNo}小節目：${p.text}`, cardW - 140),
+        cardX + 92,
+        y + cardH / 2 + 14
       );
-      ctx.textAlign = "center";
     });
     if (pauses.length > rows.length) {
       ctx.textAlign = "center";
       ctx.fillStyle = fg;
-      ctx.globalAlpha = 0.75;
-      ctx.font = '700 28px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+      ctx.globalAlpha = 0.8;
+      ctx.font = '700 34px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
       ctx.fillText(
         `…ほか${pauses.length - rows.length}箇所`,
         W / 2,
-        330 + rows.length * (cardH + gap) + 24
+        372 + rows.length * (cardH + gap) + 28
       );
       ctx.globalAlpha = 1;
     }
@@ -1027,33 +1028,33 @@ export async function recordChartVideo(
   const drawEndingCard = (alpha: number) => {
     drawStripedBg();
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-    drawSiteLogo(ctx, W / 2, 100, 64, "center");
-    drawHeavyText(ctx, o.title, W / 2, 255, 56, jpFont, "center", W - 400);
+    drawSiteLogo(ctx, W / 2, 96, 74, "center");
+    drawHeavyText(ctx, o.title, W / 2, 292, 80, jpFont, "center", W - 240);
     if (o.subtitle) {
-      drawHeavyText(ctx, o.subtitle, W / 2, 308, 30, jpFont, "center", W - 400);
+      drawHeavyText(ctx, o.subtitle, W / 2, 356, 40, jpFont, "center", W - 240);
     }
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
     // 統計タイル (エンディングで総括として見せる)
     if (o.stats && o.stats.length > 0) {
       const n = o.stats.length;
-      const gap = 16;
-      const rowW = Math.min(1300, W - 400);
+      const gap = 18;
+      const rowW = Math.min(1640, W - 200);
       const cardW = (rowW - gap * (n - 1)) / n;
       const x0 = (W - rowW) / 2;
-      const cardY = 360;
-      const cardH = 130;
+      const cardY = 420;
+      const cardH = 170;
       for (let i = 0; i < n; i++) {
         const s = o.stats[i];
         const x = x0 + i * (cardW + gap);
         ctx.fillStyle = "rgba(23, 24, 28, 0.92)";
         ctx.fillRect(x, cardY, cardW, cardH);
         ctx.fillStyle = "#00e0a0";
-        ctx.font = `400 52px ${titleFont}`;
-        ctx.fillText(String(s.value), x + cardW / 2, cardY + 70);
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        ctx.font = "700 20px system-ui, sans-serif";
-        ctx.fillText(s.label, x + cardW / 2, cardY + 106, cardW - 12);
+        ctx.font = `400 72px ${titleFont}`;
+        ctx.fillText(String(s.value), x + cardW / 2, cardY + 92);
+        ctx.fillStyle = "rgba(255,255,255,0.85)";
+        ctx.font = "700 26px system-ui, sans-serif";
+        ctx.fillText(s.label, x + cardW / 2, cardY + 140, cardW - 12);
       }
     }
     // CTA: ブラウザで自分のペースで確認できることを伝える
@@ -1061,26 +1062,28 @@ export async function recordChartVideo(
       ctx,
       "じっくり確認するならブラウザで、自分のペースで再生できます",
       W / 2,
-      612,
-      33,
+      712,
+      42,
       jpFont,
-      "center"
+      "center",
+      W - 160
     );
     const ctaText = "▶ リンクは概要欄へ";
     ctx.textAlign = "center";
-    ctx.font = `900 38px ${jpFont}`;
-    const ctaW = ctx.measureText(ctaText).width + 80;
+    ctx.font = `900 50px ${jpFont}`;
+    const ctaW = ctx.measureText(ctaText).width + 100;
     const ctaX = (W - ctaW) / 2;
-    const ctaY = 660;
+    const ctaY = 776;
+    const ctaH = 104;
     ctx.fillStyle = "#17181c";
-    ctx.fillRect(ctaX + 6, ctaY + 6, ctaW, 74);
+    ctx.fillRect(ctaX + 8, ctaY + 8, ctaW, ctaH);
     ctx.fillStyle = "#ffd400";
-    ctx.fillRect(ctaX, ctaY, ctaW, 74);
+    ctx.fillRect(ctaX, ctaY, ctaW, ctaH);
     ctx.strokeStyle = "#17181c";
-    ctx.lineWidth = 4;
-    ctx.strokeRect(ctaX, ctaY, ctaW, 74);
+    ctx.lineWidth = 5;
+    ctx.strokeRect(ctaX, ctaY, ctaW, ctaH);
     ctx.fillStyle = "#17181c";
-    ctx.fillText(ctaText, W / 2, ctaY + 51);
+    ctx.fillText(ctaText, W / 2, ctaY + 70);
     ctx.globalAlpha = 1;
     ctx.textAlign = "left";
   };
@@ -1088,12 +1091,12 @@ export async function recordChartVideo(
   const drawSpotlightCard = (p: { text: string }, elapsed: number) => {
     const cardX = paneX;
     const cardW = W - paneX - 40;
-    const font = '700 30px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    const font = '700 34px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
     ctx.font = font;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
     // 全文を折り返してから字送り (行の途中で改行位置が動かないように)
-    const maxW = cardW - 132;
+    const maxW = cardW - 190;
     const lines: string[] = [];
     let line = "";
     for (const chr of p.text) {
@@ -1105,8 +1108,8 @@ export async function recordChartVideo(
       }
     }
     if (line) lines.push(line);
-    const lineH = 44;
-    const cardH = 44 + lines.length * lineH;
+    const lineH = 50;
+    const cardH = 52 + lines.length * lineH;
     const cardY = 460 - cardH / 2;
     ctx.fillStyle = "#17181c";
     ctx.fillRect(cardX + 8, cardY + 8, cardW, cardH);
@@ -1115,22 +1118,22 @@ export async function recordChartVideo(
     ctx.strokeStyle = "#17181c";
     ctx.lineWidth = 4;
     ctx.strokeRect(cardX, cardY, cardW, cardH);
-    // 注目マーク (アプリの★注目と同じ黄色)
-    // リアクション絵文字の顔 (白丸チップに乗せ、しゃべりに合わせて小さく揺れる)
+    // リアクション絵文字の顔。カードの左肩から大きくはみ出す主役サイズで、
+    // 「顔からカードが生えている」見た目にする。しゃべりに合わせて揺れる
     const face = spotEmoji(p.text);
-    const faceCx = cardX + 48;
-    const faceCy = cardY + cardH / 2 + Math.sin(elapsed * 7) * 2.5;
+    const faceCx = cardX + 30;
+    const faceCy = cardY + 14 + Math.sin(elapsed * 7) * 3.5;
     ctx.beginPath();
-    ctx.arc(faceCx, faceCy, 32, 0, Math.PI * 2);
+    ctx.arc(faceCx, faceCy, 68, 0, Math.PI * 2);
     ctx.fillStyle = "#f2f5ff";
     ctx.fill();
-    ctx.lineWidth = 3.5;
+    ctx.lineWidth = 5;
     ctx.strokeStyle = "#17181c";
     ctx.stroke();
     ctx.font =
-      '40px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
+      '100px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
     ctx.textAlign = "center";
-    ctx.fillText(face, faceCx, faceCy + 14);
+    ctx.fillText(face, faceCx, faceCy + 36);
     ctx.textAlign = "left";
     // 字送り本文
     ctx.font = font;
@@ -1138,7 +1141,7 @@ export async function recordChartVideo(
     let remain = Math.max(0, Math.floor((elapsed - 0.35) / 0.05));
     for (let i = 0; i < lines.length && remain > 0; i++) {
       const seg = lines[i].slice(0, remain);
-      ctx.fillText(seg, cardX + 92, cardY + 58 + i * lineH);
+      ctx.fillText(seg, cardX + 130, cardY + 64 + i * lineH);
       remain -= lines[i].length;
     }
   };
