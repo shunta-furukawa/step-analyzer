@@ -331,14 +331,30 @@ export async function recordChartVideo(
   const recStart = Math.max(0, offsetSec - LEAD_IN);
   const durationSec = songEnd - recStart; // 譜面内時間
 
-  // 注目シーンの停止 (横長のみ)。停止時間はコメント量に応じて伸ばす
+  // 注目シーンのリプレイ (横長のみ)。該当小節を通常再生で見せたあと、
+  // 音楽を止めてその小節をクラップ音のみでもう一周 (以上) 再生しながら
+  // コメントを字送りする。停止時間はリプレイ周回の整数倍に揃える
   const pauses = (L ? o.spotlights ?? [] : [])
-    .map((sp) => ({
-      t: offsetSec + timeAtBeat(timeline, sp.beat),
-      text: sp.text,
-      dur: Math.min(8, 2.0 + sp.text.length * 0.06),
-    }))
-    .filter((p) => p.t >= recStart)
+    .map((sp) => {
+      const mb0 = Math.floor(sp.beat / 4) * 4;
+      const mb1 = Math.min(chart.totalBeats, mb0 + 4);
+      const rs = offsetSec + timeAtBeat(timeline, mb0); // リプレイ開始 (譜面内時刻)
+      const re = offsetSec + timeAtBeat(timeline, mb1); // リプレイ終了
+      const replayReal = Math.max(0.5, (re - rs) / vSpeed); // 1周の実時間
+      const textDur = Math.min(8, 2.0 + sp.text.length * 0.06);
+      const loops = Math.max(1, Math.min(3, Math.ceil(textDur / replayReal)));
+      return {
+        // 小節を弾き切った瞬間に停止する (直後のノーツは停止後へ回す)
+        t: re - 0.02,
+        text: sp.text,
+        dur: loops * replayReal,
+        rs,
+        re,
+        replayReal,
+        loops,
+      };
+    })
+    .filter((p) => p.t >= recStart && p.rs >= recStart - 1e-6)
     .sort((a, b) => a.t - b.t);
   const pausesTotal = pauses.reduce((s, p) => s + p.dur, 0);
   const realDuration = durationSec / vSpeed + pausesTotal; // 実時間 (0.5倍速なら2倍+停止分)
@@ -390,6 +406,18 @@ export async function recordChartVideo(
   // 停止分も織り込んだ実時間で発音する (停止中のノーツはない前提)
   const clapTimes = judged.map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
   const clapAccents = judged.map((e) => e.panels.length >= 2);
+  // リプレイ中のノーツはクラップ音のみで鳴らす (音楽は停止したまま)
+  for (const p of pauses) {
+    const pauseStartReal = songToReal(p.t);
+    for (const e of judged) {
+      const te = offsetSec + timeAtBeat(timeline, e.row.beat);
+      if (te < p.rs - 1e-6 || te >= p.re - 1e-6) continue;
+      for (let n = 0; n < p.loops; n++) {
+        clapTimes.push(pauseStartReal + n * p.replayReal + (te - p.rs) / vSpeed);
+        clapAccents.push(e.panels.length >= 2);
+      }
+    }
+  }
   const ghostTimes = chart.events
     .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
     .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
@@ -664,6 +692,27 @@ export async function recordChartVideo(
 
   // 注目シーンのコメントカード (横のみ)。統計カードと足パッドの間に
   // 白カードを重ね、経過時間ぶんの文字数だけ字送りで表示する
+  // リプレイ中のバッジ (レーン上部に重ねる)。点滅で「巻き戻し中」を示す
+  const drawReplayBadge = () => {
+    const label = "⟲ REPLAY";
+    ctx.font = `400 34px ${titleFont}`;
+    ctx.textBaseline = "alphabetic";
+    const w = ctx.measureText(label).width + 44;
+    const h = 54;
+    const x = LANE_X + (LANE_W * 4 - w) / 2;
+    const y = HEADER_H + 18;
+    ctx.fillStyle = "#17181c";
+    ctx.fillRect(x + 5, y + 5, w, h);
+    ctx.fillStyle = "#ffd400";
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = "#17181c";
+    ctx.lineWidth = 4;
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = "#17181c";
+    ctx.textAlign = "left";
+    ctx.fillText(label, x + 22, y + h - 16);
+  };
+
   const drawSpotlightCard = (p: { text: string }, elapsed: number) => {
     const cardX = paneX;
     const cardW = W - paneX - 40;
@@ -979,9 +1028,18 @@ export async function recordChartVideo(
       }
       if (r < INTRO_SEC) {
         drawIntro();
+      } else if (m.pauseIdx >= 0) {
+        // リプレイ: 停止中はその小節を頭から周回再生 (クラップ音は合成済み)
+        const p = pauses[m.pauseIdx];
+        const replayT = Math.min(
+          p.re - 1e-3,
+          p.rs + (m.pauseElapsed % p.replayReal) * vSpeed
+        );
+        drawFrame(replayT, performance.now());
+        drawReplayBadge();
+        drawSpotlightCard(p, m.pauseElapsed);
       } else {
         drawFrame(m.t, performance.now());
-        if (m.pauseIdx >= 0) drawSpotlightCard(pauses[m.pauseIdx], m.pauseElapsed);
       }
       o.onProgress?.(Math.max(0, Math.min(1, r / realDuration)));
       if (m.t >= songEnd) {
