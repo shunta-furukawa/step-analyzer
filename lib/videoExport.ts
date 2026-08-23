@@ -478,6 +478,42 @@ export async function recordChartVideo(
     src.start();
   };
 
+  // 右ペーンのストリップチャート用データ (横のみ)。
+  // 1拍ビンのノーツ密度 (notes/sec) とBPMの時系列を前計算する
+  const graph = (() => {
+    if (!L) return null;
+    const bins = Math.max(1, Math.ceil(chart.totalBeats));
+    const rate: number[] = new Array(bins).fill(0);
+    for (let b = 0; b < bins; b++) {
+      const t0 = timeAtBeat(timeline, b);
+      const t1 = timeAtBeat(timeline, Math.min(chart.totalBeats, b + 1));
+      const cnt = judged.filter(
+        (e) => e.row.beat >= b - 1e-6 && e.row.beat < b + 1 - 1e-6
+      ).length;
+      rate[b] = t1 > t0 ? cnt / (t1 - t0) : 0;
+    }
+    // 隣接ビンの移動平均でギザつきを抑える
+    const dens = rate.map((v, i) => (v + (rate[i + 1] ?? v)) / 2);
+    const bpmOf = (beat: number) => {
+      let cur = timeline.find((s) => s.move)?.bpm ?? 120;
+      for (const s of timeline) {
+        if (!s.move) continue;
+        if (s.beat0 <= beat + 1e-9) cur = s.bpm;
+        else break;
+      }
+      return cur;
+    };
+    const bpm = Array.from({ length: bins + 1 }, (_, b) => bpmOf(b));
+    return {
+      bins,
+      dens,
+      maxDens: Math.max(1e-6, ...dens),
+      bpm,
+      minBpm: Math.min(...bpm),
+      maxBpm: Math.max(...bpm),
+    };
+  })();
+
   // 足パッド (アプリと同じThree.jsシーン)
   const footScene = createFootScene();
   footScene?.setSize(PAD_W, PAD_H, 1);
@@ -617,7 +653,7 @@ export async function recordChartVideo(
 
   // 横モードの右ペーン: ジャケット+曲名+難易度+BPM / 統計カード。
   // 足パッドはペーン下半分に後段で合成される
-  const drawRightPane = () => {
+  const drawRightPane = (curBeat: number) => {
     const jSize = 170;
     const jx = paneX;
     const jy = 36;
@@ -664,28 +700,89 @@ export async function recordChartVideo(
     ctx.textBaseline = "middle";
     ctx.fillText(bpmText, dx + 14, rowY + 1);
 
-    // 統計カード (アプリのstatsと同じ内容をインクのタイルで)
-    if (o.stats && o.stats.length > 0) {
-      const n = o.stats.length;
-      const gap = 14;
-      const paneW = W - paneX - 40;
-      const cardW = (paneW - gap * (n - 1)) / n;
-      const cardY = 240;
-      const cardH = 104;
-      ctx.textAlign = "center";
-      for (let i = 0; i < n; i++) {
-        const s = o.stats[i];
-        const x = paneX + i * (cardW + gap);
-        ctx.fillStyle = "rgba(23, 24, 28, 0.92)";
-        ctx.fillRect(x, cardY, cardW, cardH);
-        ctx.fillStyle = "#00e0a0";
-        ctx.font = `400 42px ${titleFont}`;
-        ctx.textBaseline = "alphabetic";
-        ctx.fillText(String(s.value), x + cardW / 2, cardY + 56);
-        ctx.fillStyle = "rgba(255,255,255,0.82)";
-        ctx.font = "700 18px system-ui, sans-serif";
-        ctx.fillText(s.label, x + cardW / 2, cardY + 88, cardW - 12);
+    // ステップ数 (BPMチップの隣に小さく)
+    const stepsStat = o.stats?.[0];
+    if (stepsStat) {
+      ctx.font = "700 22px ui-monospace, monospace";
+      ctx.fillStyle = fg;
+      ctx.globalAlpha = 0.8;
+      ctx.textBaseline = "middle";
+      ctx.fillText(`${stepsStat.value} ${stepsStat.label}`, dx + chipW + 20, rowY + 1);
+      ctx.globalAlpha = 1;
+    }
+
+    // ストリップチャート: ノーツ密度エリア + BPMステップ線 +
+    // 再生カーソル + ★ (解説地点)。譜面全体の緩急がひと目でわかる
+    if (graph) {
+      const gx = paneX;
+      const gw = W - paneX - 40;
+      const gy = 240;
+      const gh = 118;
+      const padB = 8; // 下端の余白
+      ctx.fillStyle = "rgba(23, 24, 28, 0.92)";
+      ctx.fillRect(gx, gy, gw, gh);
+      const xOf = (beat: number) => gx + (beat / chart.totalBeats) * gw;
+      // 密度エリア (ミント)
+      ctx.beginPath();
+      ctx.moveTo(gx, gy + gh - padB);
+      for (let b = 0; b < graph.bins; b++) {
+        const y = gy + gh - padB - (graph.dens[b] / graph.maxDens) * (gh - 40);
+        ctx.lineTo(xOf(b + 0.5), y);
       }
+      ctx.lineTo(gx + gw, gy + gh - padB);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(0, 224, 160, 0.4)";
+      ctx.fill();
+      ctx.strokeStyle = "#00e0a0";
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      // BPMステップ線 (黄)。変速なしなら低めの位置に一本線
+      ctx.beginPath();
+      const bpmY = (v: number) =>
+        graph.maxBpm > graph.minBpm
+          ? gy + gh - padB - 14 - ((v - graph.minBpm) / (graph.maxBpm - graph.minBpm)) * (gh - 58)
+          : gy + gh - padB - (gh - 40) * 0.35;
+      for (let b = 0; b <= graph.bins; b++) {
+        const y = bpmY(graph.bpm[b]);
+        if (b === 0) ctx.moveTo(xOf(b), y);
+        else {
+          ctx.lineTo(xOf(b), bpmY(graph.bpm[b - 1]));
+          ctx.lineTo(xOf(b), y);
+        }
+      }
+      ctx.strokeStyle = "#ffd400";
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      // 凡例 (左上=密度、右上=BPMレンジ)
+      ctx.textBaseline = "alphabetic";
+      ctx.font = "700 17px system-ui, sans-serif";
+      ctx.fillStyle = "rgba(0, 224, 160, 0.95)";
+      ctx.textAlign = "left";
+      ctx.fillText("密度", gx + 10, gy + 24);
+      ctx.fillStyle = "#ffd400";
+      ctx.textAlign = "right";
+      ctx.fillText(
+        graph.maxBpm > graph.minBpm
+          ? `BPM ${+graph.minBpm.toFixed(1)}-${+graph.maxBpm.toFixed(1)}`
+          : `BPM ${+graph.minBpm.toFixed(1)}`,
+        gx + gw - 10,
+        gy + 24
+      );
+      // ★ 解説地点 (リプレイ対象小節の頭)
+      ctx.font = "400 22px system-ui, sans-serif";
+      ctx.textAlign = "center";
+      for (const sp of o.spotlights ?? []) {
+        const px = xOf(Math.floor(sp.beat / 4) * 4 + 2);
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = "#17181c";
+        ctx.strokeText("★", px, gy + gh - padB - 4);
+        ctx.fillStyle = "#ffd93b";
+        ctx.fillText("★", px, gy + gh - padB - 4);
+      }
+      // 再生カーソル (白の縦線)
+      const cx = xOf(Math.max(0, Math.min(chart.totalBeats, curBeat)));
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.fillRect(cx - 1.5, gy + 4, 3, gh - 8);
       ctx.textAlign = "left";
     }
   };
@@ -769,7 +866,7 @@ export async function recordChartVideo(
     drawStripedBg();
 
     if (L) {
-      drawRightPane();
+      drawRightPane(curBeat);
     } else {
       drawPortraitHeader();
     }
