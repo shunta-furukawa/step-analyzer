@@ -39,13 +39,19 @@ interface MeasureFeatures {
   bpmFrom: number;
   bpmTo: number;
   densest: number; // 小節内の最小ノーツ間隔 (等速換算秒)
+  avgGap: number; // 小節内の平均ノーツ間隔
+  denseStandout: boolean; // 譜面全体と比べて突出して密度が高いか (相対評価)
   mainQuant: number; // 密集部の代表的な音価 (16=16分)
 }
 
 /**
  * 小節単位の難所スコアリング。
- * スコアが閾値を超えた小節を、近接しすぎない (2小節以上空ける) ように
- * すべて選ぶ。maxSpotsを渡せば件数を絞れる。
+ * 「その譜面の中で特異な箇所」だけを選ぶ:
+ * - 密度は譜面全体の典型間隔との相対評価 (高難度譜面で常時発火しない)
+ * - 具体的な特徴 (交差/スイッチ/縦連/スタンス/加速/ラッシュ/相対密度) の
+ *   ない小節は選ばない
+ * - 同種の指摘は「最初の登場」と「最高スコアの山場」だけ残す
+ * - 総数は曲の長さに応じた上限 (1分あたり約3件) でスコア上位から採用
  */
 export function detectSpotlights(
   chart: ParsedChart,
@@ -86,6 +92,8 @@ export function detectSpotlights(
       measure: m,
       score: 0,
       kind: "generic",
+      avgGap: Infinity,
+      denseStandout: false,
       firstBeat: inM[0].beat,
       crosses: 0,
       switches: 0,
@@ -142,6 +150,7 @@ export function detectSpotlights(
     if (gaps.length > 0) {
       f.densest = Math.min(...gaps);
       const avg = gaps.reduce((a, b) => a + b, 0) / gaps.length;
+      f.avgGap = avg;
       if (Number.isFinite(prevAvgGap) && avg > 1e-4) f.gapRatio = prevAvgGap / avg;
       prevAvgGap = avg;
     }
@@ -159,12 +168,28 @@ export function detectSpotlights(
     if (f.bpmTo > f.bpmFrom * 1.3) f.score += 4;
     if (f.gapRatio >= 1.8) f.score += 4;
     else if (f.gapRatio >= 1.4) f.score += 2;
-    // 密度: 16分相当 (BPM150の16分=0.1s) を基準に連続スコア。
-    // 詰まっているほど高く、全体最速の小節が勝ちやすくする
-    if (f.densest <= 0.15) f.score += Math.min(6, 3 * (0.1 / f.densest));
 
     if (firstFeatureBeat !== null) f.firstBeat = firstFeatureBeat;
-    // 支配的な特徴を種別として持つ (同種の連続をまとめる鍵)
+    feats.push(f);
+  }
+
+  // 「この曲最速」の判定用: 全小節での最小ノーツ間隔
+  const globalDensest = Math.min(...feats.map((f) => f.densest));
+
+  // 密度は絶対値ではなく譜面全体との相対評価にする。全編16分のような
+  // 高難度譜面で「密度が高い」が常時発火するのを防ぎ、典型的な間隔より
+  // 突出して詰まる小節 (例: 平均8分の曲の16分ラッシュ) だけを拾う
+  const sortedAvg = feats
+    .map((f) => f.avgGap)
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => a - b);
+  const typicalGap = sortedAvg.length > 0 ? sortedAvg[Math.floor(sortedAvg.length / 2)] : Infinity;
+  for (const f of feats) {
+    const rel = typicalGap / f.densest;
+    f.denseStandout = Number.isFinite(rel) && rel >= 1.8;
+    if (f.denseStandout) f.score += Math.min(6, 2.2 * rel);
+    // 支配的な特徴を種別として持つ (同種の連続をまとめる鍵)。
+    // 具体的な特徴が何もない小節は generic のまま = 選定対象外
     f.kind =
       f.bpmTo > f.bpmFrom * 1.3
         ? "accel"
@@ -178,19 +203,15 @@ export function detectSpotlights(
                 ? "jack"
                 : f.gapRatio >= 1.5
                   ? "rush"
-                  : f.densest <= 0.1
+                  : f.denseStandout
                     ? "dense"
                     : "generic";
-    feats.push(f);
   }
 
-  // 「この曲最速」の判定用: 全小節での最小ノーツ間隔
-  const globalDensest = Math.min(...feats.map((f) => f.densest));
-
-  // 閾値を超えた小節を、同種の指摘が2小節以内に連続する限りひと塊に
-  // まとめる (塊の末尾で1回だけ停止し、各小節を順にリプレイする)
+  // 具体的な特徴がある小節だけを、同種の指摘が2小節以内に連続する限り
+  // ひと塊にまとめる
   const qualifying = feats
-    .filter((f) => f.score >= minScore)
+    .filter((f) => f.kind !== "generic" && f.score >= minScore)
     .sort((a, b) => a.measure - b.measure);
   const groups: { kind: string; members: MeasureFeatures[] }[] = [];
   for (const f of qualifying) {
@@ -202,13 +223,14 @@ export function detectSpotlights(
     }
   }
 
-  let spots = groups.map((g) => {
+  const allSpots = groups.map((g) => {
     const peak = g.members.reduce((a, b) => (b.score > a.score ? b : a));
     const last = g.members[g.members.length - 1];
     const base = spotText(peak, peak.densest <= globalDensest * 1.05);
     const text =
       g.members.length > 1 ? `${base}。この形が${g.members.length}小節にわたり続く` : base;
     return {
+      kind: g.kind,
       beat: peak.firstBeat,
       measure: last.measure,
       measures: g.members.map((m) => m.measure),
@@ -216,20 +238,45 @@ export function detectSpotlights(
       score: peak.score,
     };
   });
-  if (Number.isFinite(maxSpots) && spots.length > maxSpots) {
+
+  // 同種の間引き: 各種別につき「最初の登場」と「最高スコアの山場」を軸に
+  // 残す (2回目以降の同じ指摘は視聴者にとって既知の情報)。
+  // 「解説の量」は間引きの強さに効かせる: 少なめ=山場のみ /
+  // 標準=初登場+山場 / 多め=+スコア次点も
+  const keepPerKind = minScore >= 6 ? 1 : minScore <= 3 ? 3 : 2;
+  const keep = new Set<(typeof allSpots)[number]>();
+  const kinds = new Set(allSpots.map((s) => s.kind));
+  for (const kind of kinds) {
+    const ofKind = allSpots.filter((s) => s.kind === kind);
+    const byScore = [...ofKind].sort((a, b) => b.score - a.score);
+    keep.add(byScore[0]); // 山場
+    if (keepPerKind >= 2) keep.add(ofKind[0]); // 最初の登場
+    if (keepPerKind >= 3 && byScore[1]) keep.add(byScore[1]); // 次点
+  }
+
+  // 総量の上限: 曲の長さに応じて 1分あたり約2〜4件 (量の設定で変える)。
+  // 上限を超える場合はスコア上位から採用する
+  const perMin = minScore >= 6 ? 2 : minScore <= 3 ? 4 : 3;
+  const songSec = timeAtBeat(timeline, chart.totalBeats);
+  const cap = Math.min(
+    Number.isFinite(maxSpots) ? maxSpots : Infinity,
+    Math.max(3, Math.min(12, Math.round((songSec / 60) * perMin)))
+  );
+  let spots = [...keep].sort((a, b) => a.measure - b.measure);
+  if (spots.length > cap) {
     spots = spots
       .sort((a, b) => b.score - a.score)
-      .slice(0, maxSpots)
+      .slice(0, cap)
       .sort((a, b) => a.measure - b.measure);
   }
-  return spots;
+  return spots.map(({ kind: _kind, ...rest }) => rest);
 }
 
 // 検出した特徴から解説文を生成。寄与の大きい要素を1〜2個拾う
 function spotText(f: MeasureFeatures, isFastest: boolean): string {
   const parts: string[] = [];
   const accel = f.bpmTo > f.bpmFrom * 1.3;
-  const dense = f.densest <= 0.1;
+  const dense = f.denseStandout;
   const quantLabel = f.mainQuant >= 12 ? `${f.mainQuant}分` : "";
 
   if (accel) {
