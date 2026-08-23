@@ -1,13 +1,20 @@
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import type { Metadata, Viewport } from "next";
-import { Anton, Ultra } from "next/font/google";
+import { Anton, Noto_Sans_JP, Ultra } from "next/font/google";
 import "./globals.css";
 
 // 統計数字・fsタイトル用の極太コンデンス
 const anton = Anton({ weight: "400", subsets: ["latin"], variable: "--font-logo" });
 // サイトロゴ用のファットフェイスセリフ
 const ultra = Ultra({ weight: "400", subsets: ["latin"], variable: "--font-title" });
+// 動画の日本語見出し用の極太ゴシック (canvas描画で使う)
+const notoHeavy = Noto_Sans_JP({
+  weight: "900",
+  subsets: ["latin"],
+  variable: "--font-jp-heavy",
+  preload: false,
+});
 
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ??
@@ -41,7 +48,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="ja" className={`${anton.variable} ${ultra.variable}`}>
+    <html lang="ja" className={`${anton.variable} ${ultra.variable} ${notoHeavy.variable}`}>
       <body>
         {children}
         <Analytics />

@@ -150,7 +150,8 @@ function drawIntroCard(
   H: number,
   L: boolean,
   titleFont: string,
-  fg: string
+  fg: string,
+  jpFont: string
 ) {
   drawStripedBgOn(ctx, W, H, o.bgColor, o.bgColor2);
   // サムネの上に大きなサイトロゴ (イントロカードだけの特別配置)
@@ -211,20 +212,17 @@ function drawIntroCard(
       ctx.fillText(lvl, dx, cy0 + chipH / 2 + (asc - desc) / 2);
     }
   }
-  // 曲名 + アーティスト + BPM (縦=下部中央 / 横=右カラム中央)
+  // 曲名 + アーティスト + BPM (縦=下部中央 / 横=右カラム中央)。
+  // タイトルは極太ゴシック+白抜き縁取りで「タイトル感」を出す
   const tcx = L ? (jx + jSize + 80 + (W - 100)) / 2 : W / 2;
   const tMaxW = L ? W - (jx + jSize + 80) - 100 : W - 80;
+  drawHeavyText(ctx, o.title, tcx, L ? 460 : 920, L ? 66 : 58, jpFont, "center", tMaxW);
+  if (o.subtitle) {
+    drawHeavyText(ctx, o.subtitle, tcx, L ? 538 : 984, L ? 34 : 30, jpFont, "center", tMaxW);
+  }
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = fg;
-  ctx.font = `400 ${L ? 64 : 58}px ${titleFont}`;
-  ctx.fillText(o.title, tcx, L ? 460 : 920, tMaxW);
-  if (o.subtitle) {
-    ctx.globalAlpha = 0.75;
-    ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
-    ctx.fillText(o.subtitle, tcx, L ? 535 : 982, tMaxW);
-    ctx.globalAlpha = 1;
-  }
   ctx.globalAlpha = 0.8;
   ctx.font = `400 ${L ? 38 : 34}px ${titleFont}`;
   ctx.fillText("BPM", tcx, L ? 690 : 1086);
@@ -242,6 +240,53 @@ function resolveTitleFont(): string {
   return `${logoFont}, "Arial Black", system-ui, sans-serif`;
 }
 
+// 日本語見出し用の極太ゴシック (Noto Sans JP Black)。
+// next/fontのCSS変数から解決し、未ロード環境はヒラギノ等へフォールバック
+function resolveJpHeavyFont(): string {
+  const f = getComputedStyle(document.documentElement)
+    .getPropertyValue("--font-jp-heavy")
+    .trim();
+  return `${f ? `${f}, ` : ""}"Hiragino Sans", "Noto Sans JP", system-ui, sans-serif`;
+}
+
+// 見出しテキストの共通スタイル: 白抜き + 黒アウトライン + 黒ハードシャドウ
+// (サイトのロゴと同じ文法で、どの背景色でも沈まない)
+function drawHeavyText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  jpFont: string,
+  align: CanvasTextAlign = "center",
+  maxW?: number
+) {
+  ctx.font = `900 ${size}px ${jpFont}`;
+  ctx.textAlign = align;
+  ctx.textBaseline = "alphabetic";
+  ctx.lineJoin = "round";
+  const off = Math.max(3, size * 0.07);
+  ctx.fillStyle = "#17181c";
+  ctx.fillText(text, x + off, y + off, maxW);
+  ctx.lineWidth = Math.max(3, size * 0.09);
+  ctx.strokeStyle = "#17181c";
+  ctx.strokeText(text, x, y, maxW);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, x, y, maxW);
+  ctx.textAlign = "left";
+}
+
+// 解説内容に合わせたリアクション絵文字 (コメントカードの「顔」)
+export function spotEmoji(text: string): string {
+  if (/最速/.test(text)) return "🤯";
+  if (/加速|ラッシュ|走ら/.test(text)) return "😱";
+  if (/交差|捻り/.test(text)) return "😵";
+  if (/踏み替え|スイッチ/.test(text)) return "🤔";
+  if (/縦連/.test(text)) return "😤";
+  if (/2枚抜き|スタンス|重心/.test(text)) return "😳";
+  return "🧐";
+}
+
 /**
  * 動画のイントロカードと同じ絵をサムネ画像 (1280x720 JPEG) として書き出す。
  * YouTubeのカスタムサムネは2MB制限があるため、1920x1080で描いてから
@@ -254,7 +299,13 @@ export async function renderVideoThumbnail(o: IntroCardOptions): Promise<Blob> {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d")!;
-  drawIntroCard(ctx, o, W, H, true, resolveTitleFont(), fgFor(o.bgColor, o.bgColor2));
+  const jpFont = resolveJpHeavyFont();
+  try {
+    await document.fonts.load(`900 32px ${jpFont}`, o.title || "この譜面のポイント");
+  } catch {
+    // フォールバックのまま描く
+  }
+  drawIntroCard(ctx, o, W, H, true, resolveTitleFont(), fgFor(o.bgColor, o.bgColor2), jpFont);
   const out = document.createElement("canvas");
   out.width = 1280;
   out.height = 720;
@@ -268,6 +319,46 @@ export async function renderVideoThumbnail(o: IntroCardOptions): Promise<Blob> {
       0.92
     );
   });
+}
+
+// OP/ED用の控えめな合成ジングル (音源なしのフォールバック)。
+// op=ミント系の8分アルペジオ、ed=鐘っぽい下降アルペジオ
+function scheduleJingle(
+  actx: AudioContext,
+  dest: AudioNode,
+  monitor: AudioNode,
+  at: number,
+  dur: number,
+  kind: "op" | "ed"
+) {
+  const master = actx.createGain();
+  master.connect(dest);
+  master.connect(monitor);
+  const note = (t: number, freq: number, len: number, gain: number, type: OscillatorType) => {
+    const osc = actx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+    const g = actx.createGain();
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + len);
+    osc.connect(g);
+    g.connect(master);
+    osc.start(t);
+    osc.stop(t + len + 0.02);
+  };
+  if (kind === "op") {
+    const seq = [523.25, 659.25, 783.99, 987.77, 1046.5, 987.77, 783.99, 659.25];
+    const step = 0.24;
+    for (let t = at + 0.1, i = 0; t < at + dur - 0.6; t += step, i++) {
+      note(t, seq[i % seq.length], 0.5, 0.07, "triangle");
+    }
+  } else {
+    const seq = [1046.5, 783.99, 659.25, 523.25];
+    seq.forEach((f, i) => {
+      note(at + 0.2 + i * 0.4, f, 2.2, 0.09, "sine");
+      note(at + 0.2 + i * 0.4, f * 2, 1.2, 0.03, "sine"); // 倍音で鐘っぽく
+    });
+  }
 }
 
 /** フリーズを保持足ごとの区間に分割 (chartImageと同じ規則) */
@@ -329,6 +420,13 @@ export async function recordChartVideo(
   // アプリのステップ数などと同じ縦長フォント (next/fontのAnton)。
   // 実フォント名はCSS変数から実行時に解決し、無ければ太字系にフォールバック
   const titleFont = resolveTitleFont();
+  const jpFont = resolveJpHeavyFont();
+  // 日本語見出しフォント (Noto Sans JP Black) を録画前にロードしておく
+  try {
+    await document.fonts.load(`900 32px ${jpFont}`, "この譜面のポイント概要欄");
+  } catch {
+    // フォントロード不可ならフォールバックのまま描く
+  }
   const offsetSec = o.audio ? o.offsetSec : LEAD_IN; // 音源なしはハンクラのみで頭から
   const songEnd = offsetSec + timeAtBeat(timeline, chart.totalBeats) + TAIL;
   const recStart = Math.max(0, offsetSec - LEAD_IN);
@@ -577,7 +675,7 @@ export async function recordChartVideo(
   const drawStripedBg = () => drawStripedBgOn(ctx, W, H, o.bgColor, o.bgColor2);
 
   // 冒頭のイントロカード (サムネ画像書き出しと共通の1枚絵)
-  const drawIntro = () => drawIntroCard(ctx, o, W, H, L, titleFont, fg);
+  const drawIntro = () => drawIntroCard(ctx, o, W, H, L, titleFont, fg, jpFont);
 
   // 直角ジャケット+難易度色枠+黒ハードシャドウ (縦ヘッダー/横右ペーン共通)
   const drawFramedJacket = (jx: number, jy: number, jSize: number, fw: number) => {
@@ -698,11 +796,12 @@ export async function recordChartVideo(
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
     ctx.fillStyle = fg;
-    ctx.font = `400 46px ${titleFont}`;
+    // 曲名は極太ゴシック (日本語タイトルでも重厚に見えるように)
+    ctx.font = `900 42px ${jpFont}`;
     ctx.fillText(o.title, textX, 82, W - textX - 40);
     if (o.subtitle) {
       ctx.globalAlpha = 0.72;
-      ctx.font = `400 27px ${titleFont}`;
+      ctx.font = `700 26px ${jpFont}`;
       ctx.fillText(o.subtitle, textX, 126, W - textX - 40);
       ctx.globalAlpha = 1;
     }
@@ -858,11 +957,7 @@ export async function recordChartVideo(
   const drawPreviewCard = () => {
     drawStripedBg();
     drawSiteLogo(ctx, W / 2, 84, 60, "center");
-    ctx.textAlign = "center";
-    ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = fg;
-    ctx.font = `400 60px ${titleFont}`;
-    ctx.fillText("今日の見どころ", W / 2, 250);
+    drawHeavyText(ctx, "この譜面のポイント", W / 2, 258, 62, jpFont);
     const rows = pauses.slice(0, 4);
     const cardW = Math.min(1240, W - 480);
     const cardX = (W - cardW) / 2;
@@ -878,14 +973,11 @@ export async function recordChartVideo(
       ctx.strokeStyle = "#17181c";
       ctx.lineWidth = 4;
       ctx.strokeRect(cardX, y, cardW, cardH);
-      // ★ + 小節番号 + 本文 (1行に収まるよう省略)
+      // リアクション絵文字 + 小節番号 + 本文 (1行に収まるよう省略)
       ctx.textAlign = "left";
-      ctx.font = "400 34px system-ui, sans-serif";
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = "#17181c";
-      ctx.strokeText("★", cardX + 26, y + cardH / 2 + 12);
-      ctx.fillStyle = "#ffd93b";
-      ctx.fillText("★", cardX + 26, y + cardH / 2 + 12);
+      ctx.font =
+        '400 44px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
+      ctx.fillText(spotEmoji(p.text), cardX + 18, y + cardH / 2 + 15);
       ctx.fillStyle = "#17181c";
       ctx.font = font;
       ctx.fillText(
@@ -936,17 +1028,12 @@ export async function recordChartVideo(
     drawStripedBg();
     ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
     drawSiteLogo(ctx, W / 2, 100, 64, "center");
+    drawHeavyText(ctx, o.title, W / 2, 255, 56, jpFont, "center", W - 400);
+    if (o.subtitle) {
+      drawHeavyText(ctx, o.subtitle, W / 2, 308, 30, jpFont, "center", W - 400);
+    }
     ctx.textAlign = "center";
     ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = fg;
-    ctx.font = `400 54px ${titleFont}`;
-    ctx.fillText(o.title, W / 2, 250, W - 400);
-    if (o.subtitle) {
-      ctx.globalAlpha *= 0.75;
-      ctx.font = `400 32px ${titleFont}`;
-      ctx.fillText(o.subtitle, W / 2, 300, W - 400);
-      ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
-    }
     // 統計タイル (エンディングで総括として見せる)
     if (o.stats && o.stats.length > 0) {
       const n = o.stats.length;
@@ -970,11 +1057,18 @@ export async function recordChartVideo(
       }
     }
     // CTA: ブラウザで自分のペースで確認できることを伝える
-    ctx.fillStyle = fg;
-    ctx.font = '700 34px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
-    ctx.fillText("じっくり確認するならブラウザで、自分のペースで再生できます", W / 2, 610);
+    drawHeavyText(
+      ctx,
+      "じっくり確認するならブラウザで、自分のペースで再生できます",
+      W / 2,
+      612,
+      33,
+      jpFont,
+      "center"
+    );
     const ctaText = "▶ リンクは概要欄へ";
-    ctx.font = '700 38px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+    ctx.textAlign = "center";
+    ctx.font = `900 38px ${jpFont}`;
     const ctaW = ctx.measureText(ctaText).width + 80;
     const ctaX = (W - ctaW) / 2;
     const ctaY = 660;
@@ -1022,13 +1116,22 @@ export async function recordChartVideo(
     ctx.lineWidth = 4;
     ctx.strokeRect(cardX, cardY, cardW, cardH);
     // 注目マーク (アプリの★注目と同じ黄色)
-    ctx.font = "36px system-ui, sans-serif";
-    ctx.fillStyle = "#ffd93b";
+    // リアクション絵文字の顔 (白丸チップに乗せ、しゃべりに合わせて小さく揺れる)
+    const face = spotEmoji(p.text);
+    const faceCx = cardX + 48;
+    const faceCy = cardY + cardH / 2 + Math.sin(elapsed * 7) * 2.5;
+    ctx.beginPath();
+    ctx.arc(faceCx, faceCy, 32, 0, Math.PI * 2);
+    ctx.fillStyle = "#f2f5ff";
+    ctx.fill();
+    ctx.lineWidth = 3.5;
     ctx.strokeStyle = "#17181c";
-    ctx.lineWidth = 2.5;
-    const starY = cardY + cardH / 2 + 13;
-    ctx.strokeText("★", cardX + 30, starY);
-    ctx.fillText("★", cardX + 30, starY);
+    ctx.stroke();
+    ctx.font =
+      '40px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", system-ui, sans-serif';
+    ctx.textAlign = "center";
+    ctx.fillText(face, faceCx, faceCy + 14);
+    ctx.textAlign = "left";
     // 字送り本文
     ctx.font = font;
     ctx.fillStyle = "#17181c";
@@ -1285,11 +1388,41 @@ export async function recordChartVideo(
         introTotal > 0 ? t0 + introTotal : 0,
         Math.min(recStart, Math.max(0, o.audio.duration - 0.1))
       );
-      // エンディング: 譜面終了に合わせてフェードアウト (プツッと切らない)
+      // エンディング: 音量を落として流し続け、カードの終わりで消える
+      // (プツッと切らず、曲の続きがBGMとしてEDに残る)。
+      // 曲の残りがEDに届かない場合はジングルにフォールバック
       if (endingTotal > 0) {
-        musicGain.gain.setValueAtTime(1, t0 + realDuration - 0.8);
-        musicGain.gain.linearRampToValueAtTime(0, t0 + realDuration + 1.2);
+        const audioLeft = o.audio.duration - (recStart + durationSec);
+        if (audioLeft > 1.0) {
+          musicGain.gain.setValueAtTime(1, t0 + realDuration - 0.8);
+          musicGain.gain.linearRampToValueAtTime(0.25, t0 + realDuration + 0.4);
+          musicGain.gain.setValueAtTime(0.25, t0 + totalReal - 1.2);
+          musicGain.gain.linearRampToValueAtTime(0, t0 + totalReal - 0.1);
+        } else {
+          musicGain.gain.setValueAtTime(1, t0 + realDuration - 0.8);
+          musicGain.gain.linearRampToValueAtTime(0, t0 + realDuration + 1.0);
+          scheduleJingle(actx, dest, actx.destination, t0 + realDuration + 0.3, endingTotal, "ed");
+        }
       }
+      // オープニングBGM: 曲の頭を等速・小音量で流す (タイトルBGM)
+      if (introTotal > 0.5) {
+        const opSrc = actx.createBufferSource();
+        opSrc.buffer = o.audio;
+        const opGain = actx.createGain();
+        opSrc.connect(opGain);
+        opGain.connect(dest);
+        opGain.connect(actx.destination);
+        opGain.gain.setValueAtTime(0, t0);
+        opGain.gain.linearRampToValueAtTime(0.3, t0 + 0.4);
+        opGain.gain.setValueAtTime(0.3, t0 + introTotal - 1.0);
+        opGain.gain.linearRampToValueAtTime(0, t0 + introTotal - 0.15);
+        opSrc.start(t0, 0, introTotal);
+      }
+    } else if (program) {
+      // 音源なし: 控えめな合成ジングルでOP/EDの無音を埋める
+      if (introTotal > 0.5) scheduleJingle(actx, dest, actx.destination, t0, introTotal, "op");
+      if (endingTotal > 0)
+        scheduleJingle(actx, dest, actx.destination, t0 + realDuration + 0.3, endingTotal, "ed");
     }
     clapSrc.start(0);
     rec.start(1000);
