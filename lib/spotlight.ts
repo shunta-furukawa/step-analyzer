@@ -7,8 +7,9 @@ import type { FootStep, ParsedChart } from "./chart";
 import { timeAtBeat, type TimingSeg } from "./timing";
 
 export interface AutoSpot {
-  beat: number; // 停止 (リプレイ) を発火させるノーツの拍位置
-  measure: number; // 0-based小節番号
+  beat: number; // 代表ノーツの拍位置 (グループのピーク小節)
+  measure: number; // 0-based小節番号 (グループ末尾)
+  measures: number[]; // リプレイ対象の小節列 (0-based昇順)
   text: string;
   score: number;
 }
@@ -27,6 +28,7 @@ function bpmAt(timeline: TimingSeg[], beat: number): number {
 interface MeasureFeatures {
   measure: number;
   score: number;
+  kind: string; // 指摘の種別 (同種の連続をグルーピングする鍵)
   firstBeat: number; // 小節内で最初に難所要素が現れるノーツの拍
   crosses: number;
   switches: number;
@@ -83,6 +85,7 @@ export function detectSpotlights(
     const f: MeasureFeatures = {
       measure: m,
       score: 0,
+      kind: "generic",
       firstBeat: inM[0].beat,
       crosses: 0,
       switches: 0,
@@ -161,29 +164,65 @@ export function detectSpotlights(
     if (f.densest <= 0.15) f.score += Math.min(6, 3 * (0.1 / f.densest));
 
     if (firstFeatureBeat !== null) f.firstBeat = firstFeatureBeat;
+    // 支配的な特徴を種別として持つ (同種の連続をまとめる鍵)
+    f.kind =
+      f.bpmTo > f.bpmFrom * 1.3
+        ? "accel"
+        : f.crosses >= 2
+          ? "cross"
+          : f.switches >= 1
+            ? "switch"
+            : f.stretches >= 1
+              ? "stretch"
+              : f.jacks >= 3
+                ? "jack"
+                : f.gapRatio >= 1.5
+                  ? "rush"
+                  : f.densest <= 0.1
+                    ? "dense"
+                    : "generic";
     feats.push(f);
   }
 
   // 「この曲最速」の判定用: 全小節での最小ノーツ間隔
   const globalDensest = Math.min(...feats.map((f) => f.densest));
 
-  // スコア降順に、2小節以上離して選ぶ
-  const picked: MeasureFeatures[] = [];
-  for (const f of feats.sort((a, b) => b.score - a.score)) {
-    if (f.score < minScore) break; // 見どころなし (平坦な譜面は無理に選ばない)
-    if (picked.some((p) => Math.abs(p.measure - f.measure) < 2)) continue;
-    picked.push(f);
-    if (picked.length >= maxSpots) break;
+  // 閾値を超えた小節を、同種の指摘が2小節以内に連続する限りひと塊に
+  // まとめる (塊の末尾で1回だけ停止し、各小節を順にリプレイする)
+  const qualifying = feats
+    .filter((f) => f.score >= minScore)
+    .sort((a, b) => a.measure - b.measure);
+  const groups: { kind: string; members: MeasureFeatures[] }[] = [];
+  for (const f of qualifying) {
+    const g = groups[groups.length - 1];
+    if (g && g.kind === f.kind && f.measure - g.members[g.members.length - 1].measure <= 2) {
+      g.members.push(f);
+    } else {
+      groups.push({ kind: f.kind, members: [f] });
+    }
   }
 
-  return picked
-    .sort((a, b) => a.measure - b.measure)
-    .map((f) => ({
-      beat: f.firstBeat,
-      measure: f.measure,
-      text: spotText(f, f.densest <= globalDensest * 1.05),
-      score: f.score,
-    }));
+  let spots = groups.map((g) => {
+    const peak = g.members.reduce((a, b) => (b.score > a.score ? b : a));
+    const last = g.members[g.members.length - 1];
+    const base = spotText(peak, peak.densest <= globalDensest * 1.05);
+    const text =
+      g.members.length > 1 ? `${base}。この形が${g.members.length}小節にわたり続く` : base;
+    return {
+      beat: peak.firstBeat,
+      measure: last.measure,
+      measures: g.members.map((m) => m.measure),
+      text,
+      score: peak.score,
+    };
+  });
+  if (Number.isFinite(maxSpots) && spots.length > maxSpots) {
+    spots = spots
+      .sort((a, b) => b.score - a.score)
+      .slice(0, maxSpots)
+      .sort((a, b) => a.measure - b.measure);
+  }
+  return spots;
 }
 
 // 検出した特徴から解説文を生成。寄与の大きい要素を1〜2個拾う

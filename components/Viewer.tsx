@@ -537,19 +537,21 @@ export default function Viewer({
     const minScore = vSpotAmount === "few" ? 6 : vSpotAmount === "many" ? 3 : 4;
     return detectSpotlights(chart, footsteps, timeline, Infinity, minScore);
   }, [chart, footsteps, timeline, vSpotAmount]);
-  // リプレイで増える実時間の見積り (videoExportと同じ式)
+  // リプレイで増える実時間の見積り (videoExportと同じ式: 収録速度の0.5掛けで
+  // グループの小節列を順にプレイバック)
   const autoSpotExtraSec = useMemo(() => {
     if (!chart || timeline.length === 0) return 0;
+    const replayRate = vLandSpeed * 0.5;
     let sum = 0;
     for (const s of autoSpots) {
-      const mb0 = Math.floor(s.beat / 4) * 4;
-      const mb1 = Math.min(chart.totalBeats, mb0 + 4);
-      const replayReal = Math.max(
-        0.5,
-        (timeAtBeat(timeline, mb1) - timeAtBeat(timeline, mb0)) / vLandSpeed
-      );
+      let onePass = 0;
+      for (const m of s.measures) {
+        const rs = timeAtBeat(timeline, m * 4);
+        const re = timeAtBeat(timeline, Math.min(chart.totalBeats, m * 4 + 4));
+        onePass += Math.max(0.25, (re - rs) / replayRate);
+      }
       const textDur = Math.min(8, 2.0 + s.text.length * 0.06);
-      sum += Math.max(1, Math.min(3, Math.ceil(textDur / replayReal))) * replayReal;
+      sum += Math.max(1, Math.min(2, Math.ceil(textDur / onePass))) * onePass;
     }
     return sum;
   }, [chart, timeline, autoSpots, vLandSpeed]);
@@ -1889,7 +1891,11 @@ export default function Viewer({
                         autoSpots.length,
                         autoSpots
                           .slice(0, 6)
-                          .map((s) => s.measure + 1)
+                          .map((s) =>
+                            s.measures.length > 1
+                              ? `${s.measures[0] + 1}〜${s.measures[s.measures.length - 1] + 1}`
+                              : `${s.measures[0] + 1}`
+                          )
                           .join("・") + (autoSpots.length > 6 ? "…" : ""),
                         Math.round(autoSpotExtraSec)
                       )
@@ -1994,7 +2000,11 @@ export default function Viewer({
                             beat: tick / 48,
                             text,
                           }))
-                        : autoSpots.map((s) => ({ beat: s.beat, text: s.text })),
+                        : autoSpots.map((s) => ({
+                            beat: s.beat,
+                            text: s.text,
+                            measures: s.measures,
+                          })),
                     onProgress: setVProgress,
                     signal: vSignal.current,
                   });

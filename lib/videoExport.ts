@@ -42,9 +42,10 @@ export interface VideoExportOptions {
   plain?: boolean;
   stats?: { label: string; value: number }[]; // 統計カード (横長のみ表示)
   trail?: boolean; // 足の軌跡 (トレイル) を表示する
-  // 注目ノーツのコメント (横長のみ)。該当ノーツが判定線に達したら
-  // 効果音と共に停止し、字送りでコメントを表示してから再開する
-  spotlights?: { beat: number; text: string }[];
+  // 注目ノーツのコメント (横長のみ)。該当小節を弾き切ったら停止し、
+  // コメントを字送りしながらリプレイする。measuresを渡すと
+  // その小節列を順にプレイバックする (同種指摘の連続をひと塊で解説)
+  spotlights?: { beat: number; text: string; measures?: number[] }[];
   onProgress?: (ratio: number) => void;
   signal?: { cancelled: boolean };
 }
@@ -435,31 +436,42 @@ export async function recordChartVideo(
   // 番組構成 (OP/ED/リプレイ/カウントダウン)。plain指定なら素の再生のみ
   const program = L && !o.plain;
 
-  // 注目シーンのリプレイ (横長のみ)。該当小節を通常再生で見せたあと、
-  // 音楽を止めてその小節をクラップ音のみでもう一周 (以上) 再生しながら
-  // コメントを字送りする。停止時間はリプレイ周回の整数倍に揃える
+  // 注目シーンのリプレイ (横長のみ)。対象小節列を通常再生で弾き切ったあと、
+  // 音楽を止めてクラップ音のみで収録速度の半分に落として順にプレイバック
+  // しながらコメントを字送りする。停止時間はリプレイ周回の整数倍に揃える
+  const replayRate = vSpeed * 0.5; // リプレイは収録速度の0.5掛け
   const pauses = (program ? o.spotlights ?? [] : [])
     .map((sp) => {
-      const mb0 = Math.floor(sp.beat / 4) * 4;
-      const mb1 = Math.min(chart.totalBeats, mb0 + 4);
-      const rs = offsetSec + timeAtBeat(timeline, mb0); // リプレイ開始 (譜面内時刻)
-      const re = offsetSec + timeAtBeat(timeline, mb1); // リプレイ終了
-      const replayReal = Math.max(0.5, (re - rs) / vSpeed); // 1周の実時間
+      const mlist = (
+        sp.measures && sp.measures.length > 0 ? sp.measures : [Math.floor(sp.beat / 4)]
+      )
+        .slice()
+        .sort((a, b) => a - b);
+      // 各小節のリプレイ区間 (譜面内時刻) と1周の実時間
+      const segs = mlist.map((m) => {
+        const rs = offsetSec + timeAtBeat(timeline, m * 4);
+        const re = offsetSec + timeAtBeat(timeline, Math.min(chart.totalBeats, m * 4 + 4));
+        return { rs, re, real: Math.max(0.25, (re - rs) / replayRate) };
+      });
+      const onePass = segs.reduce((s, x) => s + x.real, 0);
+      const lastRe = segs[segs.length - 1].re;
       const textDur = Math.min(8, 2.0 + sp.text.length * 0.06);
-      const loops = Math.max(1, Math.min(3, Math.ceil(textDur / replayReal)));
+      const loops = Math.max(1, Math.min(2, Math.ceil(textDur / onePass)));
+      const m0 = mlist[0] + 1;
+      const m1 = mlist[mlist.length - 1] + 1;
       return {
-        // 小節を弾き切った瞬間に停止する (直後のノーツは停止後へ回す)
-        t: re - 0.02,
+        // 塊の最後の小節を弾き切った瞬間に停止する
+        t: lastRe - 0.02,
         text: sp.text,
-        dur: loops * replayReal,
-        rs,
-        re,
-        replayReal,
+        dur: loops * onePass,
+        segs,
+        onePass,
         loops,
-        measureNo: Math.floor(mb0 / 4) + 1, // 表示用 (1始まり)
+        label: m0 === m1 ? `${m0}小節目` : `${m0}〜${m1}小節目`, // 表示用
+        starBeat: ((mlist[0] + mlist[mlist.length - 1]) / 2) * 4 + 2, // グラフの★位置
       };
     })
-    .filter((p) => p.t >= recStart && p.rs >= recStart - 1e-6)
+    .filter((p) => p.t >= recStart && p.segs[0].rs >= recStart - 1e-6)
     .sort((a, b) => a.t - b.t);
   const pausesTotal = pauses.reduce((s, p) => s + p.dur, 0);
   // オープニング (横のみ): サムネカード2秒 + 見どころ予告3秒 (解説がある場合)。
@@ -529,12 +541,16 @@ export async function recordChartVideo(
   // リプレイ中のノーツはクラップ音のみで鳴らす (音楽は停止したまま)
   for (const p of pauses) {
     const pauseStartReal = songToReal(p.t);
-    for (const e of judged) {
-      const te = offsetSec + timeAtBeat(timeline, e.row.beat);
-      if (te < p.rs - 1e-6 || te >= p.re - 1e-6) continue;
-      for (let n = 0; n < p.loops; n++) {
-        clapTimes.push(pauseStartReal + n * p.replayReal + (te - p.rs) / vSpeed);
-        clapAccents.push(e.panels.length >= 2);
+    for (let n = 0; n < p.loops; n++) {
+      let segOffset = 0;
+      for (const seg of p.segs) {
+        for (const e of judged) {
+          const te = offsetSec + timeAtBeat(timeline, e.row.beat);
+          if (te < seg.rs - 1e-6 || te >= seg.re - 1e-6) continue;
+          clapTimes.push(pauseStartReal + n * p.onePass + segOffset + (te - seg.rs) / replayRate);
+          clapAccents.push(e.panels.length >= 2);
+        }
+        segOffset += seg.real;
       }
     }
   }
@@ -903,11 +919,11 @@ export async function recordChartVideo(
         gx + gw - 10,
         gy + 24
       );
-      // ★ 解説地点 (リプレイ対象小節の中央。番組構成OFFなら出ない)
+      // ★ 解説地点 (リプレイ対象範囲の中央。番組構成OFFなら出ない)
       ctx.font = "400 22px system-ui, sans-serif";
       ctx.textAlign = "center";
       for (const p of pauses) {
-        const px = xOf((p.measureNo - 1) * 4 + 2);
+        const px = xOf(p.starBeat);
         ctx.lineWidth = 3;
         ctx.strokeStyle = "#17181c";
         ctx.strokeText("★", px, gy + gh - padB - 4);
@@ -983,7 +999,7 @@ export async function recordChartVideo(
       ctx.fillStyle = "#17181c";
       ctx.font = font;
       ctx.fillText(
-        ellipsize(`${p.measureNo}小節目：${p.text}`, cardW - 140),
+        ellipsize(`${p.label}：${p.text}`, cardW - 140),
         cardX + 92,
         y + cardH / 2 + 14
       );
@@ -1461,12 +1477,19 @@ export async function recordChartVideo(
           return;
         }
       } else if (m.pauseIdx >= 0) {
-        // リプレイ: 停止中はその小節を頭から周回再生 (クラップ音は合成済み)
+        // リプレイ: 停止中は対象小節列を0.5掛けで順にプレイバック
         const p = pauses[m.pauseIdx];
-        const replayT = Math.min(
-          p.re - 1e-3,
-          p.rs + (m.pauseElapsed % p.replayReal) * vSpeed
-        );
+        const pos = m.pauseElapsed % p.onePass;
+        let acc = 0;
+        let seg = p.segs[0];
+        for (const s of p.segs) {
+          if (pos < acc + s.real) {
+            seg = s;
+            break;
+          }
+          acc += s.real;
+        }
+        const replayT = Math.min(seg.re - 1e-3, seg.rs + (pos - acc) * replayRate);
         drawFrame(replayT, performance.now());
         drawReplayBadge();
         drawSpotlightCard(p, m.pauseElapsed);
