@@ -125,6 +125,7 @@ export interface Strings {
   videoSpeedLabel: string;
   videoSpeedHalf: string;
   videoSpeedFull: string;
+  videoProgram: string;
   videoCancel: string;
   // 小節番号タップの範囲選択
   rangePending: (p: string) => string;
@@ -319,6 +320,7 @@ const ja: Strings = {
   videoSpeedLabel: "収録速度",
   videoSpeedHalf: "0.5倍速 (じっくり)",
   videoSpeedFull: "等倍",
+  videoProgram: "番組構成 (見どころ予告・解説リプレイ・まとめ)",
   videoCancel: "中止",
   rangePending: (p) => `始点: ${p} — 終点の位置をタップ`,
   rangeActive: (a, b) => `選択範囲: ${a}〜${b} (小節.拍)`,
@@ -516,6 +518,7 @@ const en: Strings = {
   videoSpeedLabel: "Recording speed",
   videoSpeedHalf: "0.5× (study)",
   videoSpeedFull: "1×",
+  videoProgram: "Show format (preview, replay breakdowns, outro)",
   videoCancel: "Cancel",
   rangePending: (p) => `Start: ${p} — tap the end position`,
   rangeActive: (a, b) => `Selection: ${a}–${b} (measure.beat)`,
@@ -712,6 +715,7 @@ const ko: Strings = {
   videoSpeedLabel: "녹화 속도",
   videoSpeedHalf: "0.5배속 (관찰)",
   videoSpeedFull: "1배속",
+  videoProgram: "방송 구성 (미리보기·해설 리플레이·마무리)",
   videoCancel: "중지",
   rangePending: (p) => `시작: ${p} — 끝 위치를 탭`,
   rangeActive: (a, b) => `선택 범위: ${a}〜${b} (마디.박)`,

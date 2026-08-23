@@ -37,6 +37,9 @@ export interface VideoExportOptions {
   offsetSec: number; // 譜面1小節目の頭が音源の何秒目か (音源なしなら無視)
   landscape?: boolean; // 横長 (1920x1080) で書き出す
   landscapeSpeed?: number; // 横長の収録速度 (0.5=じっくり既定 / 1=等倍)
+  // 番組構成 (OP予告・カウントダウン・解説リプレイ・EDまとめ) を無効にし、
+  // 素の譜面再生だけを書き出す (横長のみ意味を持つ)
+  plain?: boolean;
   stats?: { label: string; value: number }[]; // 統計カード (横長のみ表示)
   trail?: boolean; // 足の軌跡 (トレイル) を表示する
   // 注目ノーツのコメント (横長のみ)。該当ノーツが判定線に達したら
@@ -331,10 +334,13 @@ export async function recordChartVideo(
   const recStart = Math.max(0, offsetSec - LEAD_IN);
   const durationSec = songEnd - recStart; // 譜面内時間
 
+  // 番組構成 (OP/ED/リプレイ/カウントダウン)。plain指定なら素の再生のみ
+  const program = L && !o.plain;
+
   // 注目シーンのリプレイ (横長のみ)。該当小節を通常再生で見せたあと、
   // 音楽を止めてその小節をクラップ音のみでもう一周 (以上) 再生しながら
   // コメントを字送りする。停止時間はリプレイ周回の整数倍に揃える
-  const pauses = (L ? o.spotlights ?? [] : [])
+  const pauses = (program ? o.spotlights ?? [] : [])
     .map((sp) => {
       const mb0 = Math.floor(sp.beat / 4) * 4;
       const mb1 = Math.min(chart.totalBeats, mb0 + 4);
@@ -364,9 +370,9 @@ export async function recordChartVideo(
   // 予告は件数に応じて少し長く見せる (最大5秒)
   const PREVIEW_SEC =
     pauses.length > 0 ? Math.min(5, 2.2 + 0.7 * Math.min(4, pauses.length)) : 0;
-  const introTotal = L ? INTRO_CARD_SEC + PREVIEW_SEC : 0;
-  // エンディング (横のみ): まとめカード4秒。音源はその手前でフェードアウト
-  const endingTotal = L ? 4.0 : 0;
+  const introTotal = program ? INTRO_CARD_SEC + PREVIEW_SEC : 0;
+  // エンディング (番組構成のみ): まとめカード4秒。音源はその手前でフェードアウト
+  const endingTotal = program ? 4.0 : 0;
   const realDuration = introTotal + durationSec / vSpeed + pausesTotal; // 譜面終了までの実時間
   const totalReal = realDuration + endingTotal;
 
@@ -444,7 +450,7 @@ export async function recordChartVideo(
       ? songToReal(offsetSec + timeAtBeat(timeline, judged[0].row.beat))
       : introTotal;
   const countdownTimes: number[] = [];
-  if (L) {
+  if (program) {
     for (let k = 3; k >= 1; k--) {
       const t = firstNoteReal - k;
       if (t >= introTotal - 1e-6) countdownTimes.push(t);
@@ -798,11 +804,11 @@ export async function recordChartVideo(
         gx + gw - 10,
         gy + 24
       );
-      // ★ 解説地点 (リプレイ対象小節の頭)
+      // ★ 解説地点 (リプレイ対象小節の中央。番組構成OFFなら出ない)
       ctx.font = "400 22px system-ui, sans-serif";
       ctx.textAlign = "center";
-      for (const sp of o.spotlights ?? []) {
-        const px = xOf(Math.floor(sp.beat / 4) * 4 + 2);
+      for (const p of pauses) {
+        const px = xOf((p.measureNo - 1) * 4 + 2);
         ctx.lineWidth = 3;
         ctx.strokeStyle = "#17181c";
         ctx.strokeText("★", px, gy + gh - padB - 4);
@@ -1307,11 +1313,11 @@ export async function recordChartVideo(
         }
         lastPauseIdx = m.pauseIdx;
       }
-      if (L ? r < introTotal : r < INTRO_SEC) {
+      if (program ? r < introTotal : r < INTRO_SEC) {
         // オープニング: サムネカード → 見どころ予告 (解説がある場合)
-        if (!L || r < INTRO_CARD_SEC || pauses.length === 0) drawIntro();
+        if (!program || r < INTRO_CARD_SEC || pauses.length === 0) drawIntro();
         else drawPreviewCard();
-      } else if (L && m.t >= songEnd - 1e-6 && r >= realDuration - 1e-6) {
+      } else if (program && m.t >= songEnd - 1e-6 && r >= realDuration - 1e-6) {
         // エンディング: まとめカード (音源はフェードアウト済み)
         drawEndingCard(Math.min(1, (r - realDuration) / 0.6));
         if (r >= totalReal) {
@@ -1330,10 +1336,10 @@ export async function recordChartVideo(
         drawSpotlightCard(p, m.pauseElapsed);
       } else {
         drawFrame(m.t, performance.now());
-        if (L) drawCountdown(r);
+        if (program) drawCountdown(r);
       }
       o.onProgress?.(Math.max(0, Math.min(1, r / totalReal)));
-      if (!L && m.t >= songEnd) {
+      if (!program && m.t >= songEnd) {
         rec.stop();
         return;
       }

@@ -285,6 +285,8 @@ export default function Viewer({
   const [vMode, setVMode] = useState<"portrait" | "landscape">("portrait");
   // 横長の収録速度 (0.5=じっくり / 1=等倍)
   const [vLandSpeed, setVLandSpeed] = useState<0.5 | 1>(0.5);
+  // 番組構成 (OP予告・解説リプレイ・EDまとめ)。OFFで素の横動画
+  const [vProgram, setVProgram] = useState(true);
   const [vUseMedia, setVUseMedia] = useState(false);
   const [vOgg, setVOgg] = useState("");
   const [vJacket, setVJacket] = useState("");
@@ -1822,6 +1824,17 @@ export default function Viewer({
                 </div>
               </div>
             )}
+            {/* 横長のみ: 番組構成 (OFFなら素の譜面再生だけを書き出す) */}
+            {vMode === "landscape" && (
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={vProgram}
+                  onChange={(e) => setVProgram(e.target.checked)}
+                />
+                <span>{S.videoProgram}</span>
+              </label>
+            )}
             <label className="toggle-row">
               <input
                 type="checkbox"
@@ -1896,6 +1909,7 @@ export default function Viewer({
                     offsetSec: Number.isFinite(off) ? off : 0,
                     landscape: vMode === "landscape",
                     landscapeSpeed: vLandSpeed,
+                    plain: !vProgram,
                     trail: footTrail,
                     stats: [
                       { label: S.steps, value: stats.steps },
