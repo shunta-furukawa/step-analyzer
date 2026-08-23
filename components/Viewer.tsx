@@ -69,6 +69,7 @@ import {
   parseTransform,
   randomTransform,
 } from "@/lib/transform";
+import { detectSpotlights } from "@/lib/spotlight";
 import { listSmCharts, normalizeNotesInput, type SmChartInfo } from "@/lib/url";
 import {
   DIFF_COLORS,
@@ -1906,11 +1907,18 @@ export default function Viewer({
                         ? [{ label: S.shocks, value: stats.shocks }]
                         : []),
                     ],
-                    // 注目コメント (tick=48分音基準をbeatへ換算)。横長のみ使われる
-                    spotlights: [...noteComments.entries()].map(([tick, text]) => ({
-                      beat: tick / 48,
-                      text,
-                    })),
+                    // 注目コメント (tick=48分音基準をbeatへ換算)。横長のみ使われる。
+                    // 手動コメントがなければ難所を自動検出して解説を付ける
+                    spotlights:
+                      noteComments.size > 0
+                        ? [...noteComments.entries()].map(([tick, text]) => ({
+                            beat: tick / 48,
+                            text,
+                          }))
+                        : detectSpotlights(chart, footsteps, timeline).map((s) => ({
+                            beat: s.beat,
+                            text: s.text,
+                          })),
                     onProgress: setVProgress,
                     signal: vSignal.current,
                   });
