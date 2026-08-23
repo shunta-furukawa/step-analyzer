@@ -42,13 +42,14 @@ interface MeasureFeatures {
 
 /**
  * 小節単位の難所スコアリング。
- * maxSpots箇所まで、近接しすぎない (2小節以上空ける) ように選ぶ。
+ * スコアが閾値を超えた小節を、近接しすぎない (2小節以上空ける) ように
+ * すべて選ぶ。maxSpotsを渡せば件数を絞れる。
  */
 export function detectSpotlights(
   chart: ParsedChart,
   footsteps: FootStep[],
   timeline: TimingSeg[],
-  maxSpots = 3
+  maxSpots = Infinity
 ): AutoSpot[] {
   const measures = chart.measures.length;
   if (measures === 0) return [];

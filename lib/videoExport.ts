@@ -361,8 +361,10 @@ export async function recordChartVideo(
   // オープニング (横のみ): サムネカード2秒 + 見どころ予告3秒 (解説がある場合)。
   // 縦は従来どおり0.5秒のイントロカードが冒頭の譜面再生に重なる
   const INTRO_CARD_SEC = 2.0;
-  const PREVIEW_SEC = 3.0;
-  const introTotal = L ? INTRO_CARD_SEC + (pauses.length > 0 ? PREVIEW_SEC : 0) : 0;
+  // 予告は件数に応じて少し長く見せる (最大5秒)
+  const PREVIEW_SEC =
+    pauses.length > 0 ? Math.min(5, 2.2 + 0.7 * Math.min(4, pauses.length)) : 0;
+  const introTotal = L ? INTRO_CARD_SEC + PREVIEW_SEC : 0;
   // エンディング (横のみ): まとめカード4秒。音源はその手前でフェードアウト
   const endingTotal = L ? 4.0 : 0;
   const realDuration = introTotal + durationSec / vSpeed + pausesTotal; // 譜面終了までの実時間
@@ -855,7 +857,7 @@ export async function recordChartVideo(
     ctx.fillStyle = fg;
     ctx.font = `400 60px ${titleFont}`;
     ctx.fillText("今日の見どころ", W / 2, 250);
-    const rows = pauses.slice(0, 3);
+    const rows = pauses.slice(0, 4);
     const cardW = Math.min(1240, W - 480);
     const cardX = (W - cardW) / 2;
     const cardH = 96;
@@ -887,6 +889,18 @@ export async function recordChartVideo(
       );
       ctx.textAlign = "center";
     });
+    if (pauses.length > rows.length) {
+      ctx.textAlign = "center";
+      ctx.fillStyle = fg;
+      ctx.globalAlpha = 0.75;
+      ctx.font = '700 28px "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif';
+      ctx.fillText(
+        `…ほか${pauses.length - rows.length}箇所`,
+        W / 2,
+        330 + rows.length * (cardH + gap) + 24
+      );
+      ctx.globalAlpha = 1;
+    }
     ctx.textAlign = "left";
   };
 
