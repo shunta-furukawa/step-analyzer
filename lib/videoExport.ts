@@ -19,6 +19,7 @@ import { drawArrow, drawFootBadge, drawGhostArrow, drawSiteLogo } from "./chartI
 import { renderClapTrackSamples } from "./clap";
 import { DIFF_COLORS, drawDiffFoot } from "./difficulty";
 import { createFootScene } from "./footScene";
+import { spotEmoji } from "./spotEmoji";
 import { beatAtTime, timeAtBeat, type TimingSeg } from "./timing";
 
 export interface VideoExportOptions {
@@ -278,15 +279,7 @@ function drawHeavyText(
 }
 
 // 解説内容に合わせたリアクション絵文字 (コメントカードの「顔」)
-export function spotEmoji(text: string): string {
-  if (/最速/.test(text)) return "🤯";
-  if (/加速|ラッシュ|走ら/.test(text)) return "😱";
-  if (/交差|捻り/.test(text)) return "😵";
-  if (/踏み替え|スイッチ/.test(text)) return "🤔";
-  if (/縦連/.test(text)) return "😤";
-  if (/2枚抜き|スタンス|重心/.test(text)) return "😳";
-  return "🧐";
-}
+export { spotEmoji } from "./spotEmoji";
 
 /**
  * 動画のイントロカードと同じ絵をサムネ画像 (1280x720 JPEG) として書き出す。
