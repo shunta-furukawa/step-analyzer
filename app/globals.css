@@ -184,6 +184,12 @@ select,
   display: flex;
   flex-direction: column;
   gap: 16px;
+  /* 中身が縦に伸びても画面内に収め、モーダル内部をスクロールさせる
+     (スマホ縦でも最下部のリンクに届くように)。dvhはiOSのURLバー対応 */
+  max-height: 86vh;
+  max-height: 86dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal-head {
