@@ -97,6 +97,10 @@ export const PANEL_COORDS = [
   { x: 1, y: 1 },
 ];
 
+// フリーズ終端の直前 (この拍数以内) に保持足で別パネルを踏む指定が来たら、
+// またぎ表示にせず保持を早めに離す
+const HOLD_RELEASE_WINDOW = 0.25;
+
 function dist(a: number, b: number): number {
   return Math.hypot(
     PANEL_COORDS[a].x - PANEL_COORDS[b].x,
@@ -460,10 +464,17 @@ export function assignFeet(
       }
 
       // フリーズ保持中の足でもう1パネルを踏む指定 (かかとで保持したまま
-      // つま先で拾う)。足は保持パネルに留め、2枚抜きと同じまたぎ表示にする
+      // つま先で拾う)。足は保持パネルに留め、2枚抜きと同じまたぎ表示にする。
+      // ただしフリーズ終端ギリギリ (残り16分=0.25拍以下) の踏み替えは
+      // 保持を早めに離して普通に踏む (足を残すとまたぎ表示のあとに
+      // 余計な移動が入って見えるため)
       const heldOther = active.find((x) => x.foot === foot && x.panel !== p);
       if (heldOther) {
-        stretch = { foot, panels: [heldOther.panel, p] };
+        if (heldOther.endBeat - beat <= HOLD_RELEASE_WINDOW + 1e-6) {
+          active = active.filter((x) => x !== heldOther);
+        } else {
+          stretch = { foot, panels: [heldOther.panel, p] };
+        }
       }
 
       jack = lastPanel === p && lastFoot === foot;
