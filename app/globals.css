@@ -1891,6 +1891,7 @@ input[type="range"]:focus {
 }
 
 .viewer-fs .chart-scroll {
+  position: relative;
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -1899,6 +1900,21 @@ input[type="range"]:focus {
   border-radius: 0;
   padding: 0;
   box-shadow: none;
+}
+
+/* フリーズバー層: クリップ (判定線より上を隠す) は画面固定で不変。
+   中身のtransformだけが動くので合成のみで完結し、再描画が起きない */
+.hold-clip {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.hold-clip-inner {
+  position: absolute;
+  top: 0;
+  left: 0;
+  will-change: transform;
 }
 
 .viewer-fs .measure-num,

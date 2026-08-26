@@ -448,6 +448,8 @@ export default function Viewer({
   const scrollRef = useRef<HTMLDivElement>(null);
   // fs再生時のサブピクセルスクロール用 (scrollTopは整数に量子化されるため)
   const chartInnerRef = useRef<HTMLDivElement>(null);
+  // fs/プレイモードのフリーズバー層 (chart-innerと同じtransformで動かす)
+  const holdsInnerRef = useRef<HTMLDivElement>(null);
   // 通常表示の再生中に現在位置を示すプレイヘッド線
   const playheadRef = useRef<HTMLDivElement>(null);
   const beatRef = useRef(0);
@@ -548,6 +550,31 @@ export default function Viewer({
     }
     return segs;
   }, [chart, footsteps]);
+
+  // フリーズバーのJSX。通常表示はchart-inner内に、fs/プレイモード中は
+  // 画面固定クリップ付きのhold-clipレイヤー内に描画する (座標系は同じ)
+  const holdBars = holdSegments.map((s, i) =>
+    s.end < viewBeats.a || s.start > viewBeats.b ? null : (
+      <div
+        key={`h${i}`}
+        className="hold-body"
+        style={{
+          left: s.panel * laneW + (laneW - noteSize) / 2 + 6,
+          top: s.start * pxPerBeat + noteSize / 2,
+          width: noteSize - 12,
+          height: (s.end - s.start) * pxPerBeat,
+          // ロールはオレンジ、フリーズは保持足の色 (不明なら緑)
+          background: s.roll
+            ? "#ff9f43"
+            : s.foot === "L"
+            ? "rgba(255, 92, 168, 0.66)"
+            : s.foot === "R"
+            ? "rgba(56, 189, 248, 0.66)"
+            : "#2ecc71",
+        }}
+      />
+    )
+  );
 
   // 注目ノーツの枠: 連続する注目ノーツは1つの角丸枠にまとめる
   const highlightBoxes = useMemo(() => {
@@ -1077,7 +1104,6 @@ export default function Viewer({
     }
     let raf = 0;
     let last = performance.now();
-    let lastCut = -1; // --fs-cutの前回書き込み値 (量子化済みpx)
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
@@ -1147,16 +1173,10 @@ export default function Viewer({
           // scrollTopは整数pxに量子化されてサブピクセルの滑らかさが出ないため、
           // GPU合成されるtransformで小数px単位の追従をする (目の疲れ対策)
           const offset = beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y;
-          inner.style.transform = `translate3d(0, ${-offset}px, 0)`;
-          // フリーズバーを受け皿の中心 (判定線) で消費させるための現在位置。
-          // CSS変数の毎フレーム更新は依存する全フリーズバーの再描画を
-          // 誘発するため、16px単位に量子化して書き込み頻度を下げる
-          // (毎フレーム更新し続けるとiOS SafariのGPUメモリを圧迫してタブが落ちる)
-          const cut = Math.floor((beatRef.current * pxPerBeat + noteSize / 2) / 16) * 16;
-          if (cut !== lastCut) {
-            lastCut = cut;
-            inner.style.setProperty("--fs-cut", `${cut}px`);
-          }
+          const tf = `translate3d(0, ${-offset}px, 0)`;
+          inner.style.transform = tf;
+          // フリーズバー層も同じ変形で追従 (消費表現は層の固定クリップ)
+          if (holdsInnerRef.current) holdsInnerRef.current.style.transform = tf;
           if (el.scrollTop !== 0) el.scrollTop = 0;
           // transformではscrollイベントが出ないので、仮想化の範囲もここで更新
           const a = offset / pxPerBeat - 8;
@@ -1189,12 +1209,12 @@ export default function Viewer({
   }, [playing, chart, timeline, speed, pxPerBeat, fs, pm, noteSize, muted, prepareClapTrack]);
 
   // fs/プレイモードを抜けたらtransform追従を解除し、通常スクロールへ引き継ぐ
+  // (hold-clip層はアンマウントされるので解除不要)
   useEffect(() => {
     if (fs || pm) return;
     const inner = chartInnerRef.current;
     if (inner && inner.style.transform) {
       inner.style.transform = "";
-      inner.style.removeProperty("--fs-cut");
       const el = scrollRef.current;
       if (el)
         el.scrollTop = Math.max(
@@ -1241,13 +1261,9 @@ export default function Viewer({
       // scrollTopで位置を表せないため)。仮想化ウィンドウも合わせる
       const inner = chartInnerRef.current;
       const offset = ev.row.beat * pxPerBeat + noteSize / 2 - RECEPTOR_Y;
-      if (inner) {
-        inner.style.transform = `translate3d(0, ${-offset}px, 0)`;
-        inner.style.setProperty(
-          "--fs-cut",
-          `${ev.row.beat * pxPerBeat + noteSize / 2}px`
-        );
-      }
+      const tf = `translate3d(0, ${-offset}px, 0)`;
+      if (inner) inner.style.transform = tf;
+      if (holdsInnerRef.current) holdsInnerRef.current.style.transform = tf;
       const a = offset / pxPerBeat - 8;
       const b2 = (offset + el.clientHeight) / pxPerBeat + 8;
       setViewBeats((v) =>
@@ -2722,6 +2738,25 @@ export default function Viewer({
             // ステップゾーンの上に突き抜けて見えないようにする
             style={fs || pm ? { clipPath: `inset(${RECEPTOR_Y - noteSize / 2}px 0 0 0)` } : undefined}
           >
+            {/* fs/プレイモード中のフリーズバー層。クリップは画面固定
+                (判定線より上を隠す) で一切更新せず、中身をchart-innerと
+                同じtransformで動かすだけにする。バーごとのclip-pathを
+                毎フレーム更新するとWebKitが全バーを再描画し続け、長い
+                フリーズ地帯でGPUメモリが膨らんでタブが落ちるため */}
+            {(fs || pm) && (
+              <div
+                className="hold-clip"
+                style={{ clipPath: `inset(${RECEPTOR_Y}px 0 0 0)` }}
+              >
+                <div
+                  className="hold-clip-inner"
+                  ref={holdsInnerRef}
+                  style={{ width: laneW * 4 }}
+                >
+                  {holdBars}
+                </div>
+              </div>
+            )}
             <div
               className="chart-inner"
               ref={chartInnerRef}
@@ -2924,37 +2959,10 @@ export default function Viewer({
                 ) : null
               )}
 
-              {holdSegments.map((s, i) => (
-                s.end < viewBeats.a || s.start > viewBeats.b ? null :
-                <div
-                  key={`h${i}`}
-                  className="hold-body"
-                  style={{
-                    left: s.panel * laneW + (laneW - noteSize) / 2 + 6,
-                    top: s.start * pxPerBeat + noteSize / 2,
-                    width: noteSize - 12,
-                    height: (s.end - s.start) * pxPerBeat,
-                    // fs/プレイモード再生中は判定線より上を削って
-                    // 「消費されていく」見た目に。
-                    // --fs-cut未設定時はcalcが大きな負値になりクリップ無効
-                    ...(fs || pm
-                      ? {
-                          clipPath: `inset(calc(var(--fs-cut, -99999px) - ${
-                            s.start * pxPerBeat + noteSize / 2
-                          }px) 0 0 0)`,
-                        }
-                      : {}),
-                    // ロールはオレンジ、フリーズは保持足の色 (不明なら緑)
-                    background: s.roll
-                      ? "#ff9f43"
-                      : s.foot === "L"
-                      ? "rgba(255, 92, 168, 0.66)"
-                      : s.foot === "R"
-                      ? "rgba(56, 189, 248, 0.66)"
-                      : "#2ecc71",
-                  }}
-                />
-              ))}
+              {/* フリーズバー。fs/プレイモード中は判定線での「消費」を
+                  画面固定クリップ付きの専用レイヤー (chart-scroll直下の
+                  hold-clip) で行うため、こちらには描画しない */}
+              {!(fs || pm) && holdBars}
 
               {chart.shocks.map((r, i) => {
                 if (r.beat < viewBeats.a || r.beat > viewBeats.b) return null;
