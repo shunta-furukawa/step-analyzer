@@ -916,11 +916,19 @@ export default function Viewer({
   // モードを抜けたらキャリブレーションのAudioContextを確実に破棄
   useEffect(() => () => stopPmCal(), [stopPmCal]);
 
-  // fs/プレイモード中は背面のスクロールを止める
+  // fs/プレイモード中は背面のスクロールを止め、引っ張って更新
+  // (pull-to-refresh) やオーバースクロールも無効化する。
+  // プレイ中の連打で下方向のドラッグが混ざるとページが再読み込み
+  // されてしまうため (iOS Safari 15+/Android Chrome)
   useEffect(() => {
-    document.body.style.overflow = fs || pm ? "hidden" : "";
+    const on = fs || pm;
+    document.body.style.overflow = on ? "hidden" : "";
+    document.body.style.overscrollBehavior = on ? "none" : "";
+    document.documentElement.style.overscrollBehavior = on ? "none" : "";
     return () => {
       document.body.style.overflow = "";
+      document.body.style.overscrollBehavior = "";
+      document.documentElement.style.overscrollBehavior = "";
     };
   }, [fs, pm]);
 

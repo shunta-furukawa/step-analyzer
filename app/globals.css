@@ -2049,6 +2049,19 @@ input[type="range"]:focus {
 
 /* ===== プレイモード ===== */
 
+/* fs/プレイモード中はスクロール・ズーム・pull-to-refreshの
+   タッチジェスチャを丸ごと無効化する (タップ/クリックは通る)。
+   連打中の下方向ドラッグでページが更新されるのを防ぐ */
+.viewer-fs .chart-pane,
+.viewer-fs .side-pane,
+.pm-overlay {
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
 /* 入力レイヤー: 下ペーン全体を透明な4分割 (対角線区切り) で覆う。
    足アニメの上に重なり、見た目はタップ時のフラッシュのみ */
 .pm-pad {
