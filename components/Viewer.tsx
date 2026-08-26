@@ -19,6 +19,7 @@ import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import {
   JudgeSession,
   buildJudgeTargets,
+  resolveTapPanel,
   type Judgment,
   type JudgeResult,
 } from "@/lib/judge";
@@ -915,25 +916,32 @@ export default function Viewer({
     setPlaying(true);
   }, [chart, timeline, speed, pmWide, go, stopPmCal]);
 
-  // タップ/キー入力 → 判定。判定ポップとコンボ表示を更新する
+  // タップ/キー入力 → 判定。判定ポップとコンボ表示を更新する。
+  // パッドからは座標 {dx,dy} で渡され、境界付近の曖昧なタップは
+  // いま判定窓内にノーツがあるパネルへ解釈を広げる (resolveTapPanel)
   const pmTap = useCallback(
-    (panel: number) => {
+    (input: number | { dx: number; dy: number }) => {
       if (!pmRef.current || !judgeRef.current) return;
-      setPmZoneFlash((z) => {
-        const n = [...z];
-        n[panel]++;
-        return n;
-      });
+      const judge = judgeRef.current;
       const el = clapTrackRef.current?.el;
       const t =
         el && !el.paused && el.readyState >= 2
           ? el.currentTime * speed - pmLeadRef.current
           : timeRef.current;
-      if (t < -0.2) return; // カウントイン中はフラッシュのみ
       const adj = t - (pmOffsetRef.current / 1000) * speed;
-      const res = judgeRef.current.hit(panel, adj);
+      const panel =
+        typeof input === "number"
+          ? input
+          : resolveTapPanel(input.dx, input.dy, (p) => judge.hasPending(p, adj));
+      setPmZoneFlash((z) => {
+        const n = [...z];
+        n[panel]++;
+        return n;
+      });
+      if (t < -0.2) return; // カウントイン中はフラッシュのみ
+      const res = judge.hit(panel, adj);
       if (res) {
-        setPmCombo(judgeRef.current.combo);
+        setPmCombo(judge.combo);
         setPmPopup({ j: res.judgment, k: performance.now() });
       }
     },
@@ -3182,9 +3190,7 @@ export default function Viewer({
                   const r = e.currentTarget.getBoundingClientRect();
                   const dx = e.clientX - (r.left + r.width / 2);
                   const dy = e.clientY - (r.top + r.height / 2);
-                  pmTap(
-                    Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 0 : 3) : dy < 0 ? 2 : 1
-                  );
+                  pmTap({ dx, dy });
                 }}
               >
                 {[0, 1, 2, 3].map((p) => (

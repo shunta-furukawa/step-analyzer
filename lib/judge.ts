@@ -100,6 +100,28 @@ export function gradeOf(score: number): string {
   return "D";
 }
 
+/**
+ * タップ位置から踏むパネルを解釈する。基本は4分割 (対角線区切り) だが、
+ * 境界付近 (対角線から±約24°) の曖昧なタップは「いま判定窓内に踏める
+ * ノーツがあるパネル」を優先して解釈を広げる。指の位置の厳密さを
+ * 要求しないための緩和で、明確に別方向のタップはそのまま。
+ * dx/dyはパッド中心からのオフセット。
+ */
+export function resolveTapPanel(
+  dx: number,
+  dy: number,
+  hasPending: (panel: number) => boolean
+): number {
+  const primary = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 0 : 3) : dy < 0 ? 2 : 1;
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  const ratio = Math.min(ax, ay) / Math.max(ax, ay, 1e-6);
+  if (ratio < 0.45 || hasPending(primary)) return primary;
+  const secondary =
+    primary === 0 || primary === 3 ? (dy < 0 ? 2 : 1) : dx < 0 ? 0 : 3;
+  return hasPending(secondary) ? secondary : primary;
+}
+
 export class JudgeSession {
   private targets: JudgeTarget[];
   private shocks: number[];
@@ -201,6 +223,20 @@ export class JudgeSession {
       }
     }
     return null;
+  }
+
+  /** そのパネルに「いま判定窓内で踏める」未入力ノーツがあるか */
+  hasPending(panel: number, songTime: number): boolean {
+    const goodW = this.window("good");
+    for (let i = this.sweepFrom; i < this.targets.length; i++) {
+      const dtReal = (songTime - this.targets[i].time) / this.speed;
+      if (dtReal < -goodW) break;
+      if (this.judged[i] !== null) continue;
+      if (Math.abs(dtReal) > goodW) continue;
+      const slot = this.targets[i].panels.indexOf(panel);
+      if (slot >= 0 && this.hits[i][slot] === null) return true;
+    }
+    return false;
   }
 
   /** 窓を過ぎた未判定ノーツをMISSにする。新たに発生したMISS数を返す */
