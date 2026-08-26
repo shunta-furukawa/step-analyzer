@@ -2073,9 +2073,17 @@ input[type="range"]:focus {
 .pm-overlay {
   touch-action: none;
   overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* fs/プレイモード中は配下の全要素でテキスト選択とiOSの長押し
+   吹き出し (コピー/ペーストのバルーン・選択ルーペ) を禁止する。
+   連打中の長押し気味のタップでOSの選択UIが出てくるのを防ぐ */
+.viewer-fs,
+.viewer-fs * {
   -webkit-user-select: none;
   user-select: none;
-  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
 }
 
 /* 入力レイヤー: 下ペーン全体を透明な4分割 (対角線区切り) で覆う。
