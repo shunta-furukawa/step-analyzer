@@ -17,6 +17,12 @@ import {
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import {
+  JudgeSession,
+  buildJudgeTargets,
+  type Judgment,
+  type JudgeResult,
+} from "@/lib/judge";
+import {
   computeChartImageLayout,
   filterCommentsForRange,
   measureChartComments,
@@ -91,6 +97,15 @@ function clampHs(n: number): number {
   return Math.min(HS_MAX, Math.max(HS_MIN, Math.round(n * 20) / 20));
 }
 const SPEED_OPTIONS = [0.25, 0.5, 0.75, 1];
+
+// プレイモードの判定表示文字 (言語によらずDDR風の英語表記)
+const PM_JUDGE_TEXT: Record<Judgment, string> = {
+  marvelous: "MARVELOUS!!",
+  perfect: "PERFECT!",
+  great: "GREAT",
+  good: "GOOD",
+  miss: "MISS…",
+};
 
 // URLパラメータの値を選択肢のうち最も近いものに丸める
 function parseChoice(v: string | undefined, options: number[], def: number): number {
@@ -363,8 +378,6 @@ export default function Viewer({
   const [hsText, setHsText] = useState(() => String(hispeed));
   const [muted, setMuted] = useState(false);
   const [ghostSound, setGhostSound] = useState(true); // 空打ちのストンプ音
-  // 4つ打ちメトロノーム (デフォルトOFF)。小節頭のアクセントは付けない
-  const [metronome, setMetronome] = useState(false);
   // 足の軌跡 (トレイル) 表示。密度で濃さが変わり速さが見えるためデフォルトON
   const [footTrail, setFootTrail] = useState(true);
   // テーマカラー。単色 "rrggbb" または2色グラデ "rrggbb-rrggbb" (左上-右下)
@@ -393,6 +406,44 @@ export default function Viewer({
   const [fs, setFs] = useState(false);
   const [editingTitle, setEditingTitle] = useState(false);
   const [narrow, setNarrow] = useState(false);
+
+  // ===== プレイモード (譜面を指/矢印キーでなぞって判定) =====
+  const [pm, setPm] = useState(false); // モードに入っているか
+  const [pmStarted, setPmStarted] = useState(false); // カウントイン〜プレイ中
+  const [pmResult, setPmResult] = useState<JudgeResult | null>(null);
+  const [pmCombo, setPmCombo] = useState(0);
+  const [pmPopup, setPmPopup] = useState<{ j: Judgment; k: number } | null>(null);
+  const [pmCount, setPmCount] = useState(0); // カウントイン表示 (0=非表示)
+  // タップパッドのフラッシュ (キー変更でCSSアニメを再生する)
+  const [pmZoneFlash, setPmZoneFlash] = useState<number[]>([0, 0, 0, 0]);
+  // タッチ・音声の遅延補正 (ms, 正=入力が遅れて届く端末)。端末ごとに保存
+  const [pmOffsetMs, setPmOffsetMs] = useState(() => {
+    try {
+      const v = Number(localStorage.getItem("sa-pm-offset"));
+      return Number.isFinite(v) ? Math.max(-250, Math.min(250, Math.round(v))) : 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [pmWide, setPmWide] = useState(() => {
+    try {
+      return localStorage.getItem("sa-pm-wide") === "1";
+    } catch {
+      return false;
+    }
+  });
+  // 遅延キャリブレーション中 (メトロノームに合わせてタップ)
+  const [pmCal, setPmCal] = useState<{ taps: number } | null>(null);
+  const judgeRef = useRef<JudgeSession | null>(null);
+  const pmLeadRef = useRef(0); // カウントインの長さ (曲内秒)
+  const pmFreshRef = useRef(false); // スタート直後: 再生effectで-leadから始める
+  const pmRef = useRef(false);
+  pmRef.current = pm && pmStarted;
+  const pmOffsetRef = useRef(0);
+  pmOffsetRef.current = pmOffsetMs;
+  const pmCalCtxRef = useRef<{ actx: AudioContext; ticks: number[]; taps: number[] } | null>(
+    null
+  );
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // fs再生時のサブピクセルスクロール用 (scrollTopは整数に量子化されるため)
@@ -430,10 +481,10 @@ export default function Viewer({
     typeof window !== "undefined"
       ? Math.min(96, Math.floor((window.innerWidth - 16) / 4))
       : 80;
-  const noteSize = fs ? fsLane - 10 : narrow ? 28 : 40;
+  const noteSize = fs || pm ? fsLane - 10 : narrow ? 28 : 40;
   // 1拍の高さは矢印サイズの1.8倍 (通常表示・フルスクリーン・画像書き出しで統一)
-  const pxPerBeat = (fs ? noteSize * 1.8 : narrow ? 52 : 72) * hispeed;
-  const laneW = fs ? fsLane : narrow ? 36 : 52;
+  const pxPerBeat = (fs || pm ? noteSize * 1.8 : narrow ? 52 : 72) * hispeed;
+  const laneW = fs || pm ? fsLane : narrow ? 36 : 52;
 
   // 変形オプション適用後の譜面 (表示・解析はすべてこちらを使う)。
   // 元データ (compact) はURLにそのまま保存され、変形は tr= として別に持つ
@@ -610,7 +661,12 @@ export default function Viewer({
   const prepareClapTrack = useCallback(() => {
     if (!chart || timeline.length === 0) return null;
     setPlaybackAudioSession();
-    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}|${metronome ? 1 : 0}|${serializeOverrides(overrides)}`;
+    // プレイモードはメトロノーム強制ON + 4拍のカウントインを頭に足す
+    const metroOn = pm;
+    const beat1 = Math.max(0.15, timeAtBeat(timeline, 1) - timeAtBeat(timeline, 0));
+    const lead = pm ? beat1 * 4 : 0;
+    pmLeadRef.current = lead;
+    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}|${metroOn ? 1 : 0}|${pm ? "pm" : ""}|${serializeOverrides(overrides)}`;
     if (clapTrackRef.current?.key === key) return clapTrackRef.current.el;
     if (clapTrackRef.current) {
       clapTrackRef.current.el.pause();
@@ -621,24 +677,29 @@ export default function Viewer({
     const judged = chart.events.filter(
       (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
     );
-    const times = judged.map((e) => timeAtBeat(timeline, e.row.beat) / speed);
+    // リードインぶんトラック上の時刻を後ろへずらす (トラック時刻 = (曲内時刻+lead)/speed)
+    const shift = lead / speed;
+    const times = judged.map((e) => timeAtBeat(timeline, e.row.beat) / speed + shift);
     const accents = judged.map((e) => e.panels.length >= 2);
     const ghostTimes = ghostSound
       ? chart.events
           .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
-          .map((e) => timeAtBeat(timeline, e.row.beat) / speed)
+          .map((e) => timeAtBeat(timeline, e.row.beat) / speed + shift)
       : [];
     // メトロノーム: 4分ごとのティック (小節頭のアクセントなし)
     const metroTimes: number[] = [];
-    if (metronome) {
+    if (pm) {
+      for (let k = 0; k < 4; k++) metroTimes.push((k * beat1) / speed); // カウントイン
+    }
+    if (metroOn) {
       for (let b = 0; b < chart.totalBeats - 1e-9; b++) {
-        metroTimes.push(timeAtBeat(timeline, b) / speed);
+        metroTimes.push(timeAtBeat(timeline, b) / speed + shift);
       }
     }
     const url = buildClapTrackUrl(
       times,
       accents,
-      timeAtBeat(timeline, chart.totalBeats) / speed,
+      timeAtBeat(timeline, chart.totalBeats) / speed + shift,
       ghostTimes,
       metroTimes
     );
@@ -647,7 +708,7 @@ export default function Viewer({
     el.setAttribute("playsinline", "");
     clapTrackRef.current = { key, el, url };
     return el;
-  }, [chart, timeline, compact, bpm, stops, speed, ghostSound, metronome, overrides, footsteps]);
+  }, [chart, timeline, compact, bpm, stops, speed, ghostSound, pm, overrides, footsteps]);
 
   // 再生開始 (ユーザー操作の文脈で呼ぶこと: audio.play()の許可が必要)
   const startPlayback = useCallback(() => {
@@ -694,13 +755,174 @@ export default function Viewer({
     }
   }, []);
 
-  // fs中は背面のスクロールを止める
+  // ===== プレイモード =====
+  // 遅延キャリブレーション: メトロノームに合わせて8回タップ→中央値を補正値に
+  const stopPmCal = useCallback(() => {
+    const c = pmCalCtxRef.current;
+    if (c) {
+      void c.actx.close().catch(() => {});
+      pmCalCtxRef.current = null;
+    }
+    setPmCal(null);
+  }, []);
+
+  const startPmCal = useCallback(() => {
+    stopPmCal();
+    try {
+      const actx = new AudioContext();
+      const ticks: number[] = [];
+      const t0 = actx.currentTime + 0.8;
+      for (let k = 0; k < 32; k++) {
+        const t = t0 + k * 0.5; // 120BPM
+        const o = actx.createOscillator();
+        const g = actx.createGain();
+        o.type = "square";
+        o.frequency.value = 1080;
+        g.gain.setValueAtTime(0.22, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+        o.connect(g);
+        g.connect(actx.destination);
+        o.start(t);
+        o.stop(t + 0.08);
+        ticks.push(t);
+      }
+      pmCalCtxRef.current = { actx, ticks, taps: [] };
+      setPmCal({ taps: 0 });
+    } catch {
+      // AudioContext非対応環境では手動の±ボタンで調整してもらう
+    }
+  }, [stopPmCal]);
+
+  const pmCalTap = useCallback(() => {
+    const c = pmCalCtxRef.current;
+    if (!c) return;
+    const now = c.actx.currentTime;
+    let best = Infinity;
+    for (const t of c.ticks) {
+      const d = now - t;
+      if (Math.abs(d) < Math.abs(best)) best = d;
+    }
+    if (!Number.isFinite(best) || Math.abs(best) > 0.25) return; // ティックから遠すぎ
+    c.taps.push(best * 1000);
+    setPmCal({ taps: c.taps.length });
+    if (c.taps.length >= 8) {
+      // 最初の1タップはリズムを掴む前なので捨てて中央値を取る
+      const arr = [...c.taps.slice(1)].sort((a, b) => a - b);
+      const med = Math.round(arr[Math.floor(arr.length / 2)]);
+      const v = Math.max(-250, Math.min(250, med));
+      setPmOffsetMs(v);
+      try {
+        localStorage.setItem("sa-pm-offset", String(v));
+      } catch {
+        /* プライベートモード等では保存しない */
+      }
+      stopPmCal();
+    }
+  }, [stopPmCal]);
+
+  const setPmOffsetSaved = useCallback((v: number) => {
+    const c = Math.max(-250, Math.min(250, Math.round(v)));
+    setPmOffsetMs(c);
+    try {
+      localStorage.setItem("sa-pm-offset", String(c));
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  const setPmWideSaved = useCallback((v: boolean) => {
+    setPmWide(v);
+    try {
+      localStorage.setItem("sa-pm-wide", v ? "1" : "0");
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  const enterPm = useCallback(() => {
+    setEditMode(false);
+    setShowText(false);
+    setShowTiming(false);
+    setPlaying(false);
+    setPmResult(null);
+    setPmCombo(0);
+    setPmPopup(null);
+    setPmCount(0);
+    go(0);
+    beatRef.current = 0;
+    setPm(true);
+    try {
+      void document.documentElement.requestFullscreen?.();
+    } catch {
+      /* iOS Safariなどは非対応でOK */
+    }
+  }, [go]);
+
+  const exitPm = useCallback(() => {
+    stopPmCal();
+    setPm(false);
+    setPmStarted(false);
+    setPmResult(null);
+    setPlaying(false);
+    judgeRef.current = null;
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen();
+    } catch {
+      /* noop */
+    }
+  }, [stopPmCal]);
+
+  // プレイ開始 (ユーザー操作の文脈で呼ぶ: 音声の再生許可が必要)
+  const startPm = useCallback(() => {
+    if (!chart || timeline.length === 0) return;
+    stopPmCal();
+    const { targets, shocks } = buildJudgeTargets(chart, timeline);
+    judgeRef.current = new JudgeSession(targets, shocks, speed, pmWide);
+    setPmResult(null);
+    setPmCombo(0);
+    setPmPopup(null);
+    go(0);
+    beatRef.current = 0;
+    pmFreshRef.current = true;
+    setPmStarted(true);
+    setPlaying(true);
+  }, [chart, timeline, speed, pmWide, go, stopPmCal]);
+
+  // タップ/キー入力 → 判定。判定ポップとコンボ表示を更新する
+  const pmTap = useCallback(
+    (panel: number) => {
+      if (!pmRef.current || !judgeRef.current) return;
+      setPmZoneFlash((z) => {
+        const n = [...z];
+        n[panel]++;
+        return n;
+      });
+      const el = clapTrackRef.current?.el;
+      const t =
+        el && !el.paused && el.readyState >= 2
+          ? el.currentTime * speed - pmLeadRef.current
+          : timeRef.current;
+      if (t < -0.2) return; // カウントイン中はフラッシュのみ
+      const adj = t - (pmOffsetRef.current / 1000) * speed;
+      const res = judgeRef.current.hit(panel, adj);
+      if (res) {
+        setPmCombo(judgeRef.current.combo);
+        setPmPopup({ j: res.judgment, k: performance.now() });
+      }
+    },
+    [speed]
+  );
+
+  // モードを抜けたらキャリブレーションのAudioContextを確実に破棄
+  useEffect(() => () => stopPmCal(), [stopPmCal]);
+
+  // fs/プレイモード中は背面のスクロールを止める
   useEffect(() => {
-    document.body.style.overflow = fs ? "hidden" : "";
+    document.body.style.overflow = fs || pm ? "hidden" : "";
     return () => {
       document.body.style.overflow = "";
     };
-  }, [fs]);
+  }, [fs, pm]);
 
   // 自動再生中は画面をスリープさせない (Screen Wake Lock、iOS 16.4+)。
   // ロックはタブが隠れると自動解放されるため、復帰時に取り直す
@@ -746,6 +968,24 @@ export default function Viewer({
         e.target instanceof HTMLSelectElement
       )
         return;
+      // プレイモード中: 矢印キーが踏み入力になる (通常のイベント送りは無効)
+      if (pm) {
+        const map: Record<string, number> = {
+          ArrowLeft: 0,
+          ArrowDown: 1,
+          ArrowUp: 2,
+          ArrowRight: 3,
+        };
+        if (e.key in map) {
+          e.preventDefault();
+          pmTap(map[e.key]);
+        } else if (e.key === "Escape") {
+          exitPm();
+        } else if (e.key === " ") {
+          e.preventDefault();
+        }
+        return;
+      }
       if (e.key === "ArrowRight" || e.key === "j") {
         e.preventDefault();
         setPlaying(false);
@@ -763,22 +1003,30 @@ export default function Viewer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, current, togglePlay, exitFs]);
+  }, [go, current, togglePlay, exitFs, pm, pmTap, exitPm]);
 
   // 自動再生: タイムライン (ソフラン・停止込み) に沿って時間基準で進行。
   // 譜面スクロール・足の動き・クラップ音をすべて時刻→拍の変換で同期する。
   useEffect(() => {
     if (!playing || !chart || timeline.length === 0) return;
-    // 現在の拍位置から時刻を復元して再開
-    timeRef.current = timeAtBeat(timeline, beatRef.current);
     // クラップトラック: 再生中は音声側をマスタークロックにする
     // (iOSの画面収録でrAFがスロットルされても音と同期が保たれる)。
-    // トラックは速度込みでレンダリング済みなので常に等速再生
-    const track = !mutedRef.current ? prepareClapTrack() : null;
+    // トラックは速度込みでレンダリング済みなので常に等速再生。
+    // プレイモードは判定の基準クロックになるためミュートでも使う。
+    // ※prepareClapTrackがpmLeadRefを更新するため、leadより先に呼ぶ
+    const track = !mutedRef.current || pm ? prepareClapTrack() : null;
+    // 現在の拍位置から時刻を復元して再開。
+    // プレイモードのスタート直後はカウントイン (曲内時刻の負領域) から
+    const lead = pm ? pmLeadRef.current : 0;
+    timeRef.current = timeAtBeat(timeline, beatRef.current);
+    if (pmFreshRef.current) {
+      timeRef.current = -lead;
+      pmFreshRef.current = false;
+    }
     if (track) {
-      if (Math.abs(track.currentTime * speed - timeRef.current) > 0.05) {
+      if (Math.abs(track.currentTime * speed - (timeRef.current + lead)) > 0.05) {
         try {
-          track.currentTime = timeRef.current / speed;
+          track.currentTime = (timeRef.current + lead) / speed;
         } catch {
           // メタデータ未ロード時は無視
         }
@@ -791,14 +1039,39 @@ export default function Viewer({
       const dt = (now - last) / 1000;
       last = now;
       if (track && !track.paused && track.readyState >= 2) {
-        timeRef.current = track.currentTime * speed;
+        timeRef.current = track.currentTime * speed - lead;
       } else {
         timeRef.current += dt * speed;
       }
       beatRef.current = beatAtTime(timeline, timeRef.current);
       if (beatRef.current >= chart.totalBeats - 1e-9) {
         beatRef.current = chart.totalBeats;
-        setPlaying(false);
+        // プレイモードは最後のノーツの判定窓が閉じるまで走らせ続ける
+        if (!pmRef.current) setPlaying(false);
+      }
+
+      // ===== プレイモードの進行 (カウントイン表示・MISS掃き出し・終了) =====
+      if (pmRef.current && judgeRef.current) {
+        if (timeRef.current < 0) {
+          const beat1 = Math.max(0.15, pmLeadRef.current / 4);
+          const c = Math.min(4, Math.max(1, Math.ceil(-timeRef.current / beat1)));
+          setPmCount((v) => (v !== c ? c : v));
+        } else {
+          setPmCount((v) => (v !== 0 ? 0 : v));
+          const adj = timeRef.current - (pmOffsetRef.current / 1000) * speed;
+          if (judgeRef.current.sweep(adj) > 0) {
+            setPmCombo(0);
+            setPmPopup({ j: "miss", k: now });
+          }
+        }
+        const endT = timeAtBeat(timeline, chart.totalBeats) + 0.5 * speed;
+        if (timeRef.current >= endT) {
+          const r = judgeRef.current.results();
+          judgeRef.current = null;
+          setPmResult(r);
+          setPmStarted(false);
+          setPlaying(false);
+        }
       }
       let idx = -1;
       for (let k = 0; k < chart.events.length; k++) {
@@ -806,7 +1079,9 @@ export default function Viewer({
         else break;
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
-      setPlayedIdx((c) => (c !== idx ? idx : c));
+      // カウントイン中 (曲内時刻が負) はまだ何も通過していない
+      const pIdx = timeRef.current < 0 ? -1 : idx;
+      setPlayedIdx((c) => (c !== pIdx ? pIdx : c));
 
       // 足の位置は移動時間ぶん先読み: ジャストの瞬間に次のパネルへ到着させる。
       // timeRefは譜面内時刻なので、実時間の先読みはspeed倍して換算する
@@ -824,7 +1099,7 @@ export default function Viewer({
       const el = scrollRef.current;
       const inner = chartInnerRef.current;
       if (el) {
-        if (fs && inner) {
+        if ((fs || pm) && inner) {
           // fs時はステップゾーンに現在ビートが重なるよう合わせる。
           // scrollTopは整数pxに量子化されてサブピクセルの滑らかさが出ないため、
           // GPU合成されるtransformで小数px単位の追従をする (目の疲れ対策)
@@ -873,7 +1148,7 @@ export default function Viewer({
           );
       }
     };
-  }, [playing, chart, timeline, speed, pxPerBeat, fs, noteSize, muted, prepareClapTrack]);
+  }, [playing, chart, timeline, speed, pxPerBeat, fs, pm, noteSize, muted, prepareClapTrack]);
 
   // 仮想化: スクロール位置から描画対象のビート範囲を更新
   useEffect(() => {
@@ -908,12 +1183,13 @@ export default function Viewer({
     if (!ev) return;
     const el = scrollRef.current;
     el.scrollTo({
-      top: fs
-        ? ev.row.beat * pxPerBeat + noteSize / 2 - RECEPTOR_Y
-        : ev.row.beat * pxPerBeat - el.clientHeight / 2 + noteSize,
+      top:
+        fs || pm
+          ? ev.row.beat * pxPerBeat + noteSize / 2 - RECEPTOR_Y
+          : ev.row.beat * pxPerBeat - el.clientHeight / 2 + noteSize,
       behavior: "smooth",
     });
-  }, [current, chart, playing, editMode, pxPerBeat, noteSize, fs]);
+  }, [current, chart, playing, editMode, pxPerBeat, noteSize, fs, pm]);
 
   if (!chart) {
     return (
@@ -969,7 +1245,7 @@ export default function Viewer({
   };
 
   return (
-    <div className={fs ? "viewer-fs" : undefined}>
+    <div className={fs || pm ? `viewer-fs${pm ? " viewer-pm" : ""}` : undefined}>
       <div className="bg-picker-wrap">
         <div className="lang-wrap">
           <span className="lang-badge">
@@ -2292,8 +2568,8 @@ export default function Viewer({
       )}
 
       <div className="viewer-layout">
-        <div className="chart-pane" onClick={fs ? togglePlay : undefined}>
-          {fs && (
+        <div className="chart-pane" onClick={fs && !pm ? togglePlay : undefined}>
+          {(fs || pm) && (
             <>
               <div
                 className="fs-progress"
@@ -2340,12 +2616,29 @@ export default function Viewer({
                   );
                 })}
               </div>
-              {!playing && <div className="fs-paused">▶</div>}
+              {!playing && !pm && <div className="fs-paused">▶</div>}
+              {/* プレイモード: 判定文字・コンボ・カウントイン */}
+              {pm && pmPopup && (
+                <div key={pmPopup.k} className={`pm-judgment pm-j-${pmPopup.j}`}>
+                  {PM_JUDGE_TEXT[pmPopup.j]}
+                </div>
+              )}
+              {pm && pmStarted && pmCombo >= 3 && (
+                <div key={`c${pmCombo}`} className="pm-combo">
+                  {pmCombo} <span className="pm-combo-word">COMBO</span>
+                </div>
+              )}
+              {pm && pmCount > 0 && (
+                <div key={`n${pmCount}`} className="pm-count">
+                  {pmCount}
+                </div>
+              )}
               <button
                 className="fs-exit"
                 onClick={(e) => {
                   e.stopPropagation();
-                  exitFs();
+                  if (pm) exitPm();
+                  else exitFs();
                 }}
               >
                 ✕
@@ -2357,7 +2650,7 @@ export default function Viewer({
             ref={scrollRef}
             // fs時は受け皿の上端から上を切り落とし、通過した要素が
             // ステップゾーンの上に突き抜けて見えないようにする
-            style={fs ? { clipPath: `inset(${RECEPTOR_Y - noteSize / 2}px 0 0 0)` } : undefined}
+            style={fs || pm ? { clipPath: `inset(${RECEPTOR_Y - noteSize / 2}px 0 0 0)` } : undefined}
           >
             <div
               className="chart-inner"
@@ -2687,7 +2980,7 @@ export default function Viewer({
               {chart.events.map((ev, i) => {
                 if (ev.row.beat < viewBeats.a || ev.row.beat > viewBeats.b) return null;
                 // fs再生中: 受け皿でジャスト表示が出たノーツは実機同様に消す
-                if (fs && playing && i <= playedIdx) return null;
+                if ((fs || pm) && playing && i <= playedIdx) return null;
                 const step = footsteps[i];
                 return ev.panels.map((p) => {
                   const foot = step.feet[p];
@@ -2793,6 +3086,31 @@ export default function Viewer({
                 liftedFoot={footStep?.liftedFoot ?? null}
               />
             )}
+            {pm && (
+              // プレイモードの入力レイヤー: 足アニメの上に透明な4分割の
+              // タップ領域を重ねる (下ペーン全体)。分割は内部的な入力判定で、
+              // 見た目はタップした瞬間のフラッシュだけ。
+              // マルチタッチ対応 (pointerdownは指ごとに発火する)
+              <div
+                className="pm-pad"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  const r = e.currentTarget.getBoundingClientRect();
+                  const dx = e.clientX - (r.left + r.width / 2);
+                  const dy = e.clientY - (r.top + r.height / 2);
+                  pmTap(
+                    Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 0 : 3) : dy < 0 ? 2 : 1
+                  );
+                }}
+              >
+                {[0, 1, 2, 3].map((p) => (
+                  <div
+                    key={`${p}-${pmZoneFlash[p]}`}
+                    className={`pm-zone pm-zone-${p}${pmZoneFlash[p] > 0 ? " flash" : ""}`}
+                  />
+                ))}
+              </div>
+            )}
             <div className="controls">
               <button
                 className="secondary"
@@ -2873,15 +3191,11 @@ export default function Viewer({
                 </button>
               )}
               <button
-                className={metronome ? "" : "secondary"}
-                onClick={() => {
-                  setMetronome(!metronome);
-                  // トラックはキー違いで次回prepare時に作り直される
-                  clapTrackRef.current?.el.pause();
-                }}
-                title={S.metronomeTitle}
+                className="secondary"
+                onClick={enterPm}
+                title={S.playModeTitle}
               >
-                ♩{metronome ? "♪" : "🔇"}
+                🎮
               </button>
               {webglOk && (
                 <button
@@ -3157,6 +3471,123 @@ export default function Viewer({
           </div>
         </div>
       </div>
+
+      {/* プレイモード: 開始前オーバーレイ (遅延キャリブレーション込み) */}
+      {pm && !pmStarted && !pmResult && (
+        <div
+          className="pm-overlay"
+          onPointerDown={pmCal ? pmCalTap : undefined}
+        >
+          {pmCal ? (
+            <>
+              <div className="pm-logo-text">CALIBRATE</div>
+              <p className="pm-desc">{S.pmCalGuide(pmCal.taps)}</p>
+              <div className="pm-cal-dots">
+                {Array.from({ length: 8 }, (_, i) => (
+                  <span key={i} className={i < pmCal.taps ? "on" : ""} />
+                ))}
+              </div>
+              <button
+                className="secondary"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={stopPmCal}
+              >
+                {S.pmCalCancel}
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="pm-logo-text">PLAY MODE</div>
+              <p className="pm-song">{title || "Step Analyzer"}</p>
+              <p className="pm-desc">{S.pmHint}</p>
+              <button className="pm-start" onClick={startPm}>
+                {S.pmStart}
+              </button>
+              <div className="pm-settings">
+                <div className="pm-setting-row">
+                  <span>{S.pmOffsetLabel}</span>
+                  <button
+                    className="secondary"
+                    onClick={() => setPmOffsetSaved(pmOffsetMs - 5)}
+                  >
+                    −
+                  </button>
+                  <span className="pm-offset-val">
+                    {pmOffsetMs > 0 ? `+${pmOffsetMs}` : pmOffsetMs}ms
+                  </span>
+                  <button
+                    className="secondary"
+                    onClick={() => setPmOffsetSaved(pmOffsetMs + 5)}
+                  >
+                    ＋
+                  </button>
+                  <button className="secondary" onClick={startPmCal}>
+                    {S.pmCalibrate}
+                  </button>
+                </div>
+                <label className="pm-setting-row">
+                  <input
+                    type="checkbox"
+                    checked={pmWide}
+                    onChange={(e) => setPmWideSaved(e.target.checked)}
+                  />
+                  <span>{S.pmWideLabel}</span>
+                </label>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* プレイモード: リザルト */}
+      {pm && pmResult && (
+        <div className="pm-overlay pm-result">
+          <div className="pm-logo-text">RESULT</div>
+          <div className={`pm-grade pm-grade-${pmResult.grade.replace(/[+-]/g, "")}`}>
+            {pmResult.grade}
+          </div>
+          <div className="pm-score">
+            <span className="pm-score-num">{pmResult.score.toLocaleString()}</span>
+            <span className="pm-score-ex">
+              EX {pmResult.exScore} / {pmResult.exMax}
+            </span>
+          </div>
+          <div className="pm-counts">
+            {(
+              [
+                ["marvelous", "MARVELOUS"],
+                ["perfect", "PERFECT"],
+                ["great", "GREAT"],
+                ["good", "GOOD"],
+                ["miss", "MISS"],
+              ] as const
+            ).map(([k, label]) => (
+              <div key={k} className={`pm-count-row pm-j-${k}`}>
+                <span className="pm-count-label">{label}</span>
+                <span className="pm-count-num">{pmResult.counts[k]}</span>
+              </div>
+            ))}
+            <div className="pm-count-row">
+              <span className="pm-count-label">{S.pmMaxCombo}</span>
+              <span className="pm-count-num">{pmResult.maxCombo}</span>
+            </div>
+            {pmResult.shockHits > 0 && (
+              <div className="pm-count-row pm-j-miss">
+                <span className="pm-count-label">{S.pmShockHits}</span>
+                <span className="pm-count-num">{pmResult.shockHits}</span>
+              </div>
+            )}
+          </div>
+          <div className="pm-result-btns">
+            <button className="pm-start" onClick={startPm}>
+              {S.pmRetry}
+            </button>
+            <button className="secondary" onClick={exitPm}>
+              {S.pmClose}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

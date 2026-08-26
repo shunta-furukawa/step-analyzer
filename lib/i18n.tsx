@@ -146,6 +146,18 @@ export interface Strings {
   addMeasureTitle: string;
   metronomeTitle: string;
   trailTitle: string;
+  playModeTitle: string;
+  pmHint: string;
+  pmStart: string;
+  pmOffsetLabel: string;
+  pmCalibrate: string;
+  pmCalGuide: (n: number) => string;
+  pmCalCancel: string;
+  pmWideLabel: string;
+  pmRetry: string;
+  pmClose: string;
+  pmMaxCombo: string;
+  pmShockHits: string;
   aiGenBtn: string;
   aiModalTitle: string;
   aiModalDesc: string;
@@ -347,6 +359,18 @@ const ja: Strings = {
   addMeasureTitle: "末尾に空の小節を1つ追加",
   metronomeTitle: "メトロノーム (4分のティック音)",
   trailTitle: "足の軌跡 (速い動きほど長く伸びる)",
+  playModeTitle: "プレイモード (譜面を指でなぞって判定)",
+  pmHint: "下の4分割パッドをタップ (PCは矢印キー) 。判定ラインに矢印が重なった瞬間に踏もう",
+  pmStart: "タップでスタート",
+  pmOffsetLabel: "タイミング補正",
+  pmCalibrate: "自動調整",
+  pmCalGuide: (n) => `メトロノームに合わせてタップ (${n}/8)`,
+  pmCalCancel: "やめる",
+  pmWideLabel: "判定ゆるめ (タッチ端末向け)",
+  pmRetry: "もう一回",
+  pmClose: "閉じる",
+  pmMaxCombo: "最大コンボ",
+  pmShockHits: "ショックアロー接触",
   aiGenBtn: "AIで譜面作成",
   aiModalTitle: "AIで譜面を作成",
   aiModalDesc:
@@ -552,6 +576,18 @@ const en: Strings = {
   addMeasureTitle: "Append an empty measure at the end",
   metronomeTitle: "Metronome (quarter-note ticks)",
   trailTitle: "Foot trails (faster moves leave longer trails)",
+  playModeTitle: "Play mode (trace the chart with your fingers)",
+  pmHint: "Tap the 4-way pad below (arrow keys on PC). Hit when the arrow overlaps the receptors",
+  pmStart: "Tap to start",
+  pmOffsetLabel: "Timing offset",
+  pmCalibrate: "Auto adjust",
+  pmCalGuide: (n) => `Tap along with the metronome (${n}/8)`,
+  pmCalCancel: "Cancel",
+  pmWideLabel: "Relaxed timing (for touch devices)",
+  pmRetry: "Retry",
+  pmClose: "Close",
+  pmMaxCombo: "Max combo",
+  pmShockHits: "Shock arrows hit",
   aiGenBtn: "Build with AI",
   aiModalTitle: "Build a chart with AI",
   aiModalDesc:
@@ -756,6 +792,18 @@ const ko: Strings = {
   addMeasureTitle: "끝에 빈 마디를 1개 추가",
   metronomeTitle: "메트로놈 (4분 틱 사운드)",
   trailTitle: "발 궤적 (빠른 움직임일수록 길게 늘어남)",
+  playModeTitle: "플레이 모드 (손가락으로 채보를 따라 밟기)",
+  pmHint: "아래 4분할 패드를 탭 (PC는 방향키). 화살표가 판정선에 겹치는 순간 밟자",
+  pmStart: "탭하여 시작",
+  pmOffsetLabel: "타이밍 보정",
+  pmCalibrate: "자동 조정",
+  pmCalGuide: (n) => `메트로놈에 맞춰 탭 (${n}/8)`,
+  pmCalCancel: "취소",
+  pmWideLabel: "판정 완화 (터치 기기용)",
+  pmRetry: "다시 하기",
+  pmClose: "닫기",
+  pmMaxCombo: "최대 콤보",
+  pmShockHits: "쇼크 애로우 접촉",
   aiGenBtn: "AI 채보 생성",
   aiModalTitle: "AI로 채보 만들기",
   aiModalDesc:

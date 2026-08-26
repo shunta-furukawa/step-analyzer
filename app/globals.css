@@ -2047,6 +2047,341 @@ input[type="range"]:focus {
   box-shadow: none;
 }
 
+/* ===== プレイモード ===== */
+
+/* 入力レイヤー: 下ペーン全体を透明な4分割 (対角線区切り) で覆う。
+   足アニメの上に重なり、見た目はタップ時のフラッシュのみ */
+.pm-pad {
+  position: fixed;
+  top: 58dvh;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 110;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.pm-zone {
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.pm-zone-0 { clip-path: polygon(0% 0%, 48% 48%, 48% 52%, 0% 100%); }
+.pm-zone-1 { clip-path: polygon(0% 100%, 48% 52%, 52% 52%, 100% 100%); }
+.pm-zone-2 { clip-path: polygon(0% 0%, 100% 0%, 52% 48%, 48% 48%); }
+.pm-zone-3 { clip-path: polygon(100% 0%, 52% 48%, 52% 52%, 100% 100%); }
+
+.pm-zone.flash {
+  animation: pm-zone-flash 0.18s ease-out;
+}
+
+@keyframes pm-zone-flash {
+  0% { background: rgba(255, 212, 0, 0.4); }
+  100% { background: transparent; }
+}
+
+/* 判定文字: サイトロゴと同じ「白抜き+黒アウトライン+ベタ押し出し」。
+   判定ごとに文字色と押し出し色を変える */
+.pm-judgment,
+.pm-count,
+.pm-combo,
+.pm-logo-text,
+.pm-grade {
+  font-family: var(--font-title), "Arial Black", sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  line-height: 1;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.pm-judgment {
+  position: absolute;
+  left: 50%;
+  top: 172px;
+  z-index: 6;
+  font-size: clamp(24px, 6.4vw, 44px);
+  animation: pm-judge-pop 0.5s ease-out forwards;
+}
+
+@keyframes pm-judge-pop {
+  0% { transform: translateX(-50%) scale(1.55); opacity: 0; }
+  16% { transform: translateX(-50%) scale(1); opacity: 1; }
+  72% { transform: translateX(-50%) scale(1); opacity: 1; }
+  100% { transform: translateX(-50%) scale(0.9); opacity: 0; }
+}
+
+.pm-j-marvelous {
+  color: #fff;
+  text-shadow:
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    -2px 0 0 var(--ink), 2px 0 0 var(--ink),
+    0 -2px 0 var(--ink), 0 2px 0 var(--ink),
+    3px 3px 0 #ffd400, 4px 4px 0 #ffd400, 5px 5px 0 #ffd400,
+    7px 7px 0 var(--ink);
+}
+
+.pm-j-perfect {
+  color: #ffe27a;
+  text-shadow:
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    -2px 0 0 var(--ink), 2px 0 0 var(--ink),
+    0 -2px 0 var(--ink), 0 2px 0 var(--ink),
+    3px 3px 0 #ff7ab8, 4px 4px 0 #ff7ab8, 5px 5px 0 #ff7ab8,
+    7px 7px 0 var(--ink);
+}
+
+.pm-j-great {
+  color: #a8ffd2;
+  text-shadow:
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    -2px 0 0 var(--ink), 2px 0 0 var(--ink),
+    0 -2px 0 var(--ink), 0 2px 0 var(--ink),
+    3px 3px 0 #00b57f, 4px 4px 0 #00b57f, 5px 5px 0 #00b57f,
+    7px 7px 0 var(--ink);
+}
+
+.pm-j-good {
+  color: #a9c6ff;
+  text-shadow:
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    -2px 0 0 var(--ink), 2px 0 0 var(--ink),
+    0 -2px 0 var(--ink), 0 2px 0 var(--ink),
+    3px 3px 0 #3e6fd8, 4px 4px 0 #3e6fd8, 5px 5px 0 #3e6fd8,
+    7px 7px 0 var(--ink);
+}
+
+.pm-j-miss {
+  color: #c7c9d4;
+  text-shadow:
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    -2px 0 0 var(--ink), 2px 0 0 var(--ink),
+    0 -2px 0 var(--ink), 0 2px 0 var(--ink),
+    3px 3px 0 #e0455e, 4px 4px 0 #e0455e, 5px 5px 0 #e0455e,
+    7px 7px 0 var(--ink);
+}
+
+.pm-combo {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 236px;
+  z-index: 6;
+  font-size: 30px;
+  color: #fff;
+  text-shadow:
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    4px 4px 0 rgba(0, 0, 0, 0.55);
+  animation: pm-combo-pulse 0.22s ease-out;
+}
+
+.pm-combo-word {
+  font-size: 0.62em;
+  color: #ffd400;
+}
+
+@keyframes pm-combo-pulse {
+  0% { transform: translateX(-50%) scale(1.28); }
+  100% { transform: translateX(-50%) scale(1); }
+}
+
+/* カウントイン (4→1) */
+.pm-count {
+  position: absolute;
+  left: 50%;
+  top: 34%;
+  z-index: 6;
+  font-size: clamp(90px, 22vw, 150px);
+  color: #fff;
+  text-shadow:
+    -3px -3px 0 var(--ink), 3px -3px 0 var(--ink),
+    -3px 3px 0 var(--ink), 3px 3px 0 var(--ink),
+    5px 5px 0 #ffd400, 7px 7px 0 #ffd400,
+    10px 10px 0 var(--ink);
+  animation: pm-count-pop 0.4s ease-out;
+}
+
+@keyframes pm-count-pop {
+  0% { transform: translateX(-50%) scale(1.6); opacity: 0.2; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+/* 開始前・リザルトの全画面オーバーレイ */
+.pm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  background: rgba(13, 15, 20, 0.96);
+  color: #e6e9f5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+.pm-logo-text {
+  font-size: clamp(40px, 9vw, 60px);
+  color: #fff;
+  pointer-events: none;
+  text-shadow:
+    -2px -2px 0 var(--ink), 2px -2px 0 var(--ink),
+    -2px 2px 0 var(--ink), 2px 2px 0 var(--ink),
+    3px 3px 0 #ffd400, 4px 4px 0 #ffd400, 5px 5px 0 #ffd400,
+    7px 7px 0 var(--ink);
+}
+
+.pm-song {
+  font-size: 17px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.pm-desc {
+  font-size: 13px;
+  color: #aab0c0;
+  max-width: 420px;
+  line-height: 1.7;
+}
+
+.pm-start {
+  background: #ffd400;
+  color: var(--ink);
+  border: 3px solid var(--ink);
+  box-shadow: 0 5px 0 var(--ink);
+  font-size: 19px;
+  font-weight: 900;
+  padding: 14px 36px;
+}
+
+.pm-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.pm-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.pm-setting-row .secondary {
+  padding: 5px 12px;
+}
+
+.pm-offset-val {
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  min-width: 64px;
+  color: var(--mint);
+}
+
+.pm-cal-dots {
+  display: flex;
+  gap: 10px;
+}
+
+.pm-cal-dots span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid #5a6390;
+}
+
+.pm-cal-dots span.on {
+  background: var(--mint);
+  border-color: var(--mint);
+}
+
+/* リザルト */
+.pm-grade {
+  font-size: clamp(84px, 20vw, 130px);
+  color: #fff;
+  text-shadow:
+    -3px -3px 0 var(--ink), 3px -3px 0 var(--ink),
+    -3px 3px 0 var(--ink), 3px 3px 0 var(--ink),
+    5px 5px 0 #ffd400, 7px 7px 0 #ffd400, 9px 9px 0 #ffd400,
+    12px 12px 0 var(--ink);
+  animation: pm-count-pop 0.5s ease-out;
+}
+
+.pm-score {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pm-score-num {
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-size: 38px;
+  color: var(--mint);
+  letter-spacing: 0.05em;
+}
+
+.pm-score-ex {
+  font-size: 13px;
+  color: #aab0c0;
+}
+
+.pm-counts {
+  width: min(82vw, 340px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pm-count-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 4px;
+}
+
+.pm-count-row .pm-count-label {
+  font-family: var(--font-title), "Arial Black", sans-serif;
+  font-size: 15px;
+  letter-spacing: 0.05em;
+}
+
+/* リザルト内訳の判定色は文字色だけ使う (押し出しは大きすぎるため) */
+.pm-count-row.pm-j-marvelous,
+.pm-count-row.pm-j-perfect,
+.pm-count-row.pm-j-great,
+.pm-count-row.pm-j-good,
+.pm-count-row.pm-j-miss {
+  text-shadow: none;
+}
+
+.pm-count-row .pm-count-num {
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-size: 20px;
+  color: #fff;
+}
+
+.pm-result-btns {
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+}
+
 /* ===== 広い画面 ===== */
 
 @media (min-width: 560px) {
