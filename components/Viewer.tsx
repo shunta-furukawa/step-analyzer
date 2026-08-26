@@ -916,6 +916,40 @@ export default function Viewer({
   // モードを抜けたらキャリブレーションのAudioContextを確実に破棄
   useEffect(() => () => stopPmCal(), [stopPmCal]);
 
+  // プレイモード中の「戻る」対策。iOS/Androidの画面端からの戻るスワイプは
+  // touch-actionでは無効化できず、発動すると前のページへ遷移→復帰で
+  // 強制リロード (一瞬白画面) になる。モードに入る際に同一URLの履歴を
+  // 1枚積んでおくと、戻るスワイプは同一ドキュメント内のpopstateで
+  // 受け止められ、ページ遷移が起きない。プレイ中は履歴を積み直して
+  // 続行し、開始前/リザルト中の「戻る」はモードを閉じる操作として扱う
+  useEffect(() => {
+    if (!pm) return;
+    try {
+      history.pushState({ saPm: 1 }, "");
+    } catch {
+      /* noop */
+    }
+    const onPop = () => {
+      if (pmRef.current) {
+        try {
+          history.pushState({ saPm: 1 }, "");
+        } catch {
+          /* noop */
+        }
+      } else {
+        // イントロ・リザルト画面での戻る = モード終了
+        stopPmCal();
+        setPm(false);
+        setPmStarted(false);
+        setPmResult(null);
+        setPlaying(false);
+        judgeRef.current = null;
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [pm, stopPmCal]);
+
   // fs/プレイモード中は背面のスクロールを止め、引っ張って更新
   // (pull-to-refresh) やオーバースクロールも無効化する。
   // プレイ中の連打で下方向のドラッグが混ざるとページが再読み込み

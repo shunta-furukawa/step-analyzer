@@ -13,19 +13,27 @@ function makeRng(seed: number): () => number {
   };
 }
 
+// 一次ローパス係数のサンプルレート補正 (44.1kHzで調整した係数を
+// 他のsrでも同じカットオフ周波数になるよう変換する)
+function adjCoef(a: number, sr: number): number {
+  return 1 - Math.pow(1 - a, 44100 / sr);
+}
+
 // 拍手っぽい中域ノイズバースト (一次ローパス2本の差分で簡易バンドパス)
 function renderClapSamples(gain: number, sr: number): Float32Array {
   const len = Math.floor(sr * 0.09);
   const out = new Float32Array(len);
   const rand = makeRng(20240808);
+  const a1 = adjCoef(0.35, sr);
+  const a2 = adjCoef(0.06, sr);
   let lp1 = 0;
   let lp2 = 0;
   for (let i = 0; i < len; i++) {
     const t = i / len;
     const burst = t < 0.02 || (t > 0.03 && t < 0.045) ? 1.6 : 1;
     const x = rand() * Math.pow(1 - t, 2.2) * burst;
-    lp1 += 0.35 * (x - lp1);
-    lp2 += 0.06 * (x - lp2);
+    lp1 += a1 * (x - lp1);
+    lp2 += a2 * (x - lp2);
     out[i] = (lp1 - lp2) * 2.2 * gain;
   }
   return out;
@@ -36,14 +44,16 @@ function renderStompSamples(gain: number, sr: number): Float32Array {
   const len = Math.floor(sr * 0.12);
   const out = new Float32Array(len);
   const rand = makeRng(20250809);
+  const a1 = adjCoef(0.09, sr);
+  const a2 = adjCoef(0.02, sr);
   let lp1 = 0;
   let lp2 = 0;
   for (let i = 0; i < len; i++) {
     const t = i / len;
     const x = rand() * Math.pow(1 - t, 3.2);
     // カットオフを低めに: こもった「ドッ」という踏み音
-    lp1 += 0.09 * (x - lp1);
-    lp2 += 0.02 * (x - lp2);
+    lp1 += a1 * (x - lp1);
+    lp2 += a2 * (x - lp2);
     // 立ち上がりに少しだけトーンを足して芯を出す
     const tone = Math.sin((i / sr) * 2 * Math.PI * 110) * Math.pow(1 - t, 6) * 0.35;
     out[i] = ((lp1 - lp2) * 3.4 + tone) * gain;
@@ -96,9 +106,9 @@ export function renderClapTrackSamples(
   accents: boolean[],
   durationSec: number,
   ghostTimes: number[] = [],
-  metroTimes: number[] = []
+  metroTimes: number[] = [],
+  sr = 44100
 ): { samples: Float32Array; sr: number } {
-  const sr = 44100;
   const len = Math.max(sr, Math.ceil((durationSec + 0.6) * sr));
   const mix = new Float32Array(len);
   const normal = renderClapSamples(0.6, sr);
@@ -135,12 +145,16 @@ export function buildClapTrackUrl(
   ghostTimes: number[] = [],
   metroTimes: number[] = []
 ): string {
+  // <audio>再生用は22.05kHzで生成する。クラップ/ティックの帯域には十分で、
+  // 曲全体をメモリ上に持つWAV Blob+デコーダのメモリを半分にできる
+  // (長い曲のスロー再生でモバイルのタブがメモリ不足で落ちるのを防ぐ)
   const { samples: mix, sr } = renderClapTrackSamples(
     eventTimes,
     accents,
     durationSec,
     ghostTimes,
-    metroTimes
+    metroTimes,
+    22050
   );
   const len = mix.length;
 
