@@ -1077,6 +1077,7 @@ export default function Viewer({
     }
     let raf = 0;
     let last = performance.now();
+    let lastCut = -1; // --fs-cutの前回書き込み値 (量子化済みpx)
     const tick = (now: number) => {
       const dt = (now - last) / 1000;
       last = now;
@@ -1147,11 +1148,15 @@ export default function Viewer({
           // GPU合成されるtransformで小数px単位の追従をする (目の疲れ対策)
           const offset = beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y;
           inner.style.transform = `translate3d(0, ${-offset}px, 0)`;
-          // フリーズバーを受け皿の中心 (判定線) で消費させるための現在位置
-          inner.style.setProperty(
-            "--fs-cut",
-            `${beatRef.current * pxPerBeat + noteSize / 2}px`
-          );
+          // フリーズバーを受け皿の中心 (判定線) で消費させるための現在位置。
+          // CSS変数の毎フレーム更新は依存する全フリーズバーの再描画を
+          // 誘発するため、16px単位に量子化して書き込み頻度を下げる
+          // (毎フレーム更新し続けるとiOS SafariのGPUメモリを圧迫してタブが落ちる)
+          const cut = Math.floor((beatRef.current * pxPerBeat + noteSize / 2) / 16) * 16;
+          if (cut !== lastCut) {
+            lastCut = cut;
+            inner.style.setProperty("--fs-cut", `${cut}px`);
+          }
           if (el.scrollTop !== 0) el.scrollTop = 0;
           // transformではscrollイベントが出ないので、仮想化の範囲もここで更新
           const a = offset / pxPerBeat - 8;
@@ -1177,20 +1182,27 @@ export default function Viewer({
     return () => {
       cancelAnimationFrame(raf);
       if (track) track.pause();
-      // transformスクロールを解除し、通常のスクロール位置に引き継ぐ
-      const inner = chartInnerRef.current;
-      if (inner && inner.style.transform) {
-        inner.style.transform = "";
-        inner.style.removeProperty("--fs-cut");
-        const el = scrollRef.current;
-        if (el)
-          el.scrollTop = Math.max(
-            0,
-            beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y
-          );
-      }
+      // fs/プレイモード中の一時停止ではtransformを保持する (heightが
+      // ないためscrollTopでは位置を表せない)。モードを抜けるときの
+      // 通常スクロールへの引き継ぎは下の専用effectで行う
     };
   }, [playing, chart, timeline, speed, pxPerBeat, fs, pm, noteSize, muted, prepareClapTrack]);
+
+  // fs/プレイモードを抜けたらtransform追従を解除し、通常スクロールへ引き継ぐ
+  useEffect(() => {
+    if (fs || pm) return;
+    const inner = chartInnerRef.current;
+    if (inner && inner.style.transform) {
+      inner.style.transform = "";
+      inner.style.removeProperty("--fs-cut");
+      const el = scrollRef.current;
+      if (el)
+        el.scrollTop = Math.max(
+          0,
+          beatRef.current * pxPerBeat + noteSize / 2 - RECEPTOR_Y
+        );
+    }
+  }, [fs, pm, pxPerBeat, noteSize]);
 
   // 仮想化: スクロール位置から描画対象のビート範囲を更新
   useEffect(() => {
@@ -1224,11 +1236,27 @@ export default function Viewer({
     const ev = chart.events[current];
     if (!ev) return;
     const el = scrollRef.current;
+    if (fs || pm) {
+      // fs/プレイモードはtransform追従 (innerに明示heightがなく
+      // scrollTopで位置を表せないため)。仮想化ウィンドウも合わせる
+      const inner = chartInnerRef.current;
+      const offset = ev.row.beat * pxPerBeat + noteSize / 2 - RECEPTOR_Y;
+      if (inner) {
+        inner.style.transform = `translate3d(0, ${-offset}px, 0)`;
+        inner.style.setProperty(
+          "--fs-cut",
+          `${ev.row.beat * pxPerBeat + noteSize / 2}px`
+        );
+      }
+      const a = offset / pxPerBeat - 8;
+      const b2 = (offset + el.clientHeight) / pxPerBeat + 8;
+      setViewBeats((v) =>
+        Math.abs(v.a - a) > 2 || Math.abs(v.b - b2) > 2 ? { a, b: b2 } : v
+      );
+      return;
+    }
     el.scrollTo({
-      top:
-        fs || pm
-          ? ev.row.beat * pxPerBeat + noteSize / 2 - RECEPTOR_Y
-          : ev.row.beat * pxPerBeat - el.clientHeight / 2 + noteSize,
+      top: ev.row.beat * pxPerBeat - el.clientHeight / 2 + noteSize,
       behavior: "smooth",
     });
   }, [current, chart, playing, editMode, pxPerBeat, noteSize, fs, pm]);
@@ -2697,7 +2725,12 @@ export default function Viewer({
             <div
               className="chart-inner"
               ref={chartInnerRef}
-              style={{ width: laneW * 4, height: totalH }}
+              // fs/プレイモード中は明示heightを外す: transformで動かす
+              // 合成レイヤーの大きさが譜面全体 (数万px) ではなく描画中の
+              // 子要素の範囲だけになり、長い譜面でGPUのタイルメモリが
+              // 膨らんでモバイルのタブが落ちるのを防ぐ (スクロールは
+              // scrollTop=0固定のtransform追従なのでheightは不要)
+              style={{ width: laneW * 4, height: fs || pm ? undefined : totalH }}
             >
               {playing && !fs && <div className="playhead" ref={playheadRef} />}
               {/* 体の向きの背景バンド: ノーツi-1→ノーツi の領域を
@@ -2901,9 +2934,10 @@ export default function Viewer({
                     top: s.start * pxPerBeat + noteSize / 2,
                     width: noteSize - 12,
                     height: (s.end - s.start) * pxPerBeat,
-                    // fs再生中は判定線より上を削って「消費されていく」見た目に。
+                    // fs/プレイモード再生中は判定線より上を削って
+                    // 「消費されていく」見た目に。
                     // --fs-cut未設定時はcalcが大きな負値になりクリップ無効
-                    ...(fs
+                    ...(fs || pm
                       ? {
                           clipPath: `inset(calc(var(--fs-cut, -99999px) - ${
                             s.start * pxPerBeat + noteSize / 2
