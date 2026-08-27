@@ -102,17 +102,36 @@ export function gradeOf(score: number): string {
 
 /**
  * タップ位置から踏むパネルを解釈する。基本は4分割 (対角線区切り) だが、
- * 境界付近 (対角線から±約24°) の曖昧なタップは「いま判定窓内に踏める
- * ノーツがあるパネル」を優先して解釈を広げる。指の位置の厳密さを
- * 要求しないための緩和で、明確に別方向のタップはそのまま。
- * dx/dyはパッド中心からのオフセット。
+ * 指の位置の厳密さを要求しないための緩和が2段ある:
+ * - 中央付近 (halfSizeの35%以内) は方向を問わず「いま判定窓内に踏める
+ *   ノーツがあるパネル」を幾何的に近い順で拾う。逆の手で中央を少し
+ *   跨いでしまったタップも意図どおりに解釈される
+ * - 対角境界付近 (±約24°) の曖昧なタップは、踏めるノーツのある側へ
+ *   解釈を広げる
+ * 明確に別方向のタップ・踏めるノーツがない場合は幾何どおり。
+ * dx/dyはパッド中心からのオフセット、halfSizeはパッドの短辺の半分。
  */
 export function resolveTapPanel(
   dx: number,
   dy: number,
-  hasPending: (panel: number) => boolean
+  hasPending: (panel: number) => boolean,
+  halfSize?: number
 ): number {
   const primary = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 0 : 3) : dy < 0 ? 2 : 1;
+  // 中央ゾーン: どの方向のノーツでも、タップの寄り順に拾う
+  if (halfSize && Math.hypot(dx, dy) < halfSize * 0.35) {
+    const dirs: [number, number][] = [
+      [-1, 0], // 0 = ←
+      [0, 1], // 1 = ↓ (画面座標は下が正)
+      [0, -1], // 2 = ↑
+      [1, 0], // 3 = →
+    ];
+    const order = [0, 1, 2, 3]
+      .map((p) => ({ p, score: dx * dirs[p][0] + dy * dirs[p][1] }))
+      .sort((a, b) => b.score - a.score);
+    for (const { p } of order) if (hasPending(p)) return p;
+    return primary;
+  }
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
   const ratio = Math.min(ax, ay) / Math.max(ax, ay, 1e-6);

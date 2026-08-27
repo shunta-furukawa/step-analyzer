@@ -920,7 +920,7 @@ export default function Viewer({
   // パッドからは座標 {dx,dy} で渡され、境界付近の曖昧なタップは
   // いま判定窓内にノーツがあるパネルへ解釈を広げる (resolveTapPanel)
   const pmTap = useCallback(
-    (input: number | { dx: number; dy: number }) => {
+    (input: number | { dx: number; dy: number; halfSize: number }) => {
       if (!pmRef.current || !judgeRef.current) return;
       const judge = judgeRef.current;
       const el = clapTrackRef.current?.el;
@@ -932,7 +932,12 @@ export default function Viewer({
       const panel =
         typeof input === "number"
           ? input
-          : resolveTapPanel(input.dx, input.dy, (p) => judge.hasPending(p, adj));
+          : resolveTapPanel(
+              input.dx,
+              input.dy,
+              (p) => judge.hasPending(p, adj),
+              input.halfSize
+            );
       setPmZoneFlash((z) => {
         const n = [...z];
         n[panel]++;
@@ -3190,7 +3195,7 @@ export default function Viewer({
                   const r = e.currentTarget.getBoundingClientRect();
                   const dx = e.clientX - (r.left + r.width / 2);
                   const dy = e.clientY - (r.top + r.height / 2);
-                  pmTap({ dx, dy });
+                  pmTap({ dx, dy, halfSize: Math.min(r.width, r.height) / 2 });
                 }}
               >
                 {[0, 1, 2, 3].map((p) => (
