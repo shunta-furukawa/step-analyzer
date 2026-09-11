@@ -31,6 +31,8 @@ export interface FootScene {
   setProps(p: FootSceneProps, nowMs?: number): void;
   /** 毎フレーム呼ぶ (トゥイーンを進めて描画する) */
   frame(nowMs?: number): void;
+  /** Seekable video frame: independent of previous calls and wall-clock time. */
+  renderAt(from: FootSceneProps, to: FootSceneProps, progress: number, nowMs: number, hitAgeMs: number): void;
   /** 足の軌跡 (トレイル) 表示の切り替え */
   setTrail(on: boolean): void;
   dispose(): void;
@@ -689,6 +691,32 @@ export function createFootScene(): FootScene | null {
     },
     setProps,
     frame,
+    renderAt(from, to, progress, nowMs, hitAgeMs) {
+      // Reuse the exact camera, meshes, pose mapping and easing of live playback.
+      // Reconstruct both tween endpoints so backwards seeks and offline encoding
+      // never inherit a pose, flash or hop from the previously rendered frame.
+      props = to;
+      initialized = true;
+      lastStepKey = to.stepKey;
+      const a = poseOf(from);
+      const b = poseOf(to);
+      const t = Math.max(0, Math.min(1, progress));
+      for (const foot of ["L", "R"] as const) {
+        const rig = feet[foot];
+        const key = foot === "L" ? "l" : "r";
+        rig.from = { x: gx2wx(a[`${key}x`]), z: gy2wz(a[`${key}y`]), rot: a[`${key}Rot`], lift: from.liftedFoot === foot ? 0.32 : 0 };
+        rig.target = { x: gx2wx(b[`${key}x`]), z: gy2wz(b[`${key}y`]), rot: b[`${key}Rot`], lift: to.liftedFoot === foot ? 0.32 : 0 };
+        rig.tweenDur = 1;
+        rig.tweenT0 = nowMs - t;
+        rig.tweenMoves = Math.hypot(rig.target.x - rig.from.x, rig.target.z - rig.from.z) > 0.05;
+        const stepped = to.stepping.includes(to[foot === "L" ? "leftPos" : "rightPos"]) && to.feet.includes(foot);
+        rig.hopT0 = !rig.tweenMoves && stepped && hitAgeMs >= 0 && hitAgeMs < HOP_MS ? nowMs - hitAgeMs : -1;
+      }
+      trailOn = false;
+      trails.L.mesh.visible = trails.R.mesh.visible = false;
+      for (let p = 0; p < panels.length; p++) panels[p].flashMat.opacity = to.stepping.includes(p) ? 0.4 : 0;
+      frame(nowMs);
+    },
     setTrail(on: boolean) {
       if (on === trailOn) return;
       trailOn = on;
@@ -705,7 +733,10 @@ export function createFootScene(): FootScene | null {
         if (obj instanceof THREE.Mesh) {
           obj.geometry.dispose();
           const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-          for (const m of mats) m.dispose();
+          for (const m of mats) {
+            for (const value of Object.values(m)) if (value instanceof THREE.Texture) value.dispose();
+            m.dispose();
+          }
         }
       });
     },
