@@ -2523,3 +2523,27 @@ input[type="range"]:focus {
   opacity: 0.85;
   margin: 2px 0 6px;
 }
+
+
+/* A bounded article player; chart scrolling stays inside the chart lane. */
+body:has(.embed-container) {
+  background: var(--ink);
+}
+.embed-container {
+  padding: 8px;
+  max-width: 1100px;
+}
+.embed-container .head-card { margin-bottom: 8px; }
+.embed-container .stats,
+.embed-container .edit-pen,
+.embed-container .bpm-caret { display: none; }
+.embed-container .title-btn:disabled,
+.embed-container .bpm-chip:disabled,
+.embed-container .diff-chip:disabled { opacity: 1; cursor: default; }
+.embed-container .chart-scroll { height: 440px; }
+.embed-container .viewer-layout { gap: 6px; }
+.embed-container .side-pane { position: static; }
+.embed-container .controls { flex-wrap: wrap; }
+.embed-container .hl-comment-input { width: 100%; min-width: 0; }
+.embed-footer { padding: 12px 0 4px; font-size: 14px; }
+.embed-footer a { color: var(--paper); }
