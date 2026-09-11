@@ -46,3 +46,32 @@ npm run build  # プロダクションビルド
 Next.js (App Router) 製。OGP画像は `/og` ルートで `next/og` (satori) により動的生成しています。日本語タイトルはGoogle Fontsからグリフサブセットを取得して描画します(取得失敗時はASCIIのみ)。
 
 デプロイはVercelを想定していますが、Node.jsが動く環境ならどこでも動きます。本番URLを `NEXT_PUBLIC_SITE_URL` に設定するとOGPの絶対URLが正しくなります。
+
+
+## 記事への埋め込み
+
+共有URLのパスを `/embed` に変えると記事用プレイヤーになる。
+
+```html
+<iframe
+  src="https://step-analyzer-beta.vercel.app/embed?n=1000010000100001&b=150"
+  title="踏み順の可視化"
+  width="100%" height="680" loading="lazy"
+  sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+></iframe>
+```
+
+通常の共有URLと同じ譜面パラメータを使用できる（圧縮 `d`、足指定、BPM変化、停止、
+変形、注目箇所・コメントを含む）。`/?embed=1&n=...` も同じ表示。
+ヘッダー・編集メニュー・出力・ゲームモードを省き、再生、速度変更、コマ送り、
+譜面タップ、足の3D表示（WebGL非対応時は2D）を残す。自動再生はしない。
+埋め込み中の操作ではURL履歴を書き換えず、元の共有URLを別タブで開いて編集できる。
+譜面データがない、または圧縮データを読めない場合はサンプルにすり替えずエラーを表示する。
+
+STEPWIREの記事本文では以下の形式を使う（STEPWIRE側の対応も必要）。
+
+```md
+@[step-analyzer](https://step-analyzer-beta.vercel.app/?n=1000010000100001&b=150 "練習用の踏み順")
+```
+
+`/embed` を先にデプロイしてから、STEPWIRE側の埋め込み対応を反映する。

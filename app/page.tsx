@@ -124,6 +124,15 @@ export default async function Page({
 }) {
   const sp = await searchParams;
   const { n } = resolveChart(sp);
+  const embedded = pick(sp.embed) === "1";
+  const standaloneParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(sp)) {
+    if (key !== "embed" && typeof value === "string") standaloneParams.set(key, value);
+  }
+  const standaloneUrl = `/?${standaloneParams.toString()}`;
+  if (embedded && !n) {
+    return <main className="container"><p role="alert">譜面データを読み込めませんでした。</p><a href="/" target="_blank" rel="noopener noreferrer">Step Analyzerを開く</a></main>;
+  }
   const t = pick(sp.t);
   const st = pick(sp.st);
   const df = pick(sp.df);
@@ -144,15 +153,16 @@ export default async function Page({
   const isDefault = !n;
 
   return (
-    <main className="container">
+    <main className={`container${embedded ? " embed-container" : ""}`}>
       {/* SSR時から背景色を適用してチラつきを防ぐ */}
       {bg && <style>{`:root{--page-bg:#${bg1};--page-bg2:#${bg2};}`}</style>}
-      <header className="site-header">
+      {!embedded && <header className="site-header">
         <h1>
           <a href="/">Step Analyzer</a>
         </h1>
-      </header>
+      </header>}
       <Viewer
+        embedded={embedded}
         key={n ?? "default"}
         compact={n ?? SAMPLE_COMPACT}
         title={isDefault ? SAMPLE_TITLE : t}
@@ -170,14 +180,15 @@ export default async function Page({
         transform={tr}
       />
       {/* フッター帯 (文字ぶんの幅) とAI生成ボタンを同じ行に横並び */}
-      <div className="footer-row">
+      {!embedded && <div className="footer-row">
         <footer className="site-footer">
           {STRINGS[lang].footerContact}
           {" · "}
           <a href="/spec">{STRINGS[lang].specLink}</a>
         </footer>
         <AiGen lang={lang} />
-      </div>
+      </div>}
+      {embedded && <footer className="embed-footer"><a href={standaloneUrl} target="_blank" rel="noopener noreferrer">Step Analyzerで開く ↗</a></footer>}
     </main>
   );
 }

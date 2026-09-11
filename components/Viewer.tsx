@@ -183,6 +183,7 @@ export default function Viewer({
   bg: initialBg,
   lang: initialLang,
   transform: initialTransform,
+  embedded = false,
 }: {
   compact: string;
   title?: string;
@@ -198,6 +199,7 @@ export default function Viewer({
   bg?: string;
   lang?: Lang;
   transform?: string;
+  embedded?: boolean;
 }) {
   const [lang, setLang] = useState<Lang>(initialLang ?? "ja");
   const S = STRINGS[lang];
@@ -649,7 +651,7 @@ export default function Viewer({
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
   // (iOS SafariはreplaceStateを10秒に100回超呼ぶとSecurityErrorで落ちる)
   useEffect(() => {
-    if (!dirty) return;
+    if (!dirty || embedded) return;
     let alive = true;
     const timer = setTimeout(() => {
       void buildUrl().then((url) => {
@@ -665,7 +667,7 @@ export default function Viewer({
       alive = false;
       clearTimeout(timer);
     };
-  }, [dirty, buildUrl]);
+  }, [dirty, buildUrl, embedded]);
 
   const clamp = useCallback(
     (i: number) => Math.max(0, Math.min(footsteps.length - 1, i)),
@@ -1345,7 +1347,7 @@ export default function Viewer({
 
   return (
     <div className={fs || pm ? `viewer-fs${pm ? " viewer-pm" : ""}` : undefined}>
-      <div className="bg-picker-wrap">
+      {!embedded && <div className="bg-picker-wrap">
         <div className="lang-wrap">
           <span className="lang-badge">
             {LANGS.find((l) => l.value === lang)?.flag}
@@ -1413,7 +1415,7 @@ export default function Viewer({
             title={S.bgPickerTitleGrad2}
           />
         )}
-      </div>
+      </div>}
       <div className="card head-card">
         <div className="head-row">
           <div style={{ minWidth: 0 }}>
@@ -1487,7 +1489,7 @@ export default function Viewer({
                   </span>
                 </span>
               ) : (
-                <button className="title-btn" onClick={() => setEditingTitle(true)}>
+                <button className="title-btn" disabled={embedded} onClick={() => setEditingTitle(true)}>
                   <span className="title-lines">
                     <span>
                       {title || S.untitled} <span className="edit-pen">✎</span>
@@ -1502,6 +1504,7 @@ export default function Viewer({
                   showTiming ? " open" : ""
                 }`}
                 onClick={() => setShowTiming(!showTiming)}
+                disabled={embedded}
                 title={S.timingPanelTitle}
               >
                 ♩=
@@ -1516,6 +1519,7 @@ export default function Viewer({
               {!editingTitle && (diffCls !== null || diffLvl) && (
                 <button
                   className="diff-chip"
+                  disabled={embedded}
                   onClick={() => setEditingTitle(true)}
                   title={S.titlePlaceholder}
                 >
@@ -1593,7 +1597,7 @@ export default function Viewer({
         </div>
       </div>
 
-      <div className="toolbar">
+      {!embedded && <div className="toolbar">
         <button
           className={editMode ? "" : "secondary"}
           onClick={() => {
@@ -1664,7 +1668,7 @@ export default function Viewer({
         >
           🎥
         </button>
-      </div>
+      </div>}
 
       {editMode && (
         <div className="toolbar edit-toolbar">
@@ -3285,13 +3289,13 @@ export default function Viewer({
                   ◇{ghostSound ? "♪" : "🔇"}
                 </button>
               )}
-              <button
+              {!embedded && <button
                 className="secondary"
                 onClick={enterPm}
                 title={S.playModeTitle}
               >
                 🎮
-              </button>
+              </button>}
               {webglOk && (
                 <button
                   className={footTrail ? "" : "secondary"}
@@ -3301,13 +3305,13 @@ export default function Viewer({
                   🐾
                 </button>
               )}
-              <button
+              {!embedded && <button
                 className="secondary"
                 onClick={enterFs}
                 title={S.fsTitle}
               >
                 ⛶
-              </button>
+              </button>}
             </div>
             <div className="controls nav-controls">
               <button
@@ -3333,6 +3337,7 @@ export default function Viewer({
               </button>
             </div>
             <input
+              aria-label={S.measureLabel((curEvent?.row.measure ?? 0) + 1)}
               type="range"
               min={0}
               max={Math.max(0, footsteps.length - 1)}
@@ -3368,7 +3373,7 @@ export default function Viewer({
                   {hasSofran && (
                     <span className="cur-bpm">♩={+bpmAtBeat(bpms, curEvent.row.beat).toFixed(1)}</span>
                   )}
-                  {!curEvent.shock && curEvent.panels.length > 0 && (
+                  {!embedded && !curEvent.shock && curEvent.panels.length > 0 && (
                     <button
                       className={`hl-btn${
                         highlights.has(tickOf(curEvent.row.beat)) ? " active" : ""
@@ -3407,6 +3412,7 @@ export default function Viewer({
                     <input
                       type="text"
                       className="hl-comment-input"
+                      readOnly={embedded}
                       maxLength={120}
                       value={noteComments.get(tickOf(curEvent.row.beat)) ?? ""}
                       placeholder={S.hlCommentPlaceholder}
@@ -3423,7 +3429,7 @@ export default function Viewer({
                       }}
                     />
                   )}
-                {curEvent.panels.length === 2 && (
+                {!embedded && curEvent.panels.length === 2 && (
                   <div className="override-row">
                     <span className="override-label">{S.stepFootLabel}</span>
                     {(["L", "R"] as const).map((opt) => {
@@ -3472,7 +3478,7 @@ export default function Viewer({
                     )}
                   </div>
                 )}
-                {curEvent.shock && (
+                {!embedded && curEvent.shock && (
                   <div className="override-row">
                     <span className="override-label">{S.handlingLabel}</span>
                     {(
@@ -3497,7 +3503,7 @@ export default function Viewer({
                     )}
                   </div>
                 )}
-                {curEvent.panels.length === 1 && (
+                {!embedded && curEvent.panels.length === 1 && (
                   <div className="override-row">
                     <span className="override-label">{S.stepFootLabel}</span>
                     <button
@@ -3555,7 +3561,7 @@ export default function Viewer({
                 </div>
               </div>
             )}
-            {overrides.size > 0 && (
+            {!embedded && overrides.size > 0 && (
               <div className="override-summary">
                 {S.overrideCount(overrides.size)}
                 <button className="ov-btn" onClick={() => { setOverrides(new Map()); setDirty(true); }}>
