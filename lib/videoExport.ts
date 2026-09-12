@@ -535,6 +535,16 @@ export async function recordChartVideo(
       if (t >= introTotal - 1e-6) countdownTimes.push(t);
     }
   }
+  // 音源なしの書き出しは4つ打ちメトロノームを鳴らす (クラップだけでは
+  // 無音区間でリズムが掴めないため)。アプリ内再生と同じティック音を
+  // クラップと同じ時刻換算で焼き込む。音源ありのときは曲が拍を
+  // 示すので入れない
+  if (!o.audio) {
+    for (let b = 0; b < chart.totalBeats - 1e-9; b++) {
+      const t = songToReal(offsetSec + timeAtBeat(timeline, b));
+      if (t >= introTotal - 1e-6) countdownTimes.push(t);
+    }
+  }
   const { samples: clapSamples, sr: clapSr } = renderClapTrackSamples(
     clapTimes,
     clapAccents,
