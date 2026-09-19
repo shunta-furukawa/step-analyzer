@@ -437,6 +437,9 @@ export default function Viewer({
   // A/B比較のB側インデックス (再生中はtickが拍から更新、停止中はAの拍から導出)
   const [currentBPlay, setCurrentBPlay] = useState(-1);
   const [footIdxBPlay, setFootIdxBPlay] = useState(-1);
+  // B側で選択中のノーツ (タップで選ぶ)。選択中は下の情報パネルと
+  // 足指定ボタンがそのBノーツを対象にする。Aの操作で解除される
+  const [bSel, setBSel] = useState<number | null>(null);
   // fs再生でジャスト済みノーツを即非表示にするための「通過済み」インデックス。
   // currentは再生前も先頭ノーツを指すため、通過判定は別に持つ (-1=未通過)
   const [playedIdx, setPlayedIdx] = useState(-1);
@@ -779,10 +782,16 @@ export default function Viewer({
       const idx = clamp(i);
       setCurrent(idx);
       setFootIdx(idx);
+      setBSel(null); // A側の移動でB側の選択は解除
       if (chart && chart.events[idx]) beatRef.current = chart.events[idx].row.beat;
     },
     [clamp, chart]
   );
+
+  // 再生が始まったらB側の選択は解除 (再生中は拍で追従する)
+  useEffect(() => {
+    if (playing) setBSel(null);
+  }, [playing]);
 
   // クラップトラックの準備 (譜面・タイミング・再生速度が変わったら作り直す)。
   // playbackRateで減速するとクラップ1発ごとの音まで間延びするため、
@@ -1433,22 +1442,33 @@ export default function Viewer({
 
   // ===== A/B比較: B側の現在位置。停止中はAの現在ノーツの拍に追従する =====
   const curBeatA = curEvent?.row.beat ?? 0;
+  const bSelValid = bSel !== null && chartB !== null && bSel < chartB.events.length ? bSel : null;
   const currentB = chartB
     ? playing
       ? currentBPlay
-      : lastIndexAtBeat(chartB, curBeatA)
+      : bSelValid ?? lastIndexAtBeat(chartB, curBeatA)
     : -1;
   const footIdxB = chartB && playing ? footIdxBPlay : currentB;
   const curStepB = currentB >= 0 ? footstepsB[currentB] : undefined;
   const footStepB = (footIdxB >= 0 ? footstepsB[footIdxB] : undefined) ?? curStepB;
   const curEventB = chartB && currentB >= 0 ? chartB.events[currentB] : undefined;
   // 停止中にAのノーツへ移動したとき、Bは「その拍以前の最後のノーツ」に追従する。
-  // 拍が一致しない (Bにはその瞬間ノーツがない) ときはパネルを光らせない
+  // 拍が一致しない (Bにはその瞬間ノーツがない) ときはパネルを光らせない。
+  // B側で直接ノーツを選んでいるときは常にそのノーツを光らせる
   const curEventBLive =
-    curEventB && (playing || Math.abs(curEventB.row.beat - curBeatA) < 1e-6)
+    curEventB &&
+    (playing || bSelValid !== null || Math.abs(curEventB.row.beat - curBeatA) < 1e-6)
       ? curEventB
       : undefined;
-  // B側ノーツのクリック: その拍以前のAのノーツへシークする (Bは編集不可)
+  // B側ノーツのタップ: その拍以前のAのノーツへシークしつつ、Bのそのノーツを
+  // 選択状態にする (下の情報パネル・足指定ボタンがBを対象にする)
+  const selectB = (i: number) => {
+    if (!chartB) return;
+    setPlaying(false);
+    const idx = lastIndexAtBeat(chart, chartB.events[i].row.beat);
+    if (idx >= 0) go(idx);
+    setBSel(i);
+  };
   const seekToBeat = (beat: number) => {
     const idx = lastIndexAtBeat(chart, beat);
     if (idx < 0) return;
@@ -1461,16 +1481,25 @@ export default function Viewer({
       ? timeAtBeat(timeline, chartB.events[trailIdxB].row.beat) -
         timeAtBeat(timeline, chartB.events[trailIdxB - 1].row.beat)
       : null;
-  const curTick = curEvent ? tickOf(curEvent.row.beat) : null;
-  const curOverride = curTick !== null ? overrides.get(curTick) : undefined;
   const facing = curStep?.facing ?? 0;
+
+  // 情報パネル・足指定の対象。B側のノーツを選択中はBを対象にする
+  const infoSide: "A" | "B" = bSelValid !== null && curEventB && curStepB ? "B" : "A";
+  const infoEvent = infoSide === "B" ? curEventB : curEvent;
+  const infoStep = infoSide === "B" ? curStepB : curStep;
+  const infoChart = infoSide === "B" ? chartB! : chart;
+  const infoFacing = infoStep?.facing ?? 0;
+  const curTick = infoEvent ? tickOf(infoEvent.row.beat) : null;
+  const curOverride =
+    curTick !== null ? (infoSide === "B" ? overridesB : overrides).get(curTick) : undefined;
 
   const setOverride = (foot: FootOverride | null) => {
     if (curTick === null) return;
-    const next = new Map(overrides);
+    const next = new Map(infoSide === "B" ? overridesB : overrides);
     if (foot === null) next.delete(curTick);
     else next.set(curTick, foot);
-    setOverrides(next);
+    if (infoSide === "B") setOverridesB(next);
+    else setOverrides(next);
     setDirty(true);
   };
 
@@ -3534,7 +3563,7 @@ export default function Viewer({
                           width: noteSize,
                           height: noteSize,
                         }}
-                        onClick={() => seekToBeat(ev.row.beat)}
+                        onClick={() => selectB(i)}
                       >
                         {isGhost ? (
                           <svg
@@ -3838,40 +3867,46 @@ export default function Viewer({
                 go(Number(e.target.value));
               }}
             />
-            {curEvent && curStep && (
+            {infoEvent && infoStep && (
               <div className="event-info">
                 <div className="event-head">
                   <span className="event-head-main">
-                  {S.measureLabel(curEvent.row.measure + 1)} —{" "}
-                  {curEvent.shock
+                  {/* A/B比較でB側のノーツを選択中は、対象がBだと分かるチップを出す */}
+                  {abMode && (
+                    <span className="ab-chip info-side">
+                      <b>{infoSide}</b>
+                    </span>
+                  )}{" "}
+                  {S.measureLabel(infoEvent.row.measure + 1)} —{" "}
+                  {infoEvent.shock
                     ? S.shockArrow
-                    : curEvent.panels
+                    : infoEvent.panels
                         .map(
                           (p) =>
                             `${["←", "↓", "↑", "→"][p]}${
-                              curStep.feet[p] === "L" ? S.footL : curStep.feet[p] === "R" ? S.footR : ""
+                              infoStep.feet[p] === "L" ? S.footL : infoStep.feet[p] === "R" ? S.footR : ""
                             }`
                         )
                         .join(" ")}
-                  {facing !== 0 && (
+                  {infoFacing !== 0 && (
                     <span className="facing-label">
                       {" "}
-                      {S.facingLabel(facing > 0 ? "R" : "L", Math.abs(facing))}
+                      {S.facingLabel(infoFacing > 0 ? "R" : "L", Math.abs(infoFacing))}
                     </span>
                   )}
                   </span>
                   <span className="event-head-side">
                   {hasSofran && (
-                    <span className="cur-bpm">♩={+bpmAtBeat(bpms, curEvent.row.beat).toFixed(1)}</span>
+                    <span className="cur-bpm">♩={+bpmAtBeat(bpms, infoEvent.row.beat).toFixed(1)}</span>
                   )}
-                  {!embedded && !curEvent.shock && curEvent.panels.length > 0 && (
+                  {!embedded && infoSide === "A" && !infoEvent.shock && infoEvent.panels.length > 0 && (
                     <button
                       className={`hl-btn${
-                        highlights.has(tickOf(curEvent.row.beat)) ? " active" : ""
+                        highlights.has(tickOf(infoEvent.row.beat)) ? " active" : ""
                       }`}
                       title={S.spotlightTitle}
                       onClick={() => {
-                        const tick = tickOf(curEvent.row.beat);
+                        const tick = tickOf(infoEvent.row.beat);
                         setHighlights((prev) => {
                           const next = new Set(prev);
                           if (next.has(tick)) {
@@ -3896,19 +3931,20 @@ export default function Viewer({
                   )}
                   </span>
                 </div>
-                {/* 注目ノーツへのコメント (横長動画の注目シーンで字送り表示する) */}
-                {!curEvent.shock &&
-                  curEvent.panels.length > 0 &&
-                  highlights.has(tickOf(curEvent.row.beat)) && (
+                {/* 注目ノーツへのコメント (横長動画の注目シーンで字送り表示する。A側のみ) */}
+                {infoSide === "A" &&
+                  !infoEvent.shock &&
+                  infoEvent.panels.length > 0 &&
+                  highlights.has(tickOf(infoEvent.row.beat)) && (
                     <input
                       type="text"
                       className="hl-comment-input"
                       readOnly={embedded}
                       maxLength={120}
-                      value={noteComments.get(tickOf(curEvent.row.beat)) ?? ""}
+                      value={noteComments.get(tickOf(infoEvent.row.beat)) ?? ""}
                       placeholder={S.hlCommentPlaceholder}
                       onChange={(e) => {
-                        const tick = tickOf(curEvent.row.beat);
+                        const tick = tickOf(infoEvent.row.beat);
                         const v = e.target.value;
                         setNoteComments((prev) => {
                           const next = new Map(prev);
@@ -3920,11 +3956,11 @@ export default function Viewer({
                       }}
                     />
                   )}
-                {!embedded && curEvent.panels.length === 2 && (
+                {!embedded && infoEvent.panels.length === 2 && (
                   <div className="override-row">
                     <span className="override-label">{S.stepFootLabel}</span>
                     {(["L", "R"] as const).map((opt) => {
-                      const [a, b] = curEvent.panels;
+                      const [a, b] = infoEvent.panels;
                       const arrows = ["←", "↓", "↑", "→"];
                       return (
                         <button
@@ -3944,8 +3980,8 @@ export default function Viewer({
                       );
                     })}
                     {/* 2枚抜き: 隣接する2パネル (横+縦) だけ片足でまとめて踏める */}
-                    {(curEvent.panels[0] === 0 || curEvent.panels[0] === 3) !==
-                      (curEvent.panels[1] === 0 || curEvent.panels[1] === 3) &&
+                    {(infoEvent.panels[0] === 0 || infoEvent.panels[0] === 3) !==
+                      (infoEvent.panels[1] === 0 || infoEvent.panels[1] === 3) &&
                       (["LL", "RR"] as const).map((opt) => (
                         <button
                           key={opt}
@@ -3969,7 +4005,7 @@ export default function Viewer({
                     )}
                   </div>
                 )}
-                {!embedded && curEvent.shock && (
+                {!embedded && infoEvent.shock && (
                   <div className="override-row">
                     <span className="override-label">{S.handlingLabel}</span>
                     {(
@@ -3994,7 +4030,7 @@ export default function Viewer({
                     )}
                   </div>
                 )}
-                {!embedded && curEvent.panels.length === 1 && (
+                {!embedded && infoEvent.panels.length === 1 && (
                   <div className="override-row">
                     <span className="override-label">{S.stepFootLabel}</span>
                     <button
@@ -4017,36 +4053,36 @@ export default function Viewer({
                   </div>
                 )}
                 <div className="tags">
-                  {curStep.shock && (
+                  {infoStep.shock && (
                     <span className="tag shocktag">
-                      {curStep.ghost ? S.tagShockGhost : S.tagShockIgnore}
+                      {infoStep.ghost ? S.tagShockGhost : S.tagShockIgnore}
                     </span>
                   )}
-                  {curStep.ghost && !curStep.shock && (
+                  {infoStep.ghost && !infoStep.shock && (
                     <span className="tag ghostswap">
-                      {chart.holds.some(
+                      {infoChart.holds.some(
                         (h) =>
-                          curEvent.ghostPanels.includes(h.panel) &&
-                          curEvent.row.beat > h.startBeat + 1e-6 &&
-                          curEvent.row.beat <= h.endBeat + 1e-6
+                          infoEvent.ghostPanels.includes(h.panel) &&
+                          infoEvent.row.beat > h.startBeat + 1e-6 &&
+                          infoEvent.row.beat <= h.endBeat + 1e-6
                       )
                         ? S.tagGhostSwap
                         : S.tagGhostReposition}
                     </span>
                   )}
-                  {curStep.stretch && <span className="tag onefoot">{S.tagBracket}</span>}
-                  {curStep.jump && !curStep.oneFootJump && <span className="tag jump">{S.tagJump}</span>}
-                  {curStep.jack && <span className="tag jack">{S.tagJack}</span>}
-                  {curStep.crossover && (
+                  {infoStep.stretch && <span className="tag onefoot">{S.tagBracket}</span>}
+                  {infoStep.jump && !infoStep.oneFootJump && <span className="tag jump">{S.tagJump}</span>}
+                  {infoStep.jack && <span className="tag jack">{S.tagJack}</span>}
+                  {infoStep.crossover && (
                     <span className="tag crossover">{S.tagCrossover}</span>
                   )}
-                  {curStep.doubleStep && (
+                  {infoStep.doubleStep && (
                     <span className="tag ds">{S.tagFootswitch}</span>
                   )}
-                  {curStep.heldFeet.length > 0 && (
+                  {infoStep.heldFeet.length > 0 && (
                     <span className="tag hold">
                       {S.holding}{" "}
-                      {curStep.heldFeet.map((f) => (f === "L" ? S.footL : S.footR)).join("・")}
+                      {infoStep.heldFeet.map((f) => (f === "L" ? S.footL : S.footR)).join("・")}
                     </span>
                   )}
                 </div>
@@ -4054,8 +4090,18 @@ export default function Viewer({
             )}
             {!embedded && overrides.size > 0 && (
               <div className="override-summary">
+                {abMode && <span className="ab-chip info-side"><b>A</b></span>}
                 {S.overrideCount(overrides.size)}
                 <button className="ov-btn" onClick={() => { setOverrides(new Map()); setDirty(true); }}>
+                  {S.clearAll}
+                </button>
+              </div>
+            )}
+            {!embedded && abMode && overridesB.size > 0 && (
+              <div className="override-summary">
+                <span className="ab-chip info-side"><b>B</b></span>
+                {S.overrideCount(overridesB.size)}
+                <button className="ov-btn" onClick={() => { setOverridesB(new Map()); setDirty(true); }}>
                   {S.clearAll}
                 </button>
               </div>

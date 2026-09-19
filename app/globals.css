@@ -2456,6 +2456,13 @@ input[type="range"]:focus {
   letter-spacing: 0.04em;
 }
 
+/* 情報パネル・足指定サマリー内の対象表示 (A/B) */
+.ab-chip.info-side {
+  padding: 1px 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
 .ab-remove {
   margin-left: auto;
   width: 20px;
