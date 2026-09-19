@@ -16,7 +16,7 @@ import {
   type ParsedChart,
 } from "./chart";
 import { drawArrow, drawFootBadge, drawGhostArrow, drawSiteLogo } from "./chartImage";
-import { renderClapTrackSamples } from "./clap";
+import { mixStereoClaps, renderClapTrackSamples } from "./clap";
 import { DIFF_COLORS, drawDiffFoot } from "./difficulty";
 import { createFootScene } from "./footScene";
 import { spotEmoji } from "./spotEmoji";
@@ -118,6 +118,8 @@ export interface IntroCardOptions {
   title: string;
   subtitle: string;
   diff: { cls: number | null; lvl: string } | null;
+  // A/B比較: 渡すと難易度チップを「A ● 13 vs B ● 17」の2枚並びにする
+  diffB?: { cls: number | null; lvl: string } | null;
   bpmLabel: string;
   bgColor: string;
   bgColor2?: string | null;
@@ -183,41 +185,81 @@ function drawIntroCard(
   ctx.strokeStyle = frameColor;
   ctx.lineWidth = frameW;
   ctx.strokeRect(jx - frameW / 2, jy - frameW / 2, jSize + frameW, jSize + frameW);
-  // 難易度チップ (白地にハードシャドウ、ジャケット下辺に重ねる)
-  const cls = o.diff?.cls ?? null;
-  const lvl = o.diff?.lvl ?? "";
-  if (cls !== null || lvl) {
-    ctx.font = `400 ${L ? 78 : 66}px ${titleFont}`;
-    // actualBoundingBoxは計測時のtextBaseline基準 (Safari)。alphabeticで統一
+  // 難易度チップ (白地にハードシャドウ、ジャケット下辺に重ねる)。
+  // A/B比較は「A ● 13  VS  B ● 17」の2枚を並べる (少し小さめ)
+  const AB = o.diffB !== undefined && o.diffB !== null;
+  const chipH = AB ? (L ? 100 : 84) : L ? 124 : 106;
+  const cy0 = jy + jSize - chipH / 2;
+  const fontPx = AB ? (L ? 60 : 50) : L ? 78 : 66;
+  const footSz = AB ? (L ? 70 : 58) : L ? 92 : 78;
+  // チップの幅を測る (tag=A/Bの文字を先頭に付ける)
+  const measureChip = (d: { cls: number | null; lvl: string } | null, tag: string | null) => {
+    ctx.font = `400 ${fontPx}px ${titleFont}`;
     ctx.textBaseline = "alphabetic";
-    const lm = lvl ? ctx.measureText(lvl) : null;
-    const footSize = cls !== null ? (L ? 92 : 78) : 0;
-    const innerW = footSize + (footSize && lm ? 14 : 0) + (lm?.width ?? 0);
-    const chipW2 = innerW + 60;
-    const chipH = L ? 124 : 106;
-    const cx0 = jx + (jSize - chipW2) / 2; // ジャケット中央に重ねる
-    const cy0 = jy + jSize - chipH / 2;
+    const tagW = tag ? ctx.measureText(tag).width + 14 : 0;
+    const lm = d?.lvl ? ctx.measureText(d.lvl) : null;
+    const fw = d?.cls != null ? footSz : 0;
+    return tagW + fw + (fw && lm ? 14 : 0) + (lm?.width ?? 0) + 60;
+  };
+  const drawChip = (
+    d: { cls: number | null; lvl: string } | null,
+    tag: string | null,
+    cx0: number,
+    w: number
+  ) => {
     // チップも直角 (白 + 黒ハードシャドウ + 黒枠)
     ctx.fillStyle = "#17181c";
-    ctx.fillRect(cx0 + 7, cy0 + 7, chipW2, chipH);
+    ctx.fillRect(cx0 + 7, cy0 + 7, w, chipH);
     ctx.fillStyle = "#ffffff";
-    ctx.fillRect(cx0, cy0, chipW2, chipH);
+    ctx.fillRect(cx0, cy0, w, chipH);
     ctx.strokeStyle = "#17181c";
     ctx.lineWidth = 5;
-    ctx.strokeRect(cx0, cy0, chipW2, chipH);
+    ctx.strokeRect(cx0, cy0, w, chipH);
+    ctx.font = `400 ${fontPx}px ${titleFont}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
     let dx = cx0 + 30;
-    if (cls !== null) {
-      drawDiffFoot(ctx, dx, cy0 + (chipH - footSize) / 2, footSize, DIFF_COLORS[cls]);
-      dx += footSize + 14;
+    if (tag) {
+      const tm = ctx.measureText(tag);
+      const asc = tm.actualBoundingBoxAscent || fontPx * 0.7;
+      ctx.fillStyle = "#0aa578";
+      ctx.fillText(tag, dx, cy0 + chipH / 2 + asc / 2);
+      dx += tm.width + 14;
     }
-    if (lm) {
+    if (d?.cls != null) {
+      drawDiffFoot(ctx, dx, cy0 + (chipH - footSz) / 2, footSz, DIFF_COLORS[d.cls]);
+      dx += footSz + 14;
+    }
+    if (d?.lvl) {
+      const lm = ctx.measureText(d.lvl);
       ctx.fillStyle = "#17181c";
-      ctx.textAlign = "left";
-      ctx.textBaseline = "alphabetic";
-      const asc = lm.actualBoundingBoxAscent || 46;
+      const asc = lm.actualBoundingBoxAscent || fontPx * 0.7;
       const desc = lm.actualBoundingBoxDescent || 0;
-      ctx.fillText(lvl, dx, cy0 + chipH / 2 + (asc - desc) / 2);
+      ctx.fillText(d.lvl, dx, cy0 + chipH / 2 + (asc - desc) / 2);
     }
+  };
+  if (AB) {
+    const wA = measureChip(o.diff, "A");
+    const wB = measureChip(o.diffB!, "B");
+    ctx.font = `400 ${fontPx * 0.7}px ${titleFont}`;
+    const vsW = ctx.measureText("VS").width;
+    const gap = 26;
+    const total = wA + gap + vsW + gap + wB;
+    const x0 = jx + (jSize - total) / 2;
+    drawChip(o.diff, "A", x0, wA);
+    // 中央に VS (白抜き+黒縁)
+    ctx.font = `400 ${fontPx * 0.7}px ${titleFont}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "#17181c";
+    ctx.strokeText("VS", x0 + wA + gap, cy0 + chipH / 2);
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("VS", x0 + wA + gap, cy0 + chipH / 2);
+    drawChip(o.diffB!, "B", x0 + wA + gap + vsW + gap, wB);
+  } else if ((o.diff?.cls ?? null) !== null || o.diff?.lvl) {
+    const w = measureChip(o.diff, null);
+    drawChip(o.diff, null, jx + (jSize - w) / 2, w); // ジャケット中央に重ねる
   }
   // 曲名 + アーティスト + BPM (縦=下部中央 / 横=右カラム中央)。
   // タイトルは極太ゴシック+白抜き縁取りで「タイトル感」を出す
@@ -545,28 +587,24 @@ export async function recordChartVideo(
   const judged = chart.events.filter(
     (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
   );
-  // A/B比較のクラップはA∪B (同時刻は1発にまとめ、どちらかがジャンプならアクセント)
-  const clapMap = new Map<number, boolean>();
-  const addClaps = (c: ParsedChart) => {
-    for (const e of c.events) {
-      if (e.panels.length === 0 || e.ghostPanels.length > 0 || e.shock) continue;
-      const t = songToReal(offsetSec + timeAtBeat(timeline, e.row.beat));
-      const key = Math.round(t * 200); // 5ms単位で同一視
-      clapMap.set(key, (clapMap.get(key) ?? false) || e.panels.length >= 2);
-    }
+  // クラップの発音時刻 (譜面ごと)。A/B比較はAを左・Bを右に振ってステレオ合成する
+  const clapsOf = (c: ParsedChart, fs: FootStep[]) => {
+    const j = c.events.filter(
+      (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
+    );
+    return {
+      times: j.map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat))),
+      accents: j.map((e) => e.panels.length >= 2),
+      ghosts: c.events
+        .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && fs[i]?.ghost))
+        .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat))),
+    };
   };
-  addClaps(chart);
-  if (AB) addClaps(o.chartB!);
-  const clapKeys = [...clapMap.keys()].sort((a, b) => a - b);
-  const clapTimes = clapKeys.map((k) => k / 200);
-  const clapAccents = clapKeys.map((k) => clapMap.get(k)!);
-  const ghostOf = (c: ParsedChart, fs: FootStep[]) =>
-    c.events
-      .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && fs[i]?.ghost))
-      .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
-  const ghostTimes = AB
-    ? [...ghostOf(chart, footsteps), ...ghostOf(o.chartB!, o.footstepsB!)]
-    : ghostOf(chart, footsteps);
+  const clapsA = clapsOf(chart, footsteps);
+  const clapsB = AB ? clapsOf(o.chartB!, o.footstepsB!) : null;
+  const clapTimes = clapsA.times;
+  const clapAccents = clapsA.accents;
+  const ghostTimes = clapsA.ghosts;
   // カウントダウン (横のみ): 最初のノーツの3秒前から1秒刻みのティック音。
   // オープニング明けに間に合う分だけ鳴らす
   const firstNoteReal =
@@ -590,13 +628,18 @@ export async function recordChartVideo(
       if (t >= introTotal - 1e-6) countdownTimes.push(t);
     }
   }
-  const { samples: clapSamples, sr: clapSr } = renderClapTrackSamples(
-    clapTimes,
-    clapAccents,
-    totalReal,
-    ghostTimes,
-    countdownTimes
-  );
+  // A/B比較はA・B・共通 (メトロノーム/カウントダウン) を別々に描いてステレオに振る。
+  // 単独は従来どおり1本のモノラル
+  const { samples: clapSamples, sr: clapSr } = clapsB
+    ? renderClapTrackSamples(clapTimes, clapAccents, totalReal, ghostTimes, [])
+    : renderClapTrackSamples(clapTimes, clapAccents, totalReal, ghostTimes, countdownTimes);
+  const stereo = clapsB
+    ? mixStereoClaps(
+        clapSamples,
+        renderClapTrackSamples(clapsB.times, clapsB.accents, totalReal, clapsB.ghosts, []).samples,
+        renderClapTrackSamples([], [], totalReal, [], countdownTimes).samples
+      )
+    : null;
   // 字送りに合わせたデジタル音 (矩形波の短いブリップ) をトラックへ焼き込む。
   // カードの出現時刻は事前に確定しているので、波形に直接書けばズレない
   for (const p of spots) {
@@ -615,8 +658,15 @@ export async function recordChartVideo(
     }
   }
 
-  const clapBuf = actx.createBuffer(1, clapSamples.length, clapSr);
-  clapBuf.copyToChannel(clapSamples as Float32Array<ArrayBuffer>, 0);
+  const clapBuf = stereo
+    ? actx.createBuffer(2, stereo.left.length, clapSr)
+    : actx.createBuffer(1, clapSamples.length, clapSr);
+  if (stereo) {
+    clapBuf.copyToChannel(stereo.left as Float32Array<ArrayBuffer>, 0);
+    clapBuf.copyToChannel(stereo.right as Float32Array<ArrayBuffer>, 1);
+  } else {
+    clapBuf.copyToChannel(clapSamples as Float32Array<ArrayBuffer>, 0);
+  }
   const clapSrc = actx.createBufferSource();
   clapSrc.buffer = clapBuf;
   clapSrc.connect(dest);

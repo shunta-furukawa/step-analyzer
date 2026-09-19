@@ -138,47 +138,101 @@ export function renderClapTrackSamples(
   return { samples: mix, sr };
 }
 
+// A/B比較のステレオ化: 左耳=A・右耳=B に振り分けつつ、反対側にも
+// この割合だけ漏らす (完全に片側だけだと不自然に聞こえるため)
+export const CLAP_BLEED = 0.3;
+
+/** A/B比較のクラップ指定 (右チャンネル側の譜面) */
+export interface ClapSide {
+  eventTimes: number[];
+  accents: boolean[];
+  ghostTimes: number[];
+}
+
+/**
+ * A(左)・B(右)・共通(メトロノーム等)の3本からステレオ2chを合成する。
+ * L = 共通 + A + bleed*B, R = 共通 + B + bleed*A
+ */
+export function mixStereoClaps(
+  a: Float32Array,
+  b: Float32Array,
+  common: Float32Array
+): { left: Float32Array; right: Float32Array } {
+  const len = Math.max(a.length, b.length, common.length);
+  const left = new Float32Array(len);
+  const right = new Float32Array(len);
+  for (let i = 0; i < len; i++) {
+    const va = a[i] ?? 0;
+    const vb = b[i] ?? 0;
+    const vc = common[i] ?? 0;
+    left[i] = vc + va + CLAP_BLEED * vb;
+    right[i] = vc + vb + CLAP_BLEED * va;
+  }
+  return { left, right };
+}
+
 export function buildClapTrackUrl(
   eventTimes: number[],
   accents: boolean[],
   durationSec: number,
   ghostTimes: number[] = [],
-  metroTimes: number[] = []
+  metroTimes: number[] = [],
+  // A/B比較: 渡すとステレオ (左=eventTimes側, 右=right側) で書き出す
+  right?: ClapSide
 ): string {
   // <audio>再生用は22.05kHzで生成する。クラップ/ティックの帯域には十分で、
   // 曲全体をメモリ上に持つWAV Blob+デコーダのメモリを半分にできる
   // (長い曲のスロー再生でモバイルのタブがメモリ不足で落ちるのを防ぐ)
-  const { samples: mix, sr } = renderClapTrackSamples(
-    eventTimes,
-    accents,
-    durationSec,
-    ghostTimes,
-    metroTimes,
-    22050
-  );
-  const len = mix.length;
+  const sr = 22050;
+  let channels: Float32Array[];
+  if (right) {
+    const a = renderClapTrackSamples(eventTimes, accents, durationSec, ghostTimes, [], sr).samples;
+    const b = renderClapTrackSamples(
+      right.eventTimes,
+      right.accents,
+      durationSec,
+      right.ghostTimes,
+      [],
+      sr
+    ).samples;
+    const common = renderClapTrackSamples([], [], durationSec, [], metroTimes, sr).samples;
+    const { left, right: r } = mixStereoClaps(a, b, common);
+    channels = [left, r];
+  } else {
+    channels = [
+      renderClapTrackSamples(eventTimes, accents, durationSec, ghostTimes, metroTimes, sr)
+        .samples,
+    ];
+  }
+  const nch = channels.length;
+  const len = channels[0].length;
+  const dataLen = len * nch * 2;
 
-  const bytes = new Uint8Array(44 + len * 2);
+  const bytes = new Uint8Array(44 + dataLen);
   const dv = new DataView(bytes.buffer);
   const writeStr = (off: number, s: string) => {
     for (let i = 0; i < s.length; i++) bytes[off + i] = s.charCodeAt(i);
   };
   writeStr(0, "RIFF");
-  dv.setUint32(4, 36 + len * 2, true);
+  dv.setUint32(4, 36 + dataLen, true);
   writeStr(8, "WAVE");
   writeStr(12, "fmt ");
   dv.setUint32(16, 16, true);
   dv.setUint16(20, 1, true); // PCM
-  dv.setUint16(22, 1, true); // mono
+  dv.setUint16(22, nch, true);
   dv.setUint32(24, sr, true);
-  dv.setUint32(28, sr * 2, true);
-  dv.setUint16(32, 2, true);
+  dv.setUint32(28, sr * nch * 2, true);
+  dv.setUint16(32, nch * 2, true);
   dv.setUint16(34, 16, true);
   writeStr(36, "data");
-  dv.setUint32(40, len * 2, true);
+  dv.setUint32(40, dataLen, true);
+  let off = 44;
   for (let i = 0; i < len; i++) {
-    const v = Math.max(-1, Math.min(1, mix[i]));
-    dv.setInt16(44 + i * 2, (v * 32767) | 0, true);
+    for (let c = 0; c < nch; c++) {
+      const v = Math.max(-1, Math.min(1, channels[c][i]));
+      dv.setInt16(off, (v * 32767) | 0, true);
+      off += 2;
+    }
   }
 
   return URL.createObjectURL(new Blob([bytes], { type: "audio/wav" }));

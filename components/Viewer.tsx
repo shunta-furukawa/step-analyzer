@@ -17,7 +17,7 @@ import {
   type FootStep,
   type ParsedChart,
 } from "@/lib/chart";
-import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
+import { buildClapTrackUrl, setPlaybackAudioSession, type ClapSide } from "@/lib/clap";
 import {
   JudgeSession,
   buildJudgeTargets,
@@ -805,7 +805,7 @@ export default function Viewer({
     const beat1 = Math.max(0.15, timeAtBeat(timeline, 1) - timeAtBeat(timeline, 0));
     const lead = pm ? beat1 * 4 : 0;
     pmLeadRef.current = lead;
-    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}|${metroOn ? 1 : 0}|${pm ? "pm" : ""}|${serializeOverrides(overrides)}`;
+    const key = `${compact}|${bpm}|${stops}|${speed}|${ghostSound ? 1 : 0}|${metroOn ? 1 : 0}|${pm ? "pm" : ""}|${serializeOverrides(overrides)}|${compactB ?? ""}|${serializeOverrides(overridesB)}`;
     if (clapTrackRef.current?.key === key) return clapTrackRef.current.el;
     if (clapTrackRef.current) {
       clapTrackRef.current.el.pause();
@@ -835,19 +835,36 @@ export default function Viewer({
         metroTimes.push(timeAtBeat(timeline, b) / speed + shift);
       }
     }
+    // A/B比較: Bのクラップを右チャンネルに振ってステレオ化 (左耳=A・右耳=B)
+    let right: ClapSide | undefined;
+    if (chartB) {
+      const judgedB = chartB.events.filter(
+        (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
+      );
+      right = {
+        eventTimes: judgedB.map((e) => timeAtBeat(timeline, e.row.beat) / speed + shift),
+        accents: judgedB.map((e) => e.panels.length >= 2),
+        ghostTimes: ghostSound
+          ? chartB.events
+              .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footstepsB[i]?.ghost))
+              .map((e) => timeAtBeat(timeline, e.row.beat) / speed + shift)
+          : [],
+      };
+    }
     const url = buildClapTrackUrl(
       times,
       accents,
       timeAtBeat(timeline, totalBeatsAll) / speed + shift,
       ghostTimes,
-      metroTimes
+      metroTimes,
+      right
     );
     const el = new Audio(url);
     el.preload = "auto";
     el.setAttribute("playsinline", "");
     clapTrackRef.current = { key, el, url };
     return el;
-  }, [chart, timeline, compact, bpm, stops, speed, ghostSound, pm, overrides, footsteps]);
+  }, [chart, chartB, timeline, compact, compactB, bpm, stops, speed, ghostSound, pm, overrides, overridesB, footsteps, footstepsB, totalBeatsAll]);
 
   // 再生開始 (ユーザー操作の文脈で呼ぶこと: audio.play()の許可が必要)
   const startPlayback = useCallback(() => {
@@ -2529,10 +2546,7 @@ export default function Viewer({
                     // A/B比較: B譜面も同じタイムラインで並べて書き出す
                     chartB: abMode ? chartB : null,
                     footstepsB: abMode ? footstepsB : undefined,
-                    diffB:
-                      abMode && (diffBCls !== null || diffBLvl)
-                        ? { cls: diffBCls, lvl: diffBLvl }
-                        : null,
+                    diffB: abMode ? { cls: diffBCls, lvl: diffBLvl } : null,
                     stats: [
                       { label: S.steps, value: stats.steps },
                       { label: S.jumps, value: stats.jumps },
@@ -2627,6 +2641,8 @@ export default function Viewer({
                       subtitle,
                       diff:
                         diffCls !== null || diffLvl ? { cls: diffCls, lvl: diffLvl } : null,
+                      // A/B比較中はサムネも「A vs B」の2チップにする
+                      diffB: abMode ? { cls: diffBCls, lvl: diffBLvl } : null,
                       bpmLabel,
                       bgColor,
                       bgColor2,
