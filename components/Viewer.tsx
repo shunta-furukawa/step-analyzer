@@ -14,6 +14,8 @@ import {
   tickOf,
   type Foot,
   type FootOverride,
+  type FootStep,
+  type ParsedChart,
 } from "@/lib/chart";
 import { buildClapTrackUrl, setPlaybackAudioSession } from "@/lib/clap";
 import {
@@ -161,6 +163,50 @@ function DiffFootIcon({ color, size }: { color: string; size: number }) {
 }
 
 // ツールバーに出す変形オプションの短縮ラベル
+// フリーズバーの区間 (保持足の色分け用)
+interface HoldSegment {
+  panel: number;
+  start: number;
+  end: number;
+  foot: Foot | null;
+  roll: boolean;
+}
+
+// フリーズを保持足で塗り分けるための区間に分割する。
+// 空打ち (持ち替え) のたびに区間を切り、以降は引き継いだ足の色にする
+function holdSegmentsFor(chart: ParsedChart, footsteps: FootStep[]): HoldSegment[] {
+  const segs: HoldSegment[] = [];
+  for (const h of chart.holds) {
+    const headIdx = chart.events.findIndex(
+      (e) => Math.abs(e.row.beat - h.startBeat) < 1e-6 && e.panels.includes(h.panel)
+    );
+    let foot: Foot | null =
+      headIdx >= 0 ? footsteps[headIdx]?.feet[h.panel] ?? null : null;
+    let segStart = h.startBeat;
+    chart.events.forEach((e, i) => {
+      if (!e.ghostPanels.includes(h.panel)) return;
+      const b = e.row.beat;
+      if (b <= h.startBeat + 1e-6 || b >= h.endBeat - 1e-6) return;
+      segs.push({ panel: h.panel, start: segStart, end: b, foot, roll: h.roll });
+      segStart = b;
+      foot = footsteps[i]?.feet[h.panel] ?? foot;
+    });
+    segs.push({ panel: h.panel, start: segStart, end: h.endBeat, foot, roll: h.roll });
+  }
+  return segs;
+}
+
+// 拍以下の最後のイベントindex (B譜面をAの現在位置に追従させる用)
+function lastIndexAtBeat(chart: ParsedChart | null, beat: number): number {
+  if (!chart) return -1;
+  let idx = -1;
+  for (let k = 0; k < chart.events.length; k++) {
+    if (chart.events[k].row.beat <= beat + 1e-6) idx = k;
+    else break;
+  }
+  return idx;
+}
+
 function transformShortLabel(tr: string): string {
   if (tr === "mirror") return "MIRROR";
   if (tr === "left") return "LEFT";
@@ -185,6 +231,9 @@ export default function Viewer({
   transform: initialTransform,
   embedded = false,
   showPlayButton = false,
+  compactB: initialCompactB,
+  overridesB: initialOverridesB,
+  difficultyB: initialDifficultyB,
 }: {
   compact: string;
   title?: string;
@@ -203,6 +252,10 @@ export default function Viewer({
   embedded?: boolean;
   /** プレイモードの🎮ボタンを出すか (?play=1 のときだけ true) */
   showPlayButton?: boolean;
+  // A/B比較のB譜面 (d2/n2, f2, df2)。BPM・停止・変形はAと共有する
+  compactB?: string;
+  overridesB?: string;
+  difficultyB?: string;
 }) {
   const [lang, setLang] = useState<Lang>(initialLang ?? "ja");
   const S = STRINGS[lang];
@@ -351,6 +404,16 @@ export default function Viewer({
   const initDiff = parseDiffParam(initialDifficulty);
   const [diffCls, setDiffCls] = useState<number | null>(initDiff.cls);
   const [diffLvl, setDiffLvl] = useState(initDiff.lvl);
+  // A/B比較のB譜面。nullなら通常の単独表示。足指定・難易度はB専用で、
+  // BPM・停止・変形 (tr) はAと共有する (同じ曲の別難易度を並べる想定)
+  const [compactB, setCompactB] = useState<string | null>(initialCompactB ?? null);
+  const [overridesB, setOverridesB] = useState<Map<number, FootOverride>>(() =>
+    parseOverrides(initialOverridesB)
+  );
+  const initDiffB = parseDiffParam(initialDifficultyB);
+  const [diffBCls, setDiffBCls] = useState<number | null>(initDiffB.cls);
+  const [diffBLvl, setDiffBLvl] = useState(initDiffB.lvl);
+  const [showTextB, setShowTextB] = useState(false);
   const [bpm, setBpm] = useState(() => normalizeParam(initialBpm ?? ""));
   const [stops, setStops] = useState(() => normalizeParam(initialStops ?? ""));
   const [showTiming, setShowTiming] = useState(false);
@@ -371,6 +434,9 @@ export default function Viewer({
   // 移動トランジション (FOOT_TRAVEL_SEC) ぶん早く動き出すことで、
   // 足がジャストのタイミングでパネルに「到着」して見えるようにする。
   const [footIdx, setFootIdx] = useState(0);
+  // A/B比較のB側インデックス (再生中はtickが拍から更新、停止中はAの拍から導出)
+  const [currentBPlay, setCurrentBPlay] = useState(-1);
+  const [footIdxBPlay, setFootIdxBPlay] = useState(-1);
   // fs再生でジャスト済みノーツを即非表示にするための「通過済み」インデックス。
   // currentは再生前も先頭ノーツを指すため、通過判定は別に持つ (-1=未通過)
   const [playedIdx, setPlayedIdx] = useState(-1);
@@ -485,14 +551,17 @@ export default function Viewer({
     return () => window.removeEventListener("resize", update);
   }, []);
 
+  // A/B比較中はレーンが8本+間隔になるので、1本あたりの幅を半分近くに落とす
+  // (chartBの解析前でも幅を決めたいので、Bデータの有無で判定する)
+  const abLanes = compactB !== null;
   const fsLane =
     typeof window !== "undefined"
-      ? Math.min(96, Math.floor((window.innerWidth - 16) / 4))
+      ? Math.min(96, Math.floor((window.innerWidth - 16 - (abLanes ? 12 : 0)) / (abLanes ? 8 : 4)))
       : 80;
-  const noteSize = fs || pm ? fsLane - 10 : narrow ? 28 : 40;
+  const noteSize = fs || pm ? fsLane - 10 : narrow ? (abLanes ? 34 : 28) : 40;
   // 1拍の高さは矢印サイズの1.8倍 (通常表示・フルスクリーン・画像書き出しで統一)
   const pxPerBeat = (fs || pm ? noteSize * 1.8 : narrow ? 52 : 72) * hispeed;
-  const laneW = fs || pm ? fsLane : narrow ? 36 : 52;
+  const laneW = fs || pm ? fsLane : narrow ? (abLanes ? 44 : 36) : 52;
 
   // 変形オプション適用後の譜面 (表示・解析はすべてこちらを使う)。
   // 元データ (compact) はURLにそのまま保存され、変形は tr= として別に持つ
@@ -526,60 +595,79 @@ export default function Viewer({
     [footsteps, chart]
   );
 
+  // ===== A/B比較: B譜面の派生データ (Aと同じ変形・タイミングを適用) =====
+  const viewCompactB = useMemo(
+    () => (compactB ? (perm ? applyTransform(compactB, perm) : compactB) : null),
+    [compactB, perm]
+  );
+  const chartB = useMemo(() => {
+    if (!viewCompactB) return null;
+    try {
+      return parseCompact(viewCompactB);
+    } catch {
+      return null; // 壊れたB譜面は黙って無視 (Aの表示は守る)
+    }
+  }, [viewCompactB]);
+  const footstepsB = useMemo(
+    () => (chartB ? assignFeet(chartB.events, overridesB, chartB.holds) : []),
+    [chartB, overridesB]
+  );
+  const statsB = useMemo(
+    () => (chartB ? statsOf(footstepsB, chartB.shocks.length) : null),
+    [footstepsB, chartB]
+  );
+  const abMode = chartB !== null;
+  // レーンの横幅・B側のx原点。ABはA|Bを間隔laneGapで横並びにする
+  const laneGap = 12;
+  const laneCount = abMode ? 8 : 4;
+  const lanesW = laneW * laneCount + (abMode ? laneGap : 0);
+  const bx = laneW * 4 + laneGap;
+  // 譜面の長さはA/Bの長い方 (タイムライン・レーン高さ・再生終了に使う)
+  const totalBeatsAll = Math.max(chart?.totalBeats ?? 0, chartB?.totalBeats ?? 0);
+  const measuresAll = Math.max(chart?.measures.length ?? 0, chartB?.measures.length ?? 0);
+
   // フリーズバーを保持足の色で塗り分けるためのセグメント。
   // 空打ち (持ち替え) のたびに区間を切り、以降は引き継いだ足の色にする
-  const holdSegments = useMemo(() => {
-    if (!chart) return [];
-    const segs: {
-      panel: number;
-      start: number;
-      end: number;
-      foot: Foot | null;
-      roll: boolean;
-    }[] = [];
-    for (const h of chart.holds) {
-      const headIdx = chart.events.findIndex(
-        (e) => Math.abs(e.row.beat - h.startBeat) < 1e-6 && e.panels.includes(h.panel)
-      );
-      let foot: Foot | null =
-        headIdx >= 0 ? footsteps[headIdx]?.feet[h.panel] ?? null : null;
-      let segStart = h.startBeat;
-      chart.events.forEach((e, i) => {
-        if (!e.ghostPanels.includes(h.panel)) return;
-        const b = e.row.beat;
-        if (b <= h.startBeat + 1e-6 || b >= h.endBeat - 1e-6) return;
-        segs.push({ panel: h.panel, start: segStart, end: b, foot, roll: h.roll });
-        segStart = b;
-        foot = footsteps[i]?.feet[h.panel] ?? foot;
-      });
-      segs.push({ panel: h.panel, start: segStart, end: h.endBeat, foot, roll: h.roll });
-    }
-    return segs;
-  }, [chart, footsteps]);
+  const holdSegments = useMemo(
+    () => (chart ? holdSegmentsFor(chart, footsteps) : []),
+    [chart, footsteps]
+  );
+  const holdSegmentsB = useMemo(
+    () => (chartB ? holdSegmentsFor(chartB, footstepsB) : []),
+    [chartB, footstepsB]
+  );
 
   // フリーズバーのJSX。通常表示はchart-inner内に、fs/プレイモード中は
-  // 画面固定クリップ付きのhold-clipレイヤー内に描画する (座標系は同じ)
-  const holdBars = holdSegments.map((s, i) =>
-    s.end < viewBeats.a || s.start > viewBeats.b ? null : (
-      <div
-        key={`h${i}`}
-        className="hold-body"
-        style={{
-          left: s.panel * laneW + (laneW - noteSize) / 2 + 6,
-          top: s.start * pxPerBeat + noteSize / 2,
-          width: noteSize - 12,
-          height: (s.end - s.start) * pxPerBeat,
-          // ロールはオレンジ、フリーズは保持足の色 (不明なら緑)
-          background: s.roll
-            ? "#ff9f43"
-            : s.foot === "L"
-            ? "rgba(255, 92, 168, 0.66)"
-            : s.foot === "R"
-            ? "rgba(56, 189, 248, 0.66)"
-            : "#2ecc71",
-        }}
-      />
-    )
+  // 画面固定クリップ付きのhold-clipレイヤー内に描画する (座標系は同じ)。
+  // x0はレーン群の左端 (Bは bx だけ右にずらす)
+  const renderHoldBars = (segs: HoldSegment[], x0: number, prefix: string) =>
+    segs.map((s, i) =>
+      s.end < viewBeats.a || s.start > viewBeats.b ? null : (
+        <div
+          key={`${prefix}${i}`}
+          className="hold-body"
+          style={{
+            left: x0 + s.panel * laneW + (laneW - noteSize) / 2 + 6,
+            top: s.start * pxPerBeat + noteSize / 2,
+            width: noteSize - 12,
+            height: (s.end - s.start) * pxPerBeat,
+            // ロールはオレンジ、フリーズは保持足の色 (不明なら緑)
+            background: s.roll
+              ? "#ff9f43"
+              : s.foot === "L"
+              ? "rgba(255, 92, 168, 0.66)"
+              : s.foot === "R"
+              ? "rgba(56, 189, 248, 0.66)"
+              : "#2ecc71",
+          }}
+        />
+      )
+    );
+  const holdBars = (
+    <>
+      {renderHoldBars(holdSegments, 0, "h")}
+      {abMode && renderHoldBars(holdSegmentsB, bx, "hb")}
+    </>
   );
 
   // 注目ノーツの枠: 連続する注目ノーツは1つの角丸枠にまとめる
@@ -610,8 +698,8 @@ export default function Viewer({
   const bpms = useMemo(() => parseBpmParam(bpm), [bpm]);
   const stopList = useMemo(() => parseStopsParam(stops), [stops]);
   const timeline = useMemo(
-    () => (chart ? buildTimeline(bpms, stopList, chart.totalBeats) : []),
-    [chart, bpms, stopList]
+    () => (chart ? buildTimeline(bpms, stopList, totalBeatsAll) : []),
+    [chart, bpms, stopList, totalBeatsAll]
   );
   const hasSofran = bpms.length > 1 || stopList.length > 0;
 
@@ -647,8 +735,17 @@ export default function Viewer({
     if (bgParam !== DEFAULT_BG) parts.push(`c=${bgParam}`);
     if (lang !== "ja") parts.push(`l=${lang}`);
     if (transform) parts.push(`tr=${transform}`);
+    // A/B比較のB譜面 (Aと同じ圧縮ルール)
+    if (compactB) {
+      const encB = await compressCompact(compactB);
+      if (encB && encB.length < compactB.length) parts.push(`d2=${encB}`);
+      else parts.push(`n2=${compactB}`);
+      if (overridesB.size > 0) parts.push(`f2=${serializeOverrides(overridesB)}`);
+      const df2 = serializeDiff(diffBCls, diffBLvl);
+      if (df2) parts.push(`df2=${df2}`);
+    }
     return `/?${parts.join("&")}`;
-  }, [compact, title, subtitle, diffCls, diffLvl, bpm, stops, overrides, highlights, noteComments, hispeed, speed, bgParam, lang, transform]);
+  }, [compact, title, subtitle, diffCls, diffLvl, bpm, stops, overrides, highlights, noteComments, hispeed, speed, bgParam, lang, transform, compactB, overridesB, diffBCls, diffBLvl]);
 
   // 編集・足指定・タイトル変更をURLへ反映 (何か触るまでは書き換えない)。
   // カラーピッカーのドラッグ等で連続変更されるため、書き込みはデバウンスする
@@ -725,14 +822,14 @@ export default function Viewer({
       for (let k = 0; k < 4; k++) metroTimes.push((k * beat1) / speed); // カウントイン
     }
     if (metroOn) {
-      for (let b = 0; b < chart.totalBeats - 1e-9; b++) {
+      for (let b = 0; b < totalBeatsAll - 1e-9; b++) {
         metroTimes.push(timeAtBeat(timeline, b) / speed + shift);
       }
     }
     const url = buildClapTrackUrl(
       times,
       accents,
-      timeAtBeat(timeline, chart.totalBeats) / speed + shift,
+      timeAtBeat(timeline, totalBeatsAll) / speed + shift,
       ghostTimes,
       metroTimes
     );
@@ -1131,8 +1228,8 @@ export default function Viewer({
         timeRef.current += dt * speed;
       }
       beatRef.current = beatAtTime(timeline, timeRef.current);
-      if (beatRef.current >= chart.totalBeats - 1e-9) {
-        beatRef.current = chart.totalBeats;
+      if (beatRef.current >= totalBeatsAll - 1e-9) {
+        beatRef.current = totalBeatsAll;
         // プレイモードは最後のノーツの判定窓が閉じるまで走らせ続ける
         if (!pmRef.current) setPlaying(false);
       }
@@ -1166,6 +1263,11 @@ export default function Viewer({
         else break;
       }
       if (idx >= 0) setCurrent((c) => (c !== idx ? idx : c));
+      // A/B比較: B側も同じ拍から現在位置・先読み位置を求める
+      if (chartB) {
+        const idxB = lastIndexAtBeat(chartB, beatRef.current);
+        setCurrentBPlay((c) => (c !== idxB ? idxB : c));
+      }
       // カウントイン中 (曲内時刻が負) はまだ何も通過していない
       const pIdx = timeRef.current < 0 ? -1 : idx;
       setPlayedIdx((c) => (c !== pIdx ? pIdx : c));
@@ -1182,6 +1284,10 @@ export default function Viewer({
         else break;
       }
       if (fIdx >= 0) setFootIdx((c) => (c !== fIdx ? fIdx : c));
+      if (chartB) {
+        const fIdxB = lastIndexAtBeat(chartB, leadBeat);
+        setFootIdxBPlay((c) => (c !== fIdxB ? fIdxB : c));
+      }
 
       const el = scrollRef.current;
       const inner = chartInnerRef.current;
@@ -1307,7 +1413,7 @@ export default function Viewer({
     );
   }
 
-  const totalH = chart.totalBeats * pxPerBeat + noteSize;
+  const totalH = totalBeatsAll * pxPerBeat + noteSize;
   const curStep = footsteps[current];
   // 再生中の足の描画位置は先読みインデックスから取る (ジャスト到着)
   const footStep = (playing ? footsteps[footIdx] : curStep) ?? curStep;
@@ -1324,6 +1430,37 @@ export default function Viewer({
   // 2枚抜き・フリーズ保持しながらのつま先拾いでは、
   // 踏み足を2パネルの中間にまたがせて表示する
   const stageOneFoot = footStep?.stretch ?? null;
+
+  // ===== A/B比較: B側の現在位置。停止中はAの現在ノーツの拍に追従する =====
+  const curBeatA = curEvent?.row.beat ?? 0;
+  const currentB = chartB
+    ? playing
+      ? currentBPlay
+      : lastIndexAtBeat(chartB, curBeatA)
+    : -1;
+  const footIdxB = chartB && playing ? footIdxBPlay : currentB;
+  const curStepB = currentB >= 0 ? footstepsB[currentB] : undefined;
+  const footStepB = (footIdxB >= 0 ? footstepsB[footIdxB] : undefined) ?? curStepB;
+  const curEventB = chartB && currentB >= 0 ? chartB.events[currentB] : undefined;
+  // 停止中にAのノーツへ移動したとき、Bは「その拍以前の最後のノーツ」に追従する。
+  // 拍が一致しない (Bにはその瞬間ノーツがない) ときはパネルを光らせない
+  const curEventBLive =
+    curEventB && (playing || Math.abs(curEventB.row.beat - curBeatA) < 1e-6)
+      ? curEventB
+      : undefined;
+  // B側ノーツのクリック: その拍以前のAのノーツへシークする (Bは編集不可)
+  const seekToBeat = (beat: number) => {
+    const idx = lastIndexAtBeat(chart, beat);
+    if (idx < 0) return;
+    setPlaying(false);
+    go(idx);
+  };
+  const trailIdxB = footIdxB;
+  const trailGapSecB =
+    chartB && trailIdxB > 0 && chartB.events[trailIdxB]
+      ? timeAtBeat(timeline, chartB.events[trailIdxB].row.beat) -
+        timeAtBeat(timeline, chartB.events[trailIdxB - 1].row.beat)
+      : null;
   const curTick = curEvent ? tickOf(curEvent.row.beat) : null;
   const curOverride = curTick !== null ? overrides.get(curTick) : undefined;
   const facing = curStep?.facing ?? 0;
@@ -1349,7 +1486,13 @@ export default function Viewer({
   };
 
   return (
-    <div className={fs || pm ? `viewer-fs${pm ? " viewer-pm" : ""}` : undefined}>
+    <div
+      className={
+        [fs || pm ? "viewer-fs" : "", pm ? "viewer-pm" : "", abMode ? "viewer-ab" : ""]
+          .filter(Boolean)
+          .join(" ") || undefined
+      }
+    >
       {!embedded && <div className="bg-picker-wrap">
         <div className="lang-wrap">
           <span className="lang-badge">
@@ -1612,6 +1755,13 @@ export default function Viewer({
         </button>
         <button className="secondary" onClick={() => setShowText(!showText)}>
           {narrow ? S.textBtnShort : S.textBtn}
+        </button>
+        <button
+          className={abMode ? "" : "secondary"}
+          onClick={() => setShowTextB(!showTextB)}
+          title={S.abBtnTitle}
+        >
+          {S.abBtn}
         </button>
         <button
           className={transform ? "" : "secondary"}
@@ -2215,8 +2365,10 @@ export default function Viewer({
                 </div>
               </div>
             )}
+            {/* A/B比較中は2譜面並びの素の再生に固定 (番組構成・解説は使えない) */}
+            {abMode && <p className="video-spot-info">{S.videoAbNote}</p>}
             {/* 横長のみ: 番組構成 (OFFなら素の譜面再生だけを書き出す) */}
-            {vMode === "landscape" && (
+            {vMode === "landscape" && !abMode && (
               <label className="toggle-row">
                 <input
                   type="checkbox"
@@ -2227,7 +2379,7 @@ export default function Viewer({
               </label>
             )}
             {/* 自動解説の量と、書き出し前の件数・追加時間のプレビュー */}
-            {vMode === "landscape" && vProgram && noteComments.size === 0 && (
+            {vMode === "landscape" && !abMode && vProgram && noteComments.size === 0 && (
               <>
                 <div className="opt-row">
                   <span className="opt-label">{S.videoSpotAmount}</span>
@@ -2266,7 +2418,7 @@ export default function Viewer({
                 </p>
               </>
             )}
-            {vMode === "landscape" && vProgram && noteComments.size > 0 && (
+            {vMode === "landscape" && !abMode && vProgram && noteComments.size > 0 && (
               <p className="video-spot-info">{S.videoSpotManual(noteComments.size)}</p>
             )}
             <label className="toggle-row">
@@ -2343,8 +2495,15 @@ export default function Viewer({
                     offsetSec: Number.isFinite(off) ? off : 0,
                     landscape: vMode === "landscape",
                     landscapeSpeed: vLandSpeed,
-                    plain: !vProgram,
+                    plain: !vProgram || abMode,
                     trail: footTrail,
+                    // A/B比較: B譜面も同じタイムラインで並べて書き出す
+                    chartB: abMode ? chartB : null,
+                    footstepsB: abMode ? footstepsB : undefined,
+                    diffB:
+                      abMode && (diffBCls !== null || diffBLvl)
+                        ? { cls: diffBCls, lvl: diffBLvl }
+                        : null,
                     stats: [
                       { label: S.steps, value: stats.steps },
                       { label: S.jumps, value: stats.jumps },
@@ -2673,6 +2832,29 @@ export default function Viewer({
         />
       )}
 
+      {/* A/B比較: B譜面の取り込み。タイミング (BPM/停止) はAのものを使い続けるので
+          ここでは譜面本体・足指定・難易度だけを受け取る */}
+      {showTextB && (
+        <TextImport
+          compact={compactB ?? ""}
+          S={S}
+          titleOverride={S.abImportTitle}
+          descOverride={S.abImportDesc}
+          onApply={(next, _timing, _smTitle, _smArtist, smDiff) => {
+            setPlaying(false);
+            setCompactB(next);
+            setOverridesB(new Map());
+            if (smDiff !== undefined) {
+              setDiffBCls(smDiff.cls);
+              setDiffBLvl(smDiff.lvl);
+            }
+            setDirty(true);
+            go(0);
+            setShowTextB(false);
+          }}
+        />
+      )}
+
       <div className="viewer-layout">
         <div className="chart-pane" onClick={fs && !pm ? togglePlay : undefined}>
           {(fs || pm) && (
@@ -2680,7 +2862,7 @@ export default function Viewer({
               <div
                 className="fs-progress"
                 style={{
-                  width: `${chart.totalBeats > 0 ? Math.min(100, (100 * (chart.events[current]?.row.beat ?? 0)) / chart.totalBeats) : 0}%`,
+                  width: `${totalBeatsAll > 0 ? Math.min(100, (100 * (chart.events[current]?.row.beat ?? 0)) / totalBeatsAll) : 0}%`,
                 }}
               />
               {/* 通過済みノーツを隠す覆い。受け皿の上端より上だけを覆い、
@@ -2693,7 +2875,7 @@ export default function Viewer({
               </div>
               <div
                 className="fs-receptors"
-                style={{ top: RECEPTOR_Y - noteSize / 2, width: laneW * 4 }}
+                style={{ top: RECEPTOR_Y - noteSize / 2, width: lanesW }}
               >
                 {[0, 1, 2, 3].map((p) => {
                   const hit = curEvent?.panels.includes(p) ?? false;
@@ -2721,7 +2903,52 @@ export default function Viewer({
                     </div>
                   );
                 })}
+                {/* A/B比較: B側の受け皿 (間隔ぶん空けて右に並べる) */}
+                {abMode && <div style={{ width: laneGap, flex: "none" }} />}
+                {abMode &&
+                  [0, 1, 2, 3].map((p) => {
+                    const hit = curEventBLive?.panels.includes(p) ?? false;
+                    const foot = hit ? curStepB?.feet[p] : null;
+                    return (
+                      <div
+                        key={`b${p}-${hit ? currentB : "idle"}`}
+                        className={`receptor${hit ? " hit" : ""}`}
+                        style={{ width: laneW, height: noteSize }}
+                      >
+                        <svg
+                          width={noteSize}
+                          height={noteSize}
+                          viewBox={ARROW_VIEWBOX}
+                          style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
+                        >
+                          <path
+                            d={ARROW_PATH}
+                            fill={foot ? FOOT_COLORS[foot] : "rgba(255,255,255,0.05)"}
+                            stroke={hit ? "#ffffff" : "#5a6390"}
+                            strokeWidth={4}
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      </div>
+                    );
+                  })}
               </div>
+              {abMode && (
+                <div className="fs-ab-labels" style={{ width: lanesW }}>
+                  <span className="ab-chip">
+                    <b>A</b>
+                    {diffCls !== null && <DiffFootIcon color={DIFF_COLORS[diffCls]} size={14} />}
+                    {diffLvl && <span className="diff-num">{diffLvl}</span>}
+                  </span>
+                  <span className="ab-chip">
+                    <b>B</b>
+                    {diffBCls !== null && (
+                      <DiffFootIcon color={DIFF_COLORS[diffBCls]} size={14} />
+                    )}
+                    {diffBLvl && <span className="diff-num">{diffBLvl}</span>}
+                  </span>
+                </div>
+              )}
               {!playing && !pm && <div className="fs-paused">▶</div>}
               {/* プレイモード: 判定文字・コンボ・カウントイン */}
               {pm && pmPopup && (
@@ -2751,6 +2978,37 @@ export default function Viewer({
               </button>
             </>
           )}
+          {/* A/B比較: レーン群の見出し (通常表示のみ。fs中はレーン上に重ねる) */}
+          {abMode && !fs && !pm && (
+            <div className="ab-labels">
+              <span className="ab-chip" style={{ width: laneW * 4 }}>
+                <b>A</b>
+                {diffCls !== null && <DiffFootIcon color={DIFF_COLORS[diffCls]} size={13} />}
+                {diffLvl && <span className="diff-num">{diffLvl}</span>}
+              </span>
+              <span className="ab-chip" style={{ width: laneW * 4 }}>
+                <b>B</b>
+                {diffBCls !== null && <DiffFootIcon color={DIFF_COLORS[diffBCls]} size={13} />}
+                {diffBLvl && <span className="diff-num">{diffBLvl}</span>}
+                {!embedded && (
+                  <button
+                    className="ab-remove"
+                    title={S.abRemove}
+                    onClick={() => {
+                      setPlaying(false);
+                      setCompactB(null);
+                      setOverridesB(new Map());
+                      setDiffBCls(null);
+                      setDiffBLvl("");
+                      setDirty(true);
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </span>
+            </div>
+          )}
           <div
             className="chart-scroll"
             ref={scrollRef}
@@ -2771,7 +3029,7 @@ export default function Viewer({
                 <div
                   className="hold-clip-inner"
                   ref={holdsInnerRef}
-                  style={{ width: laneW * 4 }}
+                  style={{ width: lanesW }}
                 >
                   {holdBars}
                 </div>
@@ -2785,12 +3043,13 @@ export default function Viewer({
               // 子要素の範囲だけになり、長い譜面でGPUのタイルメモリが
               // 膨らんでモバイルのタブが落ちるのを防ぐ (スクロールは
               // scrollTop=0固定のtransform追従なのでheightは不要)
-              style={{ width: laneW * 4, height: fs || pm ? undefined : totalH }}
+              style={{ width: lanesW, height: fs || pm ? undefined : totalH }}
             >
               {playing && !fs && <div className="playhead" ref={playheadRef} />}
               {/* 体の向きの背景バンド: ノーツi-1→ノーツi の領域を
                   「ノーツiを踏んだときの向き」の色で塗る (これから来る捻りの予告)。
-                  1ノーツ目は譜面先頭 (初期位置=正面) から塗る */}
+                  1ノーツ目は譜面先頭 (初期位置=正面) から塗る。
+                  A/B比較中は各レーン群の幅に収める */}
               {chart.events.map((ev, i) => {
                 const startBeat = i > 0 ? chart.events[i - 1].row.beat : 0;
                 if (ev.row.beat < viewBeats.a || startBeat > viewBeats.b) return null;
@@ -2804,12 +3063,41 @@ export default function Viewer({
                       top: startBeat * pxPerBeat + noteSize / 2,
                       height: Math.max(0, (ev.row.beat - startBeat) * pxPerBeat),
                       background: color,
+                      ...(abMode ? { left: 0, right: "auto", width: laneW * 4 } : {}),
                     }}
                   />
                 );
               })}
+              {abMode &&
+                chartB!.events.map((ev, i) => {
+                  const startBeat = i > 0 ? chartB!.events[i - 1].row.beat : 0;
+                  if (ev.row.beat < viewBeats.a || startBeat > viewBeats.b) return null;
+                  const color = facingColor(footstepsB[i].facing);
+                  if (!color) return null;
+                  return (
+                    <div
+                      key={`fbB${i}`}
+                      className="facing-band"
+                      style={{
+                        top: startBeat * pxPerBeat + noteSize / 2,
+                        height: Math.max(0, (ev.row.beat - startBeat) * pxPerBeat),
+                        background: color,
+                        left: bx,
+                        right: "auto",
+                        width: laneW * 4,
+                      }}
+                    />
+                  );
+                })}
+              {/* A/Bの境目 (レーン群の間の縦線) */}
+              {abMode && (
+                <div
+                  className="ab-divider"
+                  style={{ left: laneW * 4 + laneGap / 2 - 1, height: totalH }}
+                />
+              )}
 
-              {Array.from({ length: chart.measures.length + 1 }, (_, m) => {
+              {Array.from({ length: measuresAll + 1 }, (_, m) => {
                 if ((m + 1) * 4 < viewBeats.a || m * 4 > viewBeats.b) return null;
                 return (
                 <div key={`m${m}`}>
@@ -2817,7 +3105,7 @@ export default function Viewer({
                     className="measure-line"
                     style={{ top: m * 4 * pxPerBeat + noteSize / 2 }}
                   />
-                  {m < chart.measures.length && (
+                  {m < measuresAll && (
                     <span
                       className={`measure-num${
                         rangeSel && rangeSel.b === null && Math.floor(rangeSel.a / 4) === m
@@ -2831,7 +3119,7 @@ export default function Viewer({
                       {m + 1}
                     </span>
                   )}
-                  {m < chart.measures.length && (
+                  {m < measuresAll && (
                     // 左端の小節番号ゾーン: タップで範囲選択 (4分単位。
                     // タップ位置の高さからどの拍かを割り出す)
                     <div
@@ -2848,7 +3136,7 @@ export default function Viewer({
                       }}
                     />
                   )}
-                  {m < chart.measures.length &&
+                  {m < measuresAll &&
                     [1, 2, 3].map((b) => (
                       <div
                         key={b}
@@ -3152,12 +3440,162 @@ export default function Viewer({
                   );
                 });
               })}
+
+              {/* ===== A/B比較: B譜面 (bxだけ右にずらして描画。編集不可・タップでシーク) ===== */}
+              {abMode &&
+                chartB!.shocks.map((r, i) => {
+                  if (r.beat < viewBeats.a || r.beat > viewBeats.b) return null;
+                  const ov = overridesB.get(tickOf(r.beat));
+                  const label =
+                    ov === "C" ? S.badgeBoth : ov === "CL" ? "◇L" : ov === "CR" ? "◇R" : null;
+                  return (
+                    <div
+                      key={`shockB${i}`}
+                      className="shock-row"
+                      style={{
+                        left: bx + 2,
+                        top: r.beat * pxPerBeat + noteSize * 0.1,
+                        width: laneW * 4 - 4,
+                        height: noteSize * 0.8,
+                      }}
+                      title={S.shockRowTitle}
+                      onClick={() => seekToBeat(r.beat)}
+                    >
+                      {[0, 1, 2, 3].map((p) => (
+                        <svg
+                          key={p}
+                          viewBox={ARROW_VIEWBOX}
+                          width={noteSize * 0.62}
+                          height={noteSize * 0.62}
+                          style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
+                        >
+                          <path
+                            d={ARROW_PATH}
+                            fill="rgba(125, 249, 255, 0.16)"
+                            stroke="#7df9ff"
+                            strokeWidth={4}
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      ))}
+                      {label && (
+                        <span
+                          className="shock-label"
+                          style={{
+                            color:
+                              ov === "CL"
+                                ? "var(--foot-l)"
+                                : ov === "CR"
+                                ? "var(--foot-r)"
+                                : "#7df9ff",
+                          }}
+                        >
+                          {label}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              {abMode &&
+                chartB!.mines.map((m, i) =>
+                  m.beat < viewBeats.a || m.beat > viewBeats.b ? null : (
+                    <div
+                      key={`mineB${i}`}
+                      className="mine"
+                      style={{
+                        left: bx + m.panel * laneW + (laneW - noteSize) / 2,
+                        top: m.beat * pxPerBeat,
+                        width: noteSize,
+                        height: noteSize,
+                        fontSize: noteSize * 0.6,
+                      }}
+                      title={S.mineTitle}
+                    >
+                      ✕
+                    </div>
+                  )
+                )}
+              {abMode &&
+                chartB!.events.map((ev, i) => {
+                  if (ev.row.beat < viewBeats.a || ev.row.beat > viewBeats.b) return null;
+                  if ((fs || pm) && playing && i <= currentB) return null;
+                  const step = footstepsB[i];
+                  const isCur = !playing && i === currentB && !!curEventBLive && !editMode;
+                  return ev.panels.map((p) => {
+                    const foot = step.feet[p];
+                    const isGhost = ev.ghostPanels.includes(p);
+                    return (
+                      <div
+                        key={`B${i}-${p}`}
+                        className={`note${isCur ? " current" : ""}${isGhost ? " ghost-note" : ""}`}
+                        style={{
+                          left: bx + p * laneW + (laneW - noteSize) / 2,
+                          top: ev.row.beat * pxPerBeat,
+                          width: noteSize,
+                          height: noteSize,
+                        }}
+                        onClick={() => seekToBeat(ev.row.beat)}
+                      >
+                        {isGhost ? (
+                          <svg
+                            viewBox={ARROW_VIEWBOX}
+                            width={noteSize}
+                            height={noteSize}
+                            style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
+                          >
+                            <path
+                              d={ARROW_PATH}
+                              fill="rgba(46, 204, 113, 0.12)"
+                              stroke="#7ce8a9"
+                              strokeWidth={3.5}
+                              strokeDasharray="7 5"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        ) : (
+                          <Arrow
+                            size={noteSize}
+                            rotation={ARROW_ROTATIONS[p]}
+                            color={QUANT_COLORS[ev.row.quant] ?? "#9aa3b5"}
+                          />
+                        )}
+                        {foot && (
+                          <span
+                            className={`foot-badge${overridesB.has(tickOf(ev.row.beat)) ? " pinned" : ""}`}
+                            style={{ background: FOOT_COLORS[foot] }}
+                          >
+                            {foot}
+                          </span>
+                        )}
+                        {step.crossover && step.feet[p] && !step.jump && (
+                          <span className="note-flag flag-cross">{S.flagCross}</span>
+                        )}
+                        {step.jack && <span className="note-flag flag-jack">{S.flagJack}</span>}
+                        {step.doubleStep && (
+                          <span className="note-flag flag-ds">{S.flagSwitch}</span>
+                        )}
+                      </div>
+                    );
+                  });
+                })}
             </div>
           </div>
         </div>
 
         <div className="side-pane">
           <div className="card pad-card">
+            {/* A/B比較中は足ステージを2つ横並びにする (A左・B右) */}
+            <div className={abMode ? "pads-row" : undefined}>
+            <div className={abMode ? "pad-col" : undefined}>
+            {abMode && (
+              <div className="pad-label">
+                <span className="ab-chip">
+                  <b>A</b>
+                  {diffCls !== null && <DiffFootIcon color={DIFF_COLORS[diffCls]} size={13} />}
+                  {diffLvl && <span className="diff-num">{diffLvl}</span>}
+                </span>
+              </div>
+            )}
             {webglOk ? (
               <FootStage3D
                 leftPos={footStep?.leftPos ?? 0}
@@ -3190,6 +3628,53 @@ export default function Viewer({
                 liftedFoot={footStep?.liftedFoot ?? null}
               />
             )}
+            </div>
+            {abMode && (
+              <div className="pad-col">
+                <div className="pad-label">
+                  <span className="ab-chip">
+                    <b>B</b>
+                    {diffBCls !== null && (
+                      <DiffFootIcon color={DIFF_COLORS[diffBCls]} size={13} />
+                    )}
+                    {diffBLvl && <span className="diff-num">{diffBLvl}</span>}
+                  </span>
+                </div>
+                {webglOk ? (
+                  <FootStage3D
+                    leftPos={footStepB?.leftPos ?? 0}
+                    rightPos={footStepB?.rightPos ?? 3}
+                    stepping={
+                      curStepB?.shock && curStepB.ghost ? [4] : curEventBLive?.panels ?? []
+                    }
+                    feet={curStepB?.feet ?? [null, null, null, null]}
+                    facing={footStepB?.facing ?? curStepB?.facing ?? 0}
+                    stepKey={currentB}
+                    heldFeet={footStepB?.heldFeet ?? []}
+                    oneFoot={footStepB?.stretch ?? null}
+                    liftedFoot={footStepB?.liftedFoot ?? null}
+                    trail={footTrail}
+                    trailGapSec={trailGapSecB}
+                    playSpeed={speed}
+                  />
+                ) : (
+                  <FootStage
+                    leftPos={footStepB?.leftPos ?? 0}
+                    rightPos={footStepB?.rightPos ?? 3}
+                    stepping={
+                      curStepB?.shock && curStepB.ghost ? [4] : curEventBLive?.panels ?? []
+                    }
+                    feet={curStepB?.feet ?? [null, null, null, null]}
+                    facing={footStepB?.facing ?? curStepB?.facing ?? 0}
+                    stepKey={currentB}
+                    heldFeet={footStepB?.heldFeet ?? []}
+                    oneFoot={footStepB?.stretch ?? null}
+                    liftedFoot={footStepB?.liftedFoot ?? null}
+                  />
+                )}
+              </div>
+            )}
+            </div>
             {pm && (
               // プレイモードの入力レイヤー: 足アニメの上に透明な4分割の
               // タップ領域を重ねる (下ペーン全体)。分割は内部的な入力判定で、
@@ -3733,9 +4218,14 @@ function TextImport({
   compact,
   S,
   onApply,
+  titleOverride,
+  descOverride,
 }: {
   compact: string;
   S: Strings;
+  // A/B比較のB取り込みなど、見出し・説明だけ差し替えて使う場合
+  titleOverride?: string;
+  descOverride?: string;
   onApply: (
     next: string,
     timing?: { b?: string; s?: string },
@@ -3850,7 +4340,9 @@ function TextImport({
 
   return (
     <div className="card text-import">
-      <PanelHead title={S.textPanelTitle} helpTitle={S.helpTitle}>{S.textPanelDesc}</PanelHead>
+      <PanelHead title={titleOverride ?? S.textPanelTitle} helpTitle={S.helpTitle}>
+        {descOverride ?? S.textPanelDesc}
+      </PanelHead>
       <div className="form-row url-import-row">
         <input
           type="url"

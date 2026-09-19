@@ -47,6 +47,11 @@ export interface VideoExportOptions {
   // コメントを字送りしながらリプレイする。measuresを渡すと
   // その小節列を順にプレイバックする (同種指摘の連続をひと塊で解説)
   spotlights?: { beat: number; text: string; measures?: number[] }[];
+  // A/B比較: B譜面を渡すと2レーン+2パッドで書き出す (タイミングはAと共有)。
+  // 番組構成・解説カードは付かず、素の再生になる
+  chartB?: ParsedChart | null;
+  footstepsB?: FootStep[];
+  diffB?: { cls: number | null; lvl: string } | null;
   onProgress?: (ratio: number) => void;
   signal?: { cancelled: boolean };
 }
@@ -385,23 +390,45 @@ export async function recordChartVideo(
 
   // モード別レイアウト。縦=ショート向け1カラム、横=左レーン+右情報ペーンの2カラム
   const L = !!o.landscape;
+  // A/B比較: 2レーンを横並びにするぶんレーン幅を詰め、足パッドも2つ合成する
+  const AB = !!o.chartB && !!o.footstepsB;
   // 横長はじっくり観察用に0.5倍速が既定 (等倍オプションあり)。縦は常に等倍
   const vSpeed = L ? o.landscapeSpeed ?? 0.5 : 1;
   const W = L ? 1920 : 720;
   const H = L ? 1080 : 1280;
-  const HEADER_H = L ? 24 : 160; // レーン上端 (横はヘッダーなし)
-  const LANE_W = L ? 176 : 160;
-  const NOTE = L ? 150 : 144;
-  const LANE_X = L ? 50 : (W - LANE_W * 4) / 2;
-  const RECEPTOR_Y = HEADER_H + (L ? 96 : 82);
+  // レーン上端 (横はヘッダーなし。ABの横はA/Bラベル行ぶん空ける)
+  const HEADER_H = L ? (AB ? 60 : 24) : 160;
+  const LANE_W = AB ? (L ? 118 : 84) : L ? 176 : 160;
+  const NOTE = AB ? (L ? 100 : 76) : L ? 150 : 144;
+  const LANE_GAP = L ? 24 : 16; // ABのレーン群の間隔
+  const LANE_X = AB
+    ? L
+      ? 50
+      : (W - (LANE_W * 8 + LANE_GAP)) / 2
+    : L
+    ? 50
+    : (W - LANE_W * 4) / 2;
+  const LANE_X_B = LANE_X + LANE_W * 4 + LANE_GAP;
+  const RECEPTOR_Y = HEADER_H + (L ? (AB ? 70 : 96) : 82);
   const LANE_BOTTOM = L ? H - 24 : H - 362;
   // 右ペーン (横のみ)。足パッドはペーン中央に大きく合成する
-  const paneX = LANE_X + LANE_W * 4 + 46;
+  const lanesRight = AB ? LANE_X_B + LANE_W * 4 : LANE_X + LANE_W * 4;
+  const paneX = lanesRight + 46;
   const paneCx = (paneX + W - 40) / 2;
-  const PAD_W = L ? 1320 : 760;
-  const PAD_H = L ? 660 : 380;
+  const PAD_W = AB ? (L ? 800 : 336) : L ? 1320 : 760;
+  const PAD_H = AB ? (L ? 470 : 340) : L ? 660 : 380;
   const padX = L ? paneCx - PAD_W / 2 : (W - PAD_W) / 2;
   const padY = H - PAD_H - (L ? 10 : 8);
+  // ABのパッド配置: 縦は下部に横並び (3Dの奥行きぶん中央が触れないよう間隔を取る)、
+  // 横は右ペーンに縦積み
+  const padPosA = AB
+    ? L
+      ? { x: paneCx - PAD_W / 2, y: 64 }
+      : { x: 10, y: H - PAD_H - 8 }
+    : { x: padX, y: padY };
+  const padPosB = L
+    ? { x: paneCx - PAD_W / 2, y: 64 + PAD_H + 30 }
+    : { x: W - PAD_W - 10, y: H - PAD_H - 8 };
 
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -426,8 +453,9 @@ export async function recordChartVideo(
   const recStart = Math.max(0, offsetSec - LEAD_IN);
   const durationSec = songEnd - recStart; // 譜面内時間
 
-  // 番組構成 (OP/ED/リプレイ/カウントダウン)。plain指定なら素の再生のみ
-  const program = L && !o.plain;
+  // 番組構成 (OP/ED/リプレイ/カウントダウン)。plain指定なら素の再生のみ。
+  // A/B比較は解説がA前提になるので常に素の再生
+  const program = L && !o.plain && !AB;
 
   // 注目ポイントの解説 (横長のみ)。再生は止めず、対象小節群がレーンを
   // 流れる間だけ色付きの囲いをレーンに重ね、引き出し線でつないだ
@@ -517,11 +545,28 @@ export async function recordChartVideo(
   const judged = chart.events.filter(
     (e) => e.panels.length > 0 && e.ghostPanels.length === 0 && !e.shock
   );
-  const clapTimes = judged.map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
-  const clapAccents = judged.map((e) => e.panels.length >= 2);
-  const ghostTimes = chart.events
-    .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && footsteps[i]?.ghost))
-    .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
+  // A/B比較のクラップはA∪B (同時刻は1発にまとめ、どちらかがジャンプならアクセント)
+  const clapMap = new Map<number, boolean>();
+  const addClaps = (c: ParsedChart) => {
+    for (const e of c.events) {
+      if (e.panels.length === 0 || e.ghostPanels.length > 0 || e.shock) continue;
+      const t = songToReal(offsetSec + timeAtBeat(timeline, e.row.beat));
+      const key = Math.round(t * 200); // 5ms単位で同一視
+      clapMap.set(key, (clapMap.get(key) ?? false) || e.panels.length >= 2);
+    }
+  };
+  addClaps(chart);
+  if (AB) addClaps(o.chartB!);
+  const clapKeys = [...clapMap.keys()].sort((a, b) => a - b);
+  const clapTimes = clapKeys.map((k) => k / 200);
+  const clapAccents = clapKeys.map((k) => clapMap.get(k)!);
+  const ghostOf = (c: ParsedChart, fs: FootStep[]) =>
+    c.events
+      .filter((e, i) => e.ghostPanels.length > 0 || (e.shock && fs[i]?.ghost))
+      .map((e) => songToReal(offsetSec + timeAtBeat(timeline, e.row.beat)));
+  const ghostTimes = AB
+    ? [...ghostOf(chart, footsteps), ...ghostOf(o.chartB!, o.footstepsB!)]
+    : ghostOf(chart, footsteps);
   // カウントダウン (横のみ): 最初のノーツの3秒前から1秒刻みのティック音。
   // オープニング明けに間に合う分だけ鳴らす
   const firstNoteReal =
@@ -639,13 +684,48 @@ export async function recordChartVideo(
     };
   })();
 
-  // 足パッド (アプリと同じThree.jsシーン)
-  const footScene = createFootScene();
-  footScene?.setSize(PAD_W, PAD_H, 1);
-  footScene?.setTrail(!!o.trail);
-  const evTimes = chart.events.map((e) => timeAtBeat(timeline, e.row.beat));
-  let lastCurIdx = -2;
-  let lastFootIdx = -2;
+  // レーン群 (単独ならAだけ、A/B比較ならA・B)。描画と足パッドはこの単位で回す
+  interface LaneCfg {
+    tag: "A" | "B";
+    chart: ParsedChart;
+    footsteps: FootStep[];
+    segs: ReturnType<typeof holdSegmentsOf>;
+    evTimes: number[];
+    x: number;
+    diff: { cls: number | null; lvl: string } | null;
+    pad: { x: number; y: number };
+    footScene: ReturnType<typeof createFootScene>;
+    lastCurIdx: number;
+    lastFootIdx: number;
+  }
+  const makeLane = (
+    tag: "A" | "B",
+    c: ParsedChart,
+    fsteps: FootStep[],
+    x: number,
+    diff: { cls: number | null; lvl: string } | null,
+    pad: { x: number; y: number }
+  ): LaneCfg => {
+    // 足パッド (アプリと同じThree.jsシーン)
+    const scene = createFootScene();
+    scene?.setSize(PAD_W, PAD_H, 1);
+    scene?.setTrail(!!o.trail);
+    return {
+      tag,
+      chart: c,
+      footsteps: fsteps,
+      segs: c === chart ? segs : holdSegmentsOf(c, fsteps),
+      evTimes: c.events.map((e) => timeAtBeat(timeline, e.row.beat)),
+      x,
+      diff,
+      pad,
+      footScene: scene,
+      lastCurIdx: -2,
+      lastFootIdx: -2,
+    };
+  };
+  const lanes: LaneCfg[] = [makeLane("A", chart, footsteps, LANE_X, o.diff, padPosA)];
+  if (AB) lanes.push(makeLane("B", o.chartB!, o.footstepsB!, LANE_X_B, o.diffB ?? null, padPosB));
 
   const videoStream = canvas.captureStream(60);
   const stream = new MediaStream([
@@ -774,6 +854,67 @@ export async function recordChartVideo(
       ctx.fillText(o.subtitle, textX, blockTop + tAsc + tDesc + lineGap + sAsc, textMaxW);
       ctx.globalAlpha = 1;
     }
+  };
+
+  // A/B比較のラベルチップ: 「A」「B」(ミント) + 難易度アイコン + レベル。
+  // (cx, cy) を中心に、暗い角丸チップとして描く
+  const drawAbChip = (
+    tag: "A" | "B",
+    diff: { cls: number | null; lvl: string } | null,
+    cx: number,
+    cy: number
+  ) => {
+    const h = 34;
+    const footSize = 24;
+    ctx.font = `400 26px ${titleFont}`;
+    ctx.textBaseline = "alphabetic";
+    const tagW = ctx.measureText(tag).width;
+    const lvlW = diff?.lvl ? ctx.measureText(diff.lvl).width : 0;
+    const w =
+      20 + tagW + (diff?.cls != null ? 8 + footSize : 0) + (diff?.lvl ? 8 + lvlW : 0);
+    const x = cx - w / 2;
+    const y = cy - h / 2;
+    roundRectPath(ctx, x, y, w, h, 8);
+    ctx.fillStyle = "rgba(23, 24, 28, 0.9)";
+    ctx.fill();
+    ctx.strokeStyle = "#3a3b42";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    let dx = x + 10;
+    ctx.textAlign = "left";
+    ctx.fillStyle = "#00e0a0";
+    ctx.fillText(tag, dx, cy + 9);
+    dx += tagW + 8;
+    if (diff?.cls != null) {
+      drawDiffFoot(ctx, dx, cy - footSize / 2, footSize, DIFF_COLORS[diff.cls], "#ffffff");
+      dx += footSize + 8;
+    }
+    if (diff?.lvl) {
+      ctx.fillStyle = "#ffffff";
+      ctx.fillText(diff.lvl, dx, cy + 9);
+    }
+  };
+
+  // A/B比較の横モード: 右ペーンは2つの足パッドで埋まるので、
+  // 曲名とBPMだけをヘッダー行に小さく出す
+  const drawAbPaneHeader = () => {
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = fg;
+    ctx.font = `900 30px ${jpFont}`;
+    const maxW = W - paneX - 200;
+    ctx.fillText(o.title, paneX, 42, maxW);
+    const tw = Math.min(maxW, ctx.measureText(o.title).width);
+    const bpmText = `♩=${o.bpmLabel}`;
+    ctx.font = "700 20px ui-monospace, monospace";
+    const chipW = ctx.measureText(bpmText).width + 24;
+    const chipX = paneX + tw + 18;
+    roundRectPath(ctx, chipX, 16, chipW, 34, 8);
+    ctx.fillStyle = "rgba(23, 24, 28, 0.85)";
+    ctx.fill();
+    ctx.fillStyle = "#00e0a0";
+    ctx.textBaseline = "middle";
+    ctx.fillText(bpmText, chipX + 12, 34);
   };
 
   // 横モードの右ペーン: ジャケット+曲名+難易度+BPM / 統計カード。
@@ -1193,178 +1334,194 @@ export async function recordChartVideo(
     drawStripedBg();
 
     if (L) {
-      drawRightPane(curBeat);
+      if (AB) drawAbPaneHeader();
+      else drawRightPane(curBeat);
     } else {
       drawPortraitHeader();
     }
 
-    // レーン背景
-    ctx.fillStyle = "#17181c";
-    ctx.fillRect(LANE_X - 10, HEADER_H, LANE_W * 4 + 20, LANE_BOTTOM - HEADER_H);
-
     const yOf = (beat: number) => RECEPTOR_Y + (beat - curBeat) * pxPerBeat;
     const clipTop = RECEPTOR_Y - NOTE / 2; // 受け皿上端より上は描かない
-    ctx.save();
-    ctx.beginPath();
     const clipY = Math.max(HEADER_H, clipTop);
-    ctx.rect(LANE_X - 10, clipY, LANE_W * 4 + 20, LANE_BOTTOM - clipY);
-    ctx.clip();
-
-    // 体の向きバンド
-    chart.events.forEach((ev, i) => {
-      const color = facingColor(footsteps[i].facing);
-      if (!color) return;
-      const bandStart = i > 0 ? chart.events[i - 1].row.beat : 0;
-      const y1 = yOf(bandStart);
-      const y2 = yOf(ev.row.beat);
-      if (y2 < HEADER_H || y1 > LANE_BOTTOM) return;
-      ctx.fillStyle = color;
-      ctx.fillRect(LANE_X - 10, y1, LANE_W * 4 + 20, y2 - y1);
-    });
-
-    // 小節線 + 小節番号
     const beatTop = curBeat + (clipY - RECEPTOR_Y) / pxPerBeat;
     const beatBottom = curBeat + (LANE_BOTTOM - RECEPTOR_Y) / pxPerBeat;
-    for (
-      let m = Math.max(0, Math.floor(beatTop / 4));
-      m * 4 <= beatBottom && m <= chart.measures.length;
-      m++
-    ) {
-      const y = yOf(m * 4);
-      ctx.strokeStyle = "rgba(255,255,255,0.22)";
-      ctx.lineWidth = 2;
+    // A/B比較のラベル位置 (縦はレーン上端の帯、横はヘッダー行)
+    const chipY = L ? 30 : HEADER_H + 22;
+
+    // レーン群ごと (単独=A、A/B比較=A→B) に描く
+    for (const ln of lanes) {
+      const lc = ln.chart;
+      const lf = ln.footsteps;
+      const lx = ln.x;
+
+      // レーン背景
+      ctx.fillStyle = "#17181c";
+      ctx.fillRect(lx - 10, HEADER_H, LANE_W * 4 + 20, LANE_BOTTOM - HEADER_H);
+
+      ctx.save();
       ctx.beginPath();
-      ctx.moveTo(LANE_X - 10, y);
-      ctx.lineTo(LANE_X + LANE_W * 4 + 10, y);
-      ctx.stroke();
-      if (m < chart.measures.length) {
-        ctx.fillStyle = "rgba(255,255,255,0.45)";
-        ctx.font = "700 26px ui-monospace, monospace";
-        ctx.textAlign = "left";
-        ctx.textBaseline = "top";
-        ctx.fillText(String(m + 1), LANE_X - 2, y + 6);
-      }
-    }
+      ctx.rect(lx - 10, clipY, LANE_W * 4 + 20, LANE_BOTTOM - clipY);
+      ctx.clip();
 
-    // フリーズ (保持足の色)。判定線より上は消費済みとして描かない
-    for (const s of segs) {
-      const a = Math.max(s.start, curBeat);
-      const b = s.end;
-      if (b <= a || yOf(a) > LANE_BOTTOM) continue;
-      ctx.fillStyle = s.roll
-        ? "#ff9f43"
-        : s.foot === "L"
-        ? "rgba(255, 92, 168, 0.72)"
-        : s.foot === "R"
-        ? "rgba(56, 189, 248, 0.72)"
-        : "#2ecc71";
-      const x = LANE_X + s.panel * LANE_W + (LANE_W - NOTE) / 2 + 18;
-      ctx.fillRect(x, yOf(a), NOTE - 36, yOf(b) - yOf(a));
-    }
+      // 体の向きバンド
+      lc.events.forEach((ev, i) => {
+        const color = facingColor(lf[i].facing);
+        if (!color) return;
+        const bandStart = i > 0 ? lc.events[i - 1].row.beat : 0;
+        const y1 = yOf(bandStart);
+        const y2 = yOf(ev.row.beat);
+        if (y2 < HEADER_H || y1 > LANE_BOTTOM) return;
+        ctx.fillStyle = color;
+        ctx.fillRect(lx - 10, y1, LANE_W * 4 + 20, y2 - y1);
+      });
 
-    // ショックアロー行
-    for (const r of chart.shocks) {
-      if (r.beat < curBeat - 0.05 || yOf(r.beat) > LANE_BOTTOM + NOTE) continue;
-      const y = yOf(r.beat);
-      ctx.fillStyle = "rgba(125, 249, 255, 0.16)";
-      ctx.fillRect(LANE_X, y - NOTE * 0.3, LANE_W * 4, NOTE * 0.6);
-      for (let p = 0; p < 4; p++) {
-        drawGhostArrow(
-          ctx,
-          LANE_X + p * LANE_W + LANE_W / 2,
-          y,
-          NOTE * 0.5,
-          ARROW_ROTATIONS[p],
-          "#7df9ff",
-          "rgba(125, 249, 255, 0.16)"
-        );
-      }
-    }
-
-    // ノーツ (判定済みは非表示)
-    chart.events.forEach((ev, i) => {
-      const beat = ev.row.beat;
-      if (beat < curBeat - 1e-6) return;
-      const y = yOf(beat);
-      if (y > LANE_BOTTOM + NOTE) return;
-      const step = footsteps[i];
-      for (const p of ev.panels) {
-        const cx = LANE_X + p * LANE_W + LANE_W / 2;
-        if (ev.ghostPanels.includes(p)) {
-          drawGhostArrow(ctx, cx, y, NOTE, ARROW_ROTATIONS[p]);
-        } else {
-          drawArrow(ctx, cx, y, NOTE, ARROW_ROTATIONS[p], QUANT_COLORS[ev.row.quant] ?? "#9aa3b5");
-        }
-        const foot = step.feet[p];
-        if (foot) {
-          // バッジはスケールを掛けて描く (chartImage側は9px固定のため)
-          const k = NOTE / 58;
-          ctx.save();
-          ctx.translate(cx + NOTE / 2 - 12, y - NOTE / 2 + 12);
-          ctx.scale(k, k);
-          drawFootBadge(ctx, 0, 0, foot, false);
-          ctx.restore();
+      // 小節線 + 小節番号
+      for (
+        let m = Math.max(0, Math.floor(beatTop / 4));
+        m * 4 <= beatBottom && m <= lc.measures.length;
+        m++
+      ) {
+        const y = yOf(m * 4);
+        ctx.strokeStyle = "rgba(255,255,255,0.22)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(lx - 10, y);
+        ctx.lineTo(lx + LANE_W * 4 + 10, y);
+        ctx.stroke();
+        if (m < lc.measures.length) {
+          ctx.fillStyle = "rgba(255,255,255,0.45)";
+          ctx.font = `700 ${AB ? 20 : 26}px ui-monospace, monospace`;
+          ctx.textAlign = "left";
+          ctx.textBaseline = "top";
+          ctx.fillText(String(m + 1), lx - 2, y + 6);
         }
       }
-    });
-    // 注目領域の囲い (ノーツと一緒に流れる。レーンのクリップ内で描く)
-    if (L) drawSpotBoxes(audioTime, curBeat);
-    ctx.restore();
 
-    // 受け皿 (直近で踏んだパネルは足の色で光る)
-    let curIdx = -1;
-    for (let k = 0; k < chart.events.length; k++) {
-      if (evTimes[k] <= tSong + 1e-6) curIdx = k;
-      else break;
-    }
-    // フラッシュの実時間は速度によらず一定 (0.18秒)
-    const hitEvent =
-      curIdx >= 0 && tSong - evTimes[curIdx] < 0.18 * vSpeed ? chart.events[curIdx] : null;
-    for (let p = 0; p < 4; p++) {
-      const hit = hitEvent?.panels.includes(p) ?? false;
-      const foot = hit && curIdx >= 0 ? footsteps[curIdx].feet[p] : null;
-      drawReceptor(ctx, LANE_X + p * LANE_W + LANE_W / 2, RECEPTOR_Y, NOTE, p, hit, foot);
-    }
-
-    // 足パッド (Three.jsシーンを合成)
-    if (footScene) {
-      let footIdx = -1;
-      // 足の移動アニメーション(実時間0.25秒)ぶんだけ先読みする
-      const tLead = tSong + (FOOT_TRAVEL + FOOT_EARLY) * vSpeed;
-      for (let k = 0; k < chart.events.length; k++) {
-        if (evTimes[k] <= tLead + 1e-6) footIdx = k;
-        else break;
+      // フリーズ (保持足の色)。判定線より上は消費済みとして描かない
+      for (const s of ln.segs) {
+        const a = Math.max(s.start, curBeat);
+        const b = s.end;
+        if (b <= a || yOf(a) > LANE_BOTTOM) continue;
+        ctx.fillStyle = s.roll
+          ? "#ff9f43"
+          : s.foot === "L"
+          ? "rgba(255, 92, 168, 0.72)"
+          : s.foot === "R"
+          ? "rgba(56, 189, 248, 0.72)"
+          : "#2ecc71";
+        const x = lx + s.panel * LANE_W + (LANE_W - NOTE) / 2 + NOTE * 0.125;
+        ctx.fillRect(x, yOf(a), NOTE * 0.75, yOf(b) - yOf(a));
       }
-      if (footIdx !== lastFootIdx || curIdx !== lastCurIdx) {
-        lastFootIdx = footIdx;
-        lastCurIdx = curIdx;
-        const fstep = footsteps[Math.max(0, footIdx)];
-        const cstep = curIdx >= 0 ? footsteps[curIdx] : null;
-        const cev = curIdx >= 0 ? chart.events[curIdx] : null;
-        if (fstep) {
-          footScene.setProps(
-            {
-              leftPos: fstep.leftPos,
-              rightPos: fstep.rightPos,
-              stepping: cstep?.shock && cstep.ghost ? [4] : cev?.panels ?? [],
-              feet: cstep?.feet ?? [null, null, null, null],
-              facing: fstep.facing,
-              stepKey: curIdx,
-              heldFeet: fstep.heldFeet,
-              oneFoot: fstep.stretch,
-              liftedFoot: fstep.liftedFoot,
-              // 直前ノーツとの等速換算の間隔秒 (収録速度はplaySpeedで渡す)
-              trailGapSec:
-                footIdx > 0 ? evTimes[footIdx] - evTimes[footIdx - 1] : null,
-              playSpeed: vSpeed,
-            },
-            nowMs
+
+      // ショックアロー行
+      for (const r of lc.shocks) {
+        if (r.beat < curBeat - 0.05 || yOf(r.beat) > LANE_BOTTOM + NOTE) continue;
+        const y = yOf(r.beat);
+        ctx.fillStyle = "rgba(125, 249, 255, 0.16)";
+        ctx.fillRect(lx, y - NOTE * 0.3, LANE_W * 4, NOTE * 0.6);
+        for (let p = 0; p < 4; p++) {
+          drawGhostArrow(
+            ctx,
+            lx + p * LANE_W + LANE_W / 2,
+            y,
+            NOTE * 0.5,
+            ARROW_ROTATIONS[p],
+            "#7df9ff",
+            "rgba(125, 249, 255, 0.16)"
           );
         }
       }
-      footScene.frame(nowMs);
-      // 幅は領域より広め (左右は空きなのではみ出してOK)。迫力優先で大きく合成
-      ctx.drawImage(footScene.canvas, padX, padY, PAD_W, PAD_H);
+
+      // ノーツ (判定済みは非表示)
+      lc.events.forEach((ev, i) => {
+        const beat = ev.row.beat;
+        if (beat < curBeat - 1e-6) return;
+        const y = yOf(beat);
+        if (y > LANE_BOTTOM + NOTE) return;
+        const step = lf[i];
+        for (const p of ev.panels) {
+          const cx = lx + p * LANE_W + LANE_W / 2;
+          if (ev.ghostPanels.includes(p)) {
+            drawGhostArrow(ctx, cx, y, NOTE, ARROW_ROTATIONS[p]);
+          } else {
+            drawArrow(ctx, cx, y, NOTE, ARROW_ROTATIONS[p], QUANT_COLORS[ev.row.quant] ?? "#9aa3b5");
+          }
+          const foot = step.feet[p];
+          if (foot) {
+            // バッジはスケールを掛けて描く (chartImage側は9px固定のため)
+            const k = NOTE / 58;
+            ctx.save();
+            ctx.translate(cx + NOTE / 2 - 12, y - NOTE / 2 + 12);
+            ctx.scale(k, k);
+            drawFootBadge(ctx, 0, 0, foot, false);
+            ctx.restore();
+          }
+        }
+      });
+      // 注目領域の囲い (ノーツと一緒に流れる。レーンのクリップ内で描く)
+      if (L && ln.tag === "A") drawSpotBoxes(audioTime, curBeat);
+      ctx.restore();
+
+      // 受け皿 (直近で踏んだパネルは足の色で光る)
+      let curIdx = -1;
+      for (let k = 0; k < lc.events.length; k++) {
+        if (ln.evTimes[k] <= tSong + 1e-6) curIdx = k;
+        else break;
+      }
+      // フラッシュの実時間は速度によらず一定 (0.18秒)
+      const hitEvent =
+        curIdx >= 0 && tSong - ln.evTimes[curIdx] < 0.18 * vSpeed ? lc.events[curIdx] : null;
+      for (let p = 0; p < 4; p++) {
+        const hit = hitEvent?.panels.includes(p) ?? false;
+        const foot = hit && curIdx >= 0 ? lf[curIdx].feet[p] : null;
+        drawReceptor(ctx, lx + p * LANE_W + LANE_W / 2, RECEPTOR_Y, NOTE, p, hit, foot);
+      }
+
+      // A/B比較: レーン群のラベル (A/B + 難易度)
+      if (AB) drawAbChip(ln.tag, ln.diff, lx + LANE_W * 2, chipY);
+
+      // 足パッド (Three.jsシーンを合成)
+      const scene = ln.footScene;
+      if (scene) {
+        let footIdx = -1;
+        // 足の移動アニメーション(実時間0.25秒)ぶんだけ先読みする
+        const tLead = tSong + (FOOT_TRAVEL + FOOT_EARLY) * vSpeed;
+        for (let k = 0; k < lc.events.length; k++) {
+          if (ln.evTimes[k] <= tLead + 1e-6) footIdx = k;
+          else break;
+        }
+        if (footIdx !== ln.lastFootIdx || curIdx !== ln.lastCurIdx) {
+          ln.lastFootIdx = footIdx;
+          ln.lastCurIdx = curIdx;
+          const fstep = lf[Math.max(0, footIdx)];
+          const cstep = curIdx >= 0 ? lf[curIdx] : null;
+          const cev = curIdx >= 0 ? lc.events[curIdx] : null;
+          if (fstep) {
+            scene.setProps(
+              {
+                leftPos: fstep.leftPos,
+                rightPos: fstep.rightPos,
+                stepping: cstep?.shock && cstep.ghost ? [4] : cev?.panels ?? [],
+                feet: cstep?.feet ?? [null, null, null, null],
+                facing: fstep.facing,
+                stepKey: curIdx,
+                heldFeet: fstep.heldFeet,
+                oneFoot: fstep.stretch,
+                liftedFoot: fstep.liftedFoot,
+                // 直前ノーツとの等速換算の間隔秒 (収録速度はplaySpeedで渡す)
+                trailGapSec:
+                  footIdx > 0 ? ln.evTimes[footIdx] - ln.evTimes[footIdx - 1] : null,
+                playSpeed: vSpeed,
+              },
+              nowMs
+            );
+          }
+        }
+        scene.frame(nowMs);
+        // 幅は領域より広め (左右は空きなのではみ出してOK)。迫力優先で大きく合成
+        ctx.drawImage(scene.canvas, ln.pad.x, ln.pad.y, PAD_W, PAD_H);
+        if (AB) drawAbChip(ln.tag, ln.diff, ln.pad.x + PAD_W / 2, ln.pad.y + 18);
+      }
     }
 
     // 解説カード + 引き出し線 (パッドの上に重ねる)
@@ -1411,7 +1568,7 @@ export async function recordChartVideo(
       } catch {
         // 既に停止済みなら無視
       }
-      footScene?.dispose();
+      for (const ln of lanes) ln.footScene?.dispose();
       void actx.close();
     };
     rec.onstop = () => {

@@ -41,6 +41,13 @@ export interface Strings {
   editing: string;
   textBtn: string;
   textBtnShort: string;
+  // A/B比較
+  abBtn: string;
+  abBtnTitle: string;
+  abImportTitle: string;
+  abImportDesc: string;
+  abRemove: string;
+  videoAbNote: string;
   timingBtn: string;
   copyUrl: string;
   copyShort: string;
@@ -243,6 +250,13 @@ const ja: Strings = {
   editing: "編集中",
   textBtn: "テキスト入力",
   textBtnShort: "テキスト",
+  abBtn: "A/B",
+  abBtnTitle: "比較用のB譜面を並べる (激と鬼の足運び比較など)",
+  abImportTitle: "B譜面を読み込む (A/B比較)",
+  abImportDesc:
+    "同じ曲の別難易度など、比較したい譜面を貼り付けます。BPM・停止・変形はAのものを共有し、足割り・難易度だけB用に持ちます。動画書き出しも2譜面並びになります。",
+  abRemove: "B譜面を外す",
+  videoAbNote: "A/B比較中は2譜面を横並びで書き出します (番組構成・解説カードは付きません)",
   timingBtn: "変速",
   copyUrl: "URLをコピー",
   copyShort: "コピー",
@@ -460,6 +474,13 @@ const en: Strings = {
   editing: "Editing",
   textBtn: "Text input",
   textBtnShort: "Text",
+  abBtn: "A/B",
+  abBtnTitle: "Add a second chart (B) to compare side by side",
+  abImportTitle: "Load chart B (A/B compare)",
+  abImportDesc:
+    "Paste the chart to compare (e.g. another difficulty of the same song). BPM, stops and transforms are shared with A; only foot assignment and difficulty are kept for B. Video export renders both charts side by side.",
+  abRemove: "Remove chart B",
+  videoAbNote: "A/B mode exports both charts side by side (no program/callouts)",
   timingBtn: "Timing",
   copyUrl: "Copy URL",
   copyShort: "Copy",
@@ -676,6 +697,13 @@ const ko: Strings = {
   editing: "편집 중",
   textBtn: "텍스트 입력",
   textBtnShort: "텍스트",
+  abBtn: "A/B",
+  abBtnTitle: "비교용 B 채보를 나란히 표시 (激/鬼 발놀림 비교 등)",
+  abImportTitle: "B 채보 불러오기 (A/B 비교)",
+  abImportDesc:
+    "같은 곡의 다른 난이도 등 비교할 채보를 붙여넣습니다. BPM·정지·변형은 A와 공유하고, 발 배정·난이도만 B용으로 가집니다. 동영상 내보내기도 두 채보가 나란히 렌더링됩니다.",
+  abRemove: "B 채보 제거",
+  videoAbNote: "A/B 비교 중에는 두 채보를 나란히 내보냅니다 (프로그램 구성·해설 카드 없음)",
   timingBtn: "변속",
   copyUrl: "URL 복사",
   copyShort: "복사",

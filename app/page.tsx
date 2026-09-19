@@ -37,6 +37,21 @@ function resolveChart(sp: { [key: string]: string | string[] | undefined }): {
   return { n: undefined, ogParam: null };
 }
 
+// 比較用のB譜面 (n2=生データ / d2=deflate圧縮)。無ければundefined
+function resolveChartB(sp: { [key: string]: string | string[] | undefined }): string | undefined {
+  const rawN = pick(sp.n2);
+  if (rawN) return rawN;
+  const d = pick(sp.d2);
+  if (d) {
+    try {
+      return decompressCompact(d);
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 export async function generateMetadata({
   searchParams,
 }: {
@@ -153,6 +168,10 @@ export default async function Page({
   const lang = normalizeLang(pick(sp.l));
   const tr = pick(sp.tr);
   const isDefault = !n;
+  // A/B比較のB譜面 (タイミングはAと共有し、譜面・足指定・難易度だけ別持ち)
+  const n2 = isDefault ? undefined : resolveChartB(sp);
+  const f2 = pick(sp.f2);
+  const df2 = pick(sp.df2);
 
   return (
     <main className={`container${embedded ? " embed-container" : ""}`}>
@@ -181,6 +200,9 @@ export default async function Page({
         bg={bg}
         lang={lang}
         transform={tr}
+        compactB={n2}
+        overridesB={f2}
+        difficultyB={df2}
       />
       {/* フッター帯 (文字ぶんの幅) とAI生成ボタンを同じ行に横並び */}
       {!embedded && <div className="footer-row">

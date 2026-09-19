@@ -2419,6 +2419,121 @@ input[type="range"]:focus {
   margin-top: 6px;
 }
 
+/* ===== A/B比較 (2譜面を横並び) ===== */
+
+/* レーン群の見出しチップ (A/B + 難易度)。各レーン群の幅に合わせて並べる */
+.ab-labels {
+  display: flex;
+  gap: 12px;
+  margin: 0 0 6px 26px; /* chart-scrollの左パディング (小節番号帯) ぶん揃える */
+}
+
+.ab-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: var(--ink);
+  border: 2px solid var(--ink-border);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.ab-chip b {
+  color: var(--mint);
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-weight: 400;
+  font-size: 14px;
+}
+
+.ab-chip .diff-num {
+  font-family: var(--font-logo), "Arial Black", sans-serif;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+}
+
+.ab-remove {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1;
+  background: var(--ink-2);
+  border: 1px solid var(--ink-border);
+  color: #fff;
+  box-shadow: none;
+}
+
+/* A/Bレーン群の境目 */
+.ab-divider {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.14);
+  pointer-events: none;
+}
+
+/* 足ステージを2つ横並び (A左・B右) */
+.pads-row {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.pad-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+}
+
+.pad-label {
+  margin-bottom: 2px;
+}
+
+.viewer-ab .stage3d {
+  --stage: 112px;
+}
+
+/* fs中はレーン上に見出しを重ねる (受け皿の少し上) */
+.fs-ab-labels {
+  position: absolute;
+  top: 36px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  /* 各レーン群の中央に置く (右端に寄せると✕ボタンと重なる) */
+  justify-content: space-around;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.viewer-fs.viewer-ab .stage3d {
+  --stage: min(40vw, 220px);
+}
+
+/* 狭い画面のA/Bはレーンが横幅を使い切るので、足ステージを下に回す
+   (fs/プレイモードは固定配置のレイアウトをそのまま使うので除外) */
+@media (max-width: 559px) {
+  .viewer-ab:not(.viewer-fs) .viewer-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .viewer-ab:not(.viewer-fs) .chart-scroll {
+    height: 48dvh;
+    min-height: 260px;
+  }
+
+  .viewer-ab:not(.viewer-fs) .side-pane {
+    position: static;
+  }
+}
+
 /* ===== 広い画面 ===== */
 
 @media (min-width: 560px) {
@@ -2500,6 +2615,10 @@ input[type="range"]:focus {
 
   .stage3d {
     --stage: 220px;
+  }
+
+  .viewer-ab .stage3d {
+    --stage: 168px;
   }
 
   .side-pane {
