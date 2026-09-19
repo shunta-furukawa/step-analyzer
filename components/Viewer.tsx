@@ -41,6 +41,7 @@ import {
 // Three.js版の足ステージ (WebGL)。バンドルを分けるため遅延読み込みし、
 // ロード中と非対応環境はCSS版FootStageで表示する
 const FootStage3D = dynamic(() => import("./FootStage3D"), { ssr: false });
+import { buildVideoDescription } from "@/lib/videoDescription";
 import { buildClipData } from "@/lib/clip";
 import { compressCompact } from "@/lib/codec";
 import {
@@ -2681,10 +2682,6 @@ export default function Viewer({
               className="tpl-copy"
               onClick={async () => {
                 const name = title || S.untitled;
-                const diffTxt =
-                  diffCls !== null || diffLvl
-                    ? ` (${diffCls !== null ? ["習", "楽", "踊", "激", "鬼"][diffCls] : "Lv"}${diffLvl})`
-                    : "";
                 const bpmTxt =
                   bpms.length > 1
                     ? `${+Math.min(...bpms.map((x) => x.bpm)).toFixed(1)}-${+Math.max(
@@ -2692,38 +2689,19 @@ export default function Viewer({
                       ).toFixed(1)}`
                     : `${+bpms[0].bpm.toFixed(1)}`;
                 const shareUrl = location.origin + (await buildUrl());
-                // 1行目=動画タイトル、空行以降=概要欄。縦横で文言を分ける
-                const isLand = vMode === "landscape";
-                const head = isLand
-                  ? `【STEP ANALYZER】${name}${diffTxt} 足割りじっくり解説 (0.5倍速)`
-                  : `【STEP ANALYZER】${name}${diffTxt} #Shorts`;
-                const body = isLand
-                  ? [
-                      "DDRの譜面をどちらの足で踏むか (足割り) を自動解析し、0.5倍速でじっくり再生しています。",
-                      "注目ポイントでは一時停止して解説コメントが入ります。",
-                      "",
-                      "譜面と足割りをブラウザで見る:",
-                      shareUrl,
-                      "",
-                      "#DDR #DanceDanceRevolution #StepAnalyzer",
-                    ]
-                  : [
-                      "DDRの譜面をどちらの足で踏むか (足割り) を自動解析して再生しています。",
-                      "じっくり見たい人向けの0.5倍速解説版は関連動画からどうぞ。",
-                      "",
-                      "譜面と足割りをブラウザで見る:",
-                      shareUrl,
-                      "",
-                      "#DDR #DanceDanceRevolution #Shorts #StepAnalyzer",
-                    ];
-                const text = [
-                  head,
-                  "",
-                  `${name}${subtitle ? ` / ${subtitle}` : ""}`,
-                  `♩=${bpmTxt}${diffTxt} / ${stats.steps}ステップ`,
-                  "",
-                  ...body,
-                ].join("\n");
+                const text = buildVideoDescription({
+                  name,
+                  subtitle,
+                  bpm: bpmTxt,
+                  shareUrl,
+                  chartA: { cls: diffCls, lvl: diffLvl, steps: stats.steps },
+                  chartB: abMode && statsB
+                    ? { cls: diffBCls, lvl: diffBLvl, steps: statsB.steps }
+                    : null,
+                  landscape: vMode === "landscape",
+                  landscapeSpeed: vLandSpeed,
+                  program: vProgram,
+                });
                 try {
                   await navigator.clipboard.writeText(text);
                   setVTplCopied(true);
