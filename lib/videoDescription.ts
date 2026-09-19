@@ -51,7 +51,6 @@ export function buildVideoDescription(o: VideoDescriptionOptions): string {
         ]
       : [
           "DDRの譜面をどちらの足で踏むか (足割り) を自動解析して再生しています。",
-          "じっくり見たい人向けの0.5倍速解説版は関連動画からどうぞ。",
         ];
   return [
     head,
