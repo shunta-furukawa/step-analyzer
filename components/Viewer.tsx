@@ -184,6 +184,7 @@ export default function Viewer({
   lang: initialLang,
   transform: initialTransform,
   embedded = false,
+  showPlayButton = false,
 }: {
   compact: string;
   title?: string;
@@ -200,6 +201,8 @@ export default function Viewer({
   lang?: Lang;
   transform?: string;
   embedded?: boolean;
+  /** プレイモードの🎮ボタンを出すか (?play=1 のときだけ true) */
+  showPlayButton?: boolean;
 }) {
   const [lang, setLang] = useState<Lang>(initialLang ?? "ja");
   const S = STRINGS[lang];
@@ -3289,7 +3292,10 @@ export default function Viewer({
                   ◇{ghostSound ? "♪" : "🔇"}
                 </button>
               )}
-              {!embedded && <button
+              {/* プレイモードの入口。通常は非表示にしており、?play=1 を
+                  付けたときだけ出す (実装は残してあるので、常時表示に
+                  戻すときはこの条件から showPlayButton を外すだけ) */}
+              {!embedded && showPlayButton && <button
                 className="secondary"
                 onClick={enterPm}
                 title={S.playModeTitle}

@@ -125,6 +125,8 @@ export default async function Page({
   const sp = await searchParams;
   const { n } = resolveChart(sp);
   const embedded = pick(sp.embed) === "1";
+  // プレイモードの🎮ボタンは通常は非表示。?play=1 のときだけ出す
+  const showPlayButton = pick(sp.play) === "1";
   const standaloneParams = new URLSearchParams();
   for (const [key, value] of Object.entries(sp)) {
     if (key !== "embed" && typeof value === "string") standaloneParams.set(key, value);
@@ -163,6 +165,7 @@ export default async function Page({
       </header>}
       <Viewer
         embedded={embedded}
+        showPlayButton={showPlayButton}
         key={n ?? "default"}
         compact={n ?? SAMPLE_COMPACT}
         title={isDefault ? SAMPLE_TITLE : t}
