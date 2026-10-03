@@ -2681,10 +2681,18 @@ export default function Viewer({
               className="tpl-copy"
               onClick={async () => {
                 const name = title || S.untitled;
-                const diffTxt =
-                  diffCls !== null || diffLvl
-                    ? ` (${diffCls !== null ? ["習", "楽", "踊", "激", "鬼"][diffCls] : "Lv"}${diffLvl})`
+                // 難易度ラベル (例: 激13 / Lv17)。未設定なら空文字
+                const diffLabel = (cls: number | null, lvl: string) =>
+                  cls !== null || lvl
+                    ? `${cls !== null ? ["習", "楽", "踊", "激", "鬼"][cls] : "Lv"}${lvl}`
                     : "";
+                const labelA = diffLabel(diffCls, diffLvl);
+                const labelB = diffLabel(diffBCls, diffBLvl);
+                const diffTxt = labelA ? ` (${labelA})` : "";
+                // A/B比較は「激13 vs 鬼17」のように両譜面を見出しに出す
+                const abTxt = abMode
+                  ? ` ${labelA || "A"} vs ${labelB || "B"} 足運び比較`
+                  : "";
                 const bpmTxt =
                   bpms.length > 1
                     ? `${+Math.min(...bpms.map((x) => x.bpm)).toFixed(1)}-${+Math.max(
@@ -2694,10 +2702,35 @@ export default function Viewer({
                 const shareUrl = location.origin + (await buildUrl());
                 // 1行目=動画タイトル、空行以降=概要欄。縦横で文言を分ける
                 const isLand = vMode === "landscape";
-                const head = isLand
+                const head = abMode
+                  ? isLand
+                    ? `【STEP ANALYZER】${name}${abTxt} (0.5倍速)`
+                    : `【STEP ANALYZER】${name}${abTxt} #Shorts`
+                  : isLand
                   ? `【STEP ANALYZER】${name}${diffTxt} 足割りじっくり解説 (0.5倍速)`
                   : `【STEP ANALYZER】${name}${diffTxt} #Shorts`;
-                const body = isLand
+                // A/B比較は「2譜面を並べて比べている」ことを概要で説明する。
+                // (比較モードでは注目ポイントの解説停止は入らない)
+                const abIntro = [
+                  "同じ曲・同じBPM/ソフランで2種類の譜面を並べ、どちらの足で踏むか (足割り) を自動解析して同時に再生しています。",
+                  `左が A${labelA ? ` (${labelA})` : ""}、右が B${
+                    labelB ? ` (${labelB})` : ""
+                  }。足運びの違いを見比べてみてください。`,
+                  "ハンドクラップもAは左、Bは右から鳴ります。",
+                ];
+                const body = abMode
+                  ? [
+                      ...abIntro,
+                      ...(isLand ? ["0.5倍速なので動きをじっくり追えます。"] : []),
+                      "",
+                      "2譜面を並べてブラウザで見る:",
+                      shareUrl,
+                      "",
+                      isLand
+                        ? "#DDR #DanceDanceRevolution #StepAnalyzer #譜面比較"
+                        : "#DDR #DanceDanceRevolution #Shorts #StepAnalyzer #譜面比較",
+                    ]
+                  : isLand
                   ? [
                       "DDRの譜面をどちらの足で踏むか (足割り) を自動解析し、0.5倍速でじっくり再生しています。",
                       "注目ポイントでは一時停止して解説コメントが入ります。",
@@ -2720,7 +2753,13 @@ export default function Viewer({
                   head,
                   "",
                   `${name}${subtitle ? ` / ${subtitle}` : ""}`,
-                  `♩=${bpmTxt}${diffTxt} / ${stats.steps}ステップ`,
+                  ...(abMode
+                    ? [
+                        `♩=${bpmTxt}`,
+                        `A${labelA ? ` ${labelA}` : ""} / ${stats.steps}ステップ`,
+                        `B${labelB ? ` ${labelB}` : ""} / ${statsB?.steps ?? 0}ステップ`,
+                      ]
+                    : [`♩=${bpmTxt}${diffTxt} / ${stats.steps}ステップ`]),
                   "",
                   ...body,
                 ].join("\n");
