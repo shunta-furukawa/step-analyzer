@@ -364,6 +364,8 @@ export default function Viewer({
   // 自動解説の量 (検出スコアの閾値を変える)
   const [vSpotAmount, setVSpotAmount] = useState<"few" | "normal" | "many">("normal");
   const [vUseMedia, setVUseMedia] = useState(false);
+  // 音源なしのときだけ使える4つ打ちメトロノーム (既定オフ)
+  const [vMetro, setVMetro] = useState(false);
   const [vOgg, setVOgg] = useState("");
   const [vJacket, setVJacket] = useState("");
   const [vOffset, setVOffset] = useState("0");
@@ -2501,6 +2503,17 @@ export default function Viewer({
                 </div>
               </>
             )}
+            {/* 音源を使わないときだけ: 4つ打ちメトロノームを焼き込む (既定オフ) */}
+            {!(vUseMedia && vOgg.trim()) && (
+              <label className="toggle-row">
+                <input
+                  type="checkbox"
+                  checked={vMetro}
+                  onChange={(e) => setVMetro(e.target.checked)}
+                />
+                <span>{S.videoMetro}</span>
+              </label>
+            )}
             {vError && <p className="error">{vError}</p>}
             <button
               disabled={vBusy}
@@ -2537,6 +2550,7 @@ export default function Viewer({
                     bgColor2,
                     hispeed,
                     audio,
+                    metronome: vMetro,
                     jacket,
                     offsetSec: Number.isFinite(off) ? off : 0,
                     landscape: vMode === "landscape",

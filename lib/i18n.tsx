@@ -116,6 +116,7 @@ export interface Strings {
   videoTitle: string;
   videoDesc: string;
   videoUseMedia: string;
+  videoMetro: string;
   videoAudioUrl: string;
   videoJacketUrl: string;
   videoOffset: string;
@@ -337,6 +338,7 @@ const ja: Strings = {
   videoDesc:
     "譜面の自動再生を動画にします。縦はショート向け (720×1280・等速)、横はじっくり観察向け (1920×1080・0.5倍速、難所を囲いと解説カードで指摘)。録画は再生時間ぶんかかります。",
   videoUseMedia: "曲とジャケットを使う",
+  videoMetro: "メトロノームを鳴らす (音源なしのとき)",
   videoAudioUrl: "音源 (ogg/mp3) のURL",
   videoJacketUrl: "ジャケット画像のURL (任意)",
   videoOffset: "オフセット秒 (1小節目の頭が音源の何秒目か)",
@@ -561,6 +563,7 @@ const en: Strings = {
   videoDesc:
     "Renders the auto-play as a video. Portrait for Shorts (720×1280, 1×), landscape for study (1920×1080, 0.5× with highlighted callouts). Recording takes as long as the playback.",
   videoUseMedia: "Use song & jacket",
+  videoMetro: "Add a metronome (when no song is used)",
   videoAudioUrl: "Audio URL (ogg/mp3)",
   videoJacketUrl: "Jacket image URL (optional)",
   videoOffset: "Offset seconds (where measure 1 starts in the audio)",
@@ -784,6 +787,7 @@ const ko: Strings = {
   videoDesc:
     "자동 재생을 동영상으로 만듭니다. 세로는 쇼트용 (720×1280·1배속), 가로는 관찰용 (1920×1080·0.5배속, 난소를 테두리와 해설 카드로 표시). 녹화는 재생 시간만큼 걸립니다.",
   videoUseMedia: "곡·재킷 사용",
+  videoMetro: "메트로놈 넣기 (음원 없을 때)",
   videoAudioUrl: "음원 (ogg/mp3) URL",
   videoJacketUrl: "재킷 이미지 URL (선택)",
   videoOffset: "오프셋 초 (1마디 시작이 음원의 몇 초인지)",

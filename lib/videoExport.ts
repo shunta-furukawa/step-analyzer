@@ -34,6 +34,9 @@ export interface VideoExportOptions {
   bgColor2?: string | null; // グラデーション右下の色 (なければ単色)
   hispeed: number;
   audio: AudioBuffer | null; // 音源 (なければハンクラのみ)
+  // 4つ打ちメトロノームを焼き込む (既定オフ)。音源ありのときは
+  // 曲が拍を示すので指定しても無視する
+  metronome?: boolean;
   jacket: HTMLImageElement | null; // ジャケット (なければアプリアイコン風)
   offsetSec: number; // 譜面1小節目の頭が音源の何秒目か (音源なしなら無視)
   landscape?: boolean; // 横長 (1920x1080) で書き出す
@@ -618,11 +621,11 @@ export async function recordChartVideo(
       if (t >= introTotal - 1e-6) countdownTimes.push(t);
     }
   }
-  // 音源なしの書き出しは4つ打ちメトロノームを鳴らす (クラップだけでは
-  // 無音区間でリズムが掴めないため)。アプリ内再生と同じティック音を
-  // クラップと同じ時刻換算で焼き込む。音源ありのときは曲が拍を
-  // 示すので入れない
-  if (!o.audio) {
+  // メトロノームを指定された音源なしの書き出しは4つ打ちを鳴らす
+  // (クラップだけでは無音区間でリズムが掴めないとき用のオプション)。
+  // アプリ内再生と同じティック音をクラップと同じ時刻換算で焼き込む。
+  // 音源ありのときは曲が拍を示すので入れない
+  if (!o.audio && o.metronome) {
     for (let b = 0; b < chart.totalBeats - 1e-9; b++) {
       const t = songToReal(offsetSec + timeAtBeat(timeline, b));
       if (t >= introTotal - 1e-6) countdownTimes.push(t);
