@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { ARROW_PATH } from "./arrowShape";
 import { ARROW_ROTATIONS, FOOT_COLORS, type Foot } from "./chart";
+import { STAGE_CENTERS, footPlacement } from "./footPlacement";
 
 export interface FootSceneProps {
   leftPos: number;
@@ -37,15 +38,6 @@ export interface FootScene {
   setTrail(on: boolean): void;
   dispose(): void;
 }
-
-// FootStage (CSS版) と同じグリッド座標
-const STAGE_CENTERS = [
-  { x: 0.5, y: 1.5 },
-  { x: 1.5, y: 2.5 },
-  { x: 1.5, y: 0.5 },
-  { x: 2.5, y: 1.5 },
-  { x: 1.5, y: 1.5 },
-];
 
 const TRAVEL_MS = 250; // 足の移動時間の上限 (CSS版のtransitionと同じ)
 const TRAVEL_MS_MIN = 90; // 高密度時の移動時間の下限
@@ -80,14 +72,8 @@ interface Pose {
 }
 
 function poseOf(p: FootSceneProps): Pose {
-  const same = p.leftPos === p.rightPos && !p.liftedFoot;
   const rot = displayFootRot(p.facing);
-  const lc = STAGE_CENTERS[p.leftPos];
-  const rc = STAGE_CENTERS[p.rightPos];
-  let lx = lc.x + (same ? -0.22 : 0);
-  let ly = lc.y;
-  let rx = rc.x + (same ? 0.22 : 0);
-  let ry = rc.y;
+  let { lx, ly, rx, ry } = footPlacement(p.leftPos, p.rightPos, p.liftedFoot);
   let lRot = rot;
   let rRot = rot;
   if (p.oneFoot) {
@@ -107,13 +93,6 @@ function poseOf(p: FootSceneProps): Pose {
       ry = my;
       rRot = tilt;
     }
-  }
-  if (p.liftedFoot === "L") {
-    lx = 1.5 - 0.28;
-    ly = 1.5;
-  } else if (p.liftedFoot === "R") {
-    rx = 1.5 + 0.28;
-    ry = 1.5;
   }
   return { lx, ly, lRot, rx, ry, rRot };
 }
