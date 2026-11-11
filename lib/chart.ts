@@ -1,3 +1,4 @@
+import { attachPlacements, type FootPlace } from "./footPlacement";
 // 譜面データのパースと足割り解析のコアロジック。
 // クライアント・サーバー(OG画像生成)の両方から使うため純粋なTSに保つ。
 
@@ -51,6 +52,8 @@ export interface FootStep {
   stretch: { foot: Foot; panels: number[] } | null;
   heldFeet: Foot[]; // このイベント時点でフリーズ保持中の足
   facing: number; // 譜面開始からの連続回転角 (負=左向き, 正=右向き)
+  // パネルビューでの足の接地位置 (グリッド座標)。足割り後に書き込まれる
+  place?: FootPlace;
 }
 
 export interface ParsedChart {
@@ -536,6 +539,7 @@ export function assignFeet(
     });
     prevStretch = stretch;
   }
+  attachPlacements(out);
   return out;
 }
 

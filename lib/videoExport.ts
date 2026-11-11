@@ -1561,6 +1561,7 @@ export async function recordChartVideo(
                 heldFeet: fstep.heldFeet,
                 oneFoot: fstep.stretch,
                 liftedFoot: fstep.liftedFoot,
+                place: fstep.place,
                 // 直前ノーツとの等速換算の間隔秒 (収録速度はplaySpeedで渡す)
                 trailGapSec:
                   footIdx > 0 ? ln.evTimes[footIdx] - ln.evTimes[footIdx - 1] : null,

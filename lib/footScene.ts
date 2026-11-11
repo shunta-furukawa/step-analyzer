@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { ARROW_PATH } from "./arrowShape";
 import { ARROW_ROTATIONS, FOOT_COLORS, type Foot } from "./chart";
-import { STAGE_CENTERS, displayFootRot, footPlacement } from "./footPlacement";
+import { STAGE_CENTERS, displayFootRot, footPlacement, type FootPlace } from "./footPlacement";
 
 export interface FootSceneProps {
   leftPos: number;
@@ -17,6 +17,8 @@ export interface FootSceneProps {
   heldFeet: Foot[];
   oneFoot: { foot: Foot; panels: number[] } | null;
   liftedFoot: Foot | null;
+  /** 足の接地位置 (FootStep.place)。省略時はパネルだけから求める */
+  place?: FootPlace;
   /** このステップと直前ノーツ (LR問わず) の等速換算の間隔秒。
       トレイルの濃さ・減衰時間の算出に使う (省略時は既定値) */
   trailGapSec?: number | null;
@@ -73,7 +75,7 @@ interface Pose {
 
 function poseOf(p: FootSceneProps): Pose {
   const rot = displayFootRot(p.facing);
-  let { lx, ly, rx, ry } = footPlacement(p.leftPos, p.rightPos, p.liftedFoot);
+  let { lx, ly, rx, ry } = p.place ?? footPlacement(p.leftPos, p.rightPos, p.liftedFoot);
   let lRot = rot;
   let rRot = rot;
   if (p.oneFoot) {
