@@ -57,3 +57,18 @@ export function footPlacement(
   if (liftedFoot === "R") Object.assign(r, NEUTRAL.R);
   return { lx: l.x, ly: l.y, rx: r.x, ry: r.y };
 }
+
+// 表示用の足の角度。内部のfacingは「両足を結ぶ線」由来の解析角だが、
+// 画面が正面にあるので実際の体と足は正面を保とうとする。そのため
+// 解析角を半分に圧縮して表示する (45°→22.5°, 90°→45°, 上限は真横)。
+// 180°超のイレギュラー帯は「かかとを正面に向けて捻りを受ける」解釈で、
+// つま先を後ろ側へ折り返す
+export function displayFootRot(facing: number): number {
+  const norm = facing % 360;
+  let a = Math.abs(norm);
+  const sign = Math.sign(norm);
+  const heelFlip = a > 180;
+  if (heelFlip) a -= 180;
+  const compressed = Math.min(90, a * 0.5);
+  return heelFlip ? sign * (180 - compressed) : sign * compressed;
+}
