@@ -89,7 +89,7 @@ import {
   parseDiffParam,
   serializeDiff,
 } from "@/lib/difficulty";
-import { STAGE_CENTERS, displayFootRot, footPlacement } from "@/lib/footPlacement";
+import { STAGE_CENTERS, displayFootRot, footPlacement, type FootPlace } from "@/lib/footPlacement";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow from "./Arrow";
 
@@ -3708,6 +3708,7 @@ export default function Viewer({
                 heldFeet={footStep?.heldFeet ?? []}
                 oneFoot={stageOneFoot}
                 liftedFoot={footStep?.liftedFoot ?? null}
+                place={footStep?.place}
                 trail={footTrail}
                 trailGapSec={trailGapSec}
                 playSpeed={speed}
@@ -3725,6 +3726,7 @@ export default function Viewer({
                 heldFeet={footStep?.heldFeet ?? []}
                 oneFoot={stageOneFoot}
                 liftedFoot={footStep?.liftedFoot ?? null}
+                place={footStep?.place}
               />
             )}
             </div>
@@ -3752,6 +3754,7 @@ export default function Viewer({
                     heldFeet={footStepB?.heldFeet ?? []}
                     oneFoot={footStepB?.stretch ?? null}
                     liftedFoot={footStepB?.liftedFoot ?? null}
+                    place={footStepB?.place}
                     trail={footTrail}
                     trailGapSec={trailGapSecB}
                     playSpeed={speed}
@@ -3769,6 +3772,7 @@ export default function Viewer({
                     heldFeet={footStepB?.heldFeet ?? []}
                     oneFoot={footStepB?.stretch ?? null}
                     liftedFoot={footStepB?.liftedFoot ?? null}
+                    place={footStepB?.place}
                   />
                 )}
               </div>
@@ -4520,6 +4524,7 @@ function FootStage({
   heldFeet,
   oneFoot,
   liftedFoot,
+  place,
 }: {
   leftPos: number;
   rightPos: number;
@@ -4530,12 +4535,13 @@ function FootStage({
   heldFeet: Foot[];
   oneFoot: { foot: Foot; panels: number[] } | null;
   liftedFoot: Foot | null;
+  place?: FootPlace;
 }) {
   // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
   const rot = facing;
   const footRot = displayFootRot(facing);
   // 足はパネル中心ではなく、自然な立ち位置から最短で踏める位置に置く
-  let { lx, ly, rx, ry } = footPlacement(leftPos, rightPos, liftedFoot);
+  let { lx, ly, rx, ry } = place ?? footPlacement(leftPos, rightPos, liftedFoot);
   // 2枚抜き: 踏んでいる足は2パネルの中間 (角) に置き、
   // 2パネルを結ぶ対角線に沿った絶対角度 (±45°) で表示する。
   // パネルの組み合わせで足の向きは物理的に決まるため、体の向きは合成しない
