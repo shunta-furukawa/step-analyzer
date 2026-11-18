@@ -123,14 +123,19 @@ function twistPoint(
 // つま先を中央へ向け、かかとだけを中央寄りの際に乗せて最小限の動きで取る。
 // 足の本体は中央パネル側へはみ出し、両足は前後 (画面の上下) に並ぶ。
 
+// つま先の向き。真横 (90度) だと体ごと横を向いた立ち方になるので、
+// 少し前へ開いて正面 (画面) を見たまま踏める角度にする
+const SIDE_SWITCH_ROT = 60;
+
 function sideSwitchPlace(panel: 0 | 3): FootPlace {
   const left = panel === 0;
-  const rot = left ? 90 : -90; // つま先を中央へ
+  const rot = left ? SIDE_SWITCH_ROT : -SIDE_SWITCH_ROT; // つま先を中央寄りへ
+  const rad = (rot * Math.PI) / 180;
   // かかとの接地点はパネルの中央寄りの際。足の中心はそこからつま先側へ
   const heelX = left ? 1 - CORNER_INSET : 2 + CORNER_INSET;
-  const x = heelX + (left ? END_OFFSET : -END_OFFSET);
+  const x = heelX + Math.sin(rad) * END_OFFSET;
   const g = SAME_PANEL_GAP / 2 + 0.04; // 前後に並ぶ足が触れない間隔
-  // 中央を向いて立つので、左パネルなら左足が奥 (画面上側)、右パネルなら逆
+  // 中央寄りを向いて立つので、左パネルなら左足が奥 (画面上側)、右パネルなら逆
   const ly = 1.5 + (left ? -g : g);
   const ry = 1.5 + (left ? g : -g);
   return { lx: x, ly, rx: x, ry, lRot: rot, rRot: rot };
