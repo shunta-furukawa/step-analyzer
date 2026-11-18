@@ -89,6 +89,7 @@ import {
   parseDiffParam,
   serializeDiff,
 } from "@/lib/difficulty";
+import { STAGE_CENTERS, displayFootRot, footPlacement, type FootPlace } from "@/lib/footPlacement";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
 import Arrow, { ReceptorArrow } from "./Arrow";
 
@@ -3691,6 +3692,7 @@ export default function Viewer({
                 heldFeet={footStep?.heldFeet ?? []}
                 oneFoot={stageOneFoot}
                 liftedFoot={footStep?.liftedFoot ?? null}
+                place={footStep?.place}
                 trail={footTrail}
                 trailGapSec={trailGapSec}
                 playSpeed={speed}
@@ -3708,6 +3710,7 @@ export default function Viewer({
                 heldFeet={footStep?.heldFeet ?? []}
                 oneFoot={stageOneFoot}
                 liftedFoot={footStep?.liftedFoot ?? null}
+                place={footStep?.place}
               />
             )}
             </div>
@@ -3735,6 +3738,7 @@ export default function Viewer({
                     heldFeet={footStepB?.heldFeet ?? []}
                     oneFoot={footStepB?.stretch ?? null}
                     liftedFoot={footStepB?.liftedFoot ?? null}
+                    place={footStepB?.place}
                     trail={footTrail}
                     trailGapSec={trailGapSecB}
                     playSpeed={speed}
@@ -3752,6 +3756,7 @@ export default function Viewer({
                     heldFeet={footStepB?.heldFeet ?? []}
                     oneFoot={footStepB?.stretch ?? null}
                     liftedFoot={footStepB?.liftedFoot ?? null}
+                    place={footStepB?.place}
                   />
                 )}
               </div>
@@ -4487,15 +4492,6 @@ function TextImport({
 
 // ===== 3Dフットステージ =====
 
-// 3x3グリッド上のパネル中心座標 (単位: セル)
-const STAGE_CENTERS = [
-  { x: 0.5, y: 1.5 },
-  { x: 1.5, y: 2.5 },
-  { x: 1.5, y: 0.5 },
-  { x: 2.5, y: 1.5 },
-  { x: 1.5, y: 1.5 }, // 4 = 中央 (ショックの中央空打ち)
-];
-
 const STAGE_LAYOUT: (number | null)[][] = [
   [null, 2, null],
   [0, null, 3],
@@ -4512,6 +4508,7 @@ function FootStage({
   heldFeet,
   oneFoot,
   liftedFoot,
+  place,
 }: {
   leftPos: number;
   rightPos: number;
@@ -4522,29 +4519,13 @@ function FootStage({
   heldFeet: Foot[];
   oneFoot: { foot: Foot; panels: number[] } | null;
   liftedFoot: Foot | null;
+  place?: FootPlace;
 }) {
-  const same = leftPos === rightPos && !liftedFoot;
   // facing はアルゴリズムが追跡している連続回転角なのでそのまま使える
   const rot = facing;
-  // 足の表示角はプレゼン専用に圧縮する。内部のfacingは「両足を結ぶ線」由来の
-  // 解析角で、135°の捻りでも実際の人間の足はそこまで後ろを向かない。
-  // 45°までは等倍、以降は0.4倍で圧縮し、上限は真横 (90°)。
-  const norm = facing % 360;
-  let a = Math.abs(norm);
-  const sign = Math.sign(norm);
-  // 180°超のイレギュラー帯は「かかとを正面に向けて捻りを受ける」解釈。
-  // 左225°ならつま先を左後ろ (-135°) に向け、かかとが右前を向く。
-  // 直前の135° (=表示-81°) からの回転変化が最小になる連続的な表現
-  const heelFlip = a > 180;
-  if (heelFlip) a -= 180;
-  const compressed = Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4);
-  const footRot = heelFlip ? sign * (180 - compressed) : sign * compressed;
-  const lc = STAGE_CENTERS[leftPos];
-  const rc = STAGE_CENTERS[rightPos];
-  let lx = lc.x + (same ? -0.22 : 0);
-  let ly = lc.y;
-  let rx = rc.x + (same ? 0.22 : 0);
-  let ry = rc.y;
+  const footRot = displayFootRot(facing);
+  // 足はパネル中心ではなく、自然な立ち位置から最短で踏める位置に置く
+  let { lx, ly, rx, ry } = place ?? footPlacement(leftPos, rightPos, liftedFoot);
   // 2枚抜き: 踏んでいる足は2パネルの中間 (角) に置き、
   // 2パネルを結ぶ対角線に沿った絶対角度 (±45°) で表示する。
   // パネルの組み合わせで足の向きは物理的に決まるため、体の向きは合成しない
@@ -4570,16 +4551,8 @@ function FootStage({
     }
   }
 
-  // 持ち替えで解放された足は、次に踏むまで中央 (ニュートラル位置) に浮かせる
-  if (liftedFoot === "L") {
-    lx = 1.5 - 0.28;
-    ly = 1.5;
-  } else if (liftedFoot === "R") {
-    rx = 1.5 + 0.28;
-    ry = 1.5;
-  }
-  const midX = (STAGE_CENTERS[leftPos].x + STAGE_CENTERS[rightPos].x) / 2;
-  const midY = (STAGE_CENTERS[leftPos].y + STAGE_CENTERS[rightPos].y) / 2;
+  const midX = (lx + rx) / 2;
+  const midY = (ly + ry) / 2;
   const lStepping =
     (stepping.includes(leftPos) && (leftPos === 4 || feet[leftPos] === "L")) ||
     oneFoot?.foot === "L";

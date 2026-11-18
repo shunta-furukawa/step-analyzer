@@ -5,6 +5,7 @@
 import * as THREE from "three";
 import { ARROW_PATH } from "./arrowShape";
 import { ARROW_ROTATIONS, FOOT_COLORS, type Foot } from "./chart";
+import { STAGE_CENTERS, displayFootRot, footPlacement, type FootPlace } from "./footPlacement";
 
 export interface FootSceneProps {
   leftPos: number;
@@ -16,6 +17,8 @@ export interface FootSceneProps {
   heldFeet: Foot[];
   oneFoot: { foot: Foot; panels: number[] } | null;
   liftedFoot: Foot | null;
+  /** 足の接地位置 (FootStep.place)。省略時はパネルだけから求める */
+  place?: FootPlace;
   /** このステップと直前ノーツ (LR問わず) の等速換算の間隔秒。
       トレイルの濃さ・減衰時間の算出に使う (省略時は既定値) */
   trailGapSec?: number | null;
@@ -33,19 +36,21 @@ export interface FootScene {
   frame(nowMs?: number): void;
   /** Seekable video frame: independent of previous calls and wall-clock time. */
   renderAt(from: FootSceneProps, to: FootSceneProps, progress: number, nowMs: number, hitAgeMs: number): void;
+  /** カメラの仰角 (度)。既定はCAMERA_PITCH_DEFAULT、90で真上から見下ろす */
+  setCameraPitch(deg: number): void;
   /** 足の軌跡 (トレイル) 表示の切り替え */
   setTrail(on: boolean): void;
   dispose(): void;
 }
 
-// FootStage (CSS版) と同じグリッド座標
-const STAGE_CENTERS = [
-  { x: 0.5, y: 1.5 },
-  { x: 1.5, y: 2.5 },
-  { x: 1.5, y: 0.5 },
-  { x: 2.5, y: 1.5 },
-  { x: 1.5, y: 1.5 },
-];
+// カメラは注視点を中心に仰角だけを変えられる。
+// 既定値は従来の固定カメラ (0, 4.95, 5.75) → (0, -0.15, 0.1) と同じ構図
+const CAMERA_TARGET = { y: -0.15, z: 0.1 };
+const CAMERA_DIST = Math.hypot(4.95 - CAMERA_TARGET.y, 5.75 - CAMERA_TARGET.z);
+export const CAMERA_PITCH_DEFAULT =
+  Math.round((Math.atan2(4.95 - CAMERA_TARGET.y, 5.75 - CAMERA_TARGET.z) * 1800) / Math.PI) / 10;
+export const CAMERA_PITCH_MIN = 15;
+export const CAMERA_PITCH_MAX = 90;
 
 const TRAVEL_MS = 250; // 足の移動時間の上限 (CSS版のtransitionと同じ)
 const TRAVEL_MS_MIN = 90; // 高密度時の移動時間の下限
@@ -59,17 +64,6 @@ function travelMsOf(physGapSec: number | null | undefined): number {
   return Math.max(TRAVEL_MS_MIN, Math.min(TRAVEL_MS, physGapSec * 2 * 1000 * 0.9));
 }
 
-// 表示用の足の角度 (Viewerと同じ圧縮 + かかと正面の折り返し)
-function displayFootRot(facing: number): number {
-  const norm = facing % 360;
-  let a = Math.abs(norm);
-  const sign = Math.sign(norm);
-  const heelFlip = a > 180;
-  if (heelFlip) a -= 180;
-  const compressed = Math.min(90, a <= 45 ? a : 45 + (a - 45) * 0.4);
-  return heelFlip ? sign * (180 - compressed) : sign * compressed;
-}
-
 interface Pose {
   lx: number;
   ly: number;
@@ -80,14 +74,8 @@ interface Pose {
 }
 
 function poseOf(p: FootSceneProps): Pose {
-  const same = p.leftPos === p.rightPos && !p.liftedFoot;
   const rot = displayFootRot(p.facing);
-  const lc = STAGE_CENTERS[p.leftPos];
-  const rc = STAGE_CENTERS[p.rightPos];
-  let lx = lc.x + (same ? -0.22 : 0);
-  let ly = lc.y;
-  let rx = rc.x + (same ? 0.22 : 0);
-  let ry = rc.y;
+  let { lx, ly, rx, ry } = p.place ?? footPlacement(p.leftPos, p.rightPos, p.liftedFoot);
   let lRot = rot;
   let rRot = rot;
   if (p.oneFoot) {
@@ -107,13 +95,6 @@ function poseOf(p: FootSceneProps): Pose {
       ry = my;
       rRot = tilt;
     }
-  }
-  if (p.liftedFoot === "L") {
-    lx = 1.5 - 0.28;
-    ly = 1.5;
-  } else if (p.liftedFoot === "R") {
-    rx = 1.5 + 0.28;
-    ry = 1.5;
   }
   return { lx, ly, lRot, rx, ry, rRot };
 }
@@ -456,8 +437,18 @@ export function createFootScene(): FootScene | null {
   const scene = new THREE.Scene();
   // 画角を狭めてカメラを遠ざけると、同じ構図のまま遠近の縮みが弱まる
   const camera = new THREE.PerspectiveCamera(20, 1, 0.1, 40);
-  camera.position.set(0, 4.95, 5.75);
-  camera.lookAt(0, -0.15, 0.1);
+  const setCameraPitch = (deg: number) => {
+    const d = Math.max(CAMERA_PITCH_MIN, Math.min(CAMERA_PITCH_MAX, deg));
+    // 真上 (90°) ではlookAtの上方向が定まらないので、ごく僅かに手前へ倒す
+    const a = (Math.min(d, 89.9) * Math.PI) / 180;
+    // 見下ろすほど奥行きの縮みが減ってステージが縦に大きく写るので、
+    // 真上でも3パネル分が画角に収まるよう既定より上では少し引く
+    const up = Math.max(0, (d - CAMERA_PITCH_DEFAULT) / (90 - CAMERA_PITCH_DEFAULT));
+    const dist = CAMERA_DIST * (1 + 0.24 * up);
+    camera.position.set(0, CAMERA_TARGET.y + dist * Math.sin(a), CAMERA_TARGET.z + dist * Math.cos(a));
+    camera.lookAt(0, CAMERA_TARGET.y, CAMERA_TARGET.z);
+  };
+  setCameraPitch(CAMERA_PITCH_DEFAULT);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.85));
   const dir = new THREE.DirectionalLight(0xffffff, 1.6);
@@ -717,6 +708,7 @@ export function createFootScene(): FootScene | null {
       for (let p = 0; p < panels.length; p++) panels[p].flashMat.opacity = to.stepping.includes(p) ? 0.4 : 0;
       frame(nowMs);
     },
+    setCameraPitch,
     setTrail(on: boolean) {
       if (on === trailOn) return;
       trailOn = on;

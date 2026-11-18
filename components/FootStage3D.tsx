@@ -3,8 +3,19 @@
 // Three.js版の足ステージ。シーン本体はlib/footScene.tsに共有化されており、
 // 動画書き出しでも同じレンダラを使う。この層はReactへの接続だけを担う。
 
-import { useEffect, useRef } from "react";
-import { createFootScene, type FootScene, type FootSceneProps } from "@/lib/footScene";
+import { useEffect, useRef, useState } from "react";
+import {
+  CAMERA_PITCH_DEFAULT,
+  CAMERA_PITCH_MAX,
+  CAMERA_PITCH_MIN,
+  createFootScene,
+  type FootScene,
+  type FootSceneProps,
+} from "@/lib/footScene";
+
+// 上下ドラッグ1pxあたりのカメラ仰角の変化 (度)
+const PITCH_PER_PX = 0.5;
+const clampPitch = (v: number) => Math.max(CAMERA_PITCH_MIN, Math.min(CAMERA_PITCH_MAX, v));
 
 export default function FootStage3D({
   trail = false,
@@ -16,6 +27,11 @@ export default function FootStage3D({
   propsRef.current = props;
   const trailRef = useRef(trail);
   trailRef.current = trail;
+  // カメラの仰角 (保存しない。リロードで既定に戻る)
+  const [pitch, setPitch] = useState(CAMERA_PITCH_DEFAULT);
+  const pitchRef = useRef(pitch);
+  pitchRef.current = pitch;
+  const dragRef = useRef<{ id: number; y: number; pitch: number } | null>(null);
 
   // シーン構築 (マウント時に1回)
   useEffect(() => {
@@ -30,6 +46,7 @@ export default function FootStage3D({
     fs.canvas.style.display = "block";
     fs.setProps(propsRef.current); // 初期ポーズを即時反映
     fs.setTrail(trailRef.current);
+    fs.setCameraPitch(pitchRef.current);
 
     const resize = () => {
       fs.setSize(
@@ -69,9 +86,52 @@ export default function FootStage3D({
     sceneRef.current?.setTrail(trail);
   }, [trail]);
 
+  useEffect(() => {
+    sceneRef.current?.setCameraPitch(pitch);
+  }, [pitch]);
+
   return (
     <div className="stage3d stage3d-gl">
-      <div className="scene" ref={holderRef} />
+      {/* 上下ドラッグでカメラの高さを変える (下へドラッグ=真上寄り) */}
+      <div
+        className="scene"
+        ref={holderRef}
+        onPointerDown={(e) => {
+          if (e.pointerType === "mouse" && e.button !== 0) return;
+          dragRef.current = { id: e.pointerId, y: e.clientY, pitch: pitchRef.current };
+          e.currentTarget.setPointerCapture(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current;
+          if (!d || d.id !== e.pointerId) return;
+          setPitch(Math.round(clampPitch(d.pitch + (e.clientY - d.y) * PITCH_PER_PX)));
+        }}
+        onPointerUp={() => (dragRef.current = null)}
+        onPointerCancel={() => (dragRef.current = null)}
+      />
+      <div className="stage-cam">
+        <input
+          type="number"
+          aria-label="camera angle"
+          min={CAMERA_PITCH_MIN}
+          max={CAMERA_PITCH_MAX}
+          step={1}
+          value={Math.round(pitch)}
+          onChange={(e) => {
+            const v = Number(e.target.value);
+            if (e.target.value !== "" && Number.isFinite(v)) setPitch(clampPitch(v));
+          }}
+        />
+        <span>°</span>
+        <button
+          type="button"
+          aria-label="reset camera"
+          disabled={pitch === CAMERA_PITCH_DEFAULT}
+          onClick={() => setPitch(CAMERA_PITCH_DEFAULT)}
+        >
+          ↺
+        </button>
+      </div>
     </div>
   );
 }
