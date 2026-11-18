@@ -48,14 +48,14 @@ export default function Arrow({
         fill="none"
         stroke={outline}
         strokeWidth={5}
-        strokeLinejoin="round"
+        strokeLinejoin="miter"
       />
       <path
         d={ARROW_PATH}
         fill={`url(#${id}b)`}
         stroke={`url(#${id}b)`}
         strokeWidth={2}
-        strokeLinejoin="round"
+        strokeLinejoin="miter"
       />
       {detail && (
         <>
@@ -64,7 +64,7 @@ export default function Arrow({
             fill={pal.inner}
             stroke={pal.inner}
             strokeWidth={1}
-            strokeLinejoin="round"
+            strokeLinejoin="miter"
           />
           <path d={ARROW_CRYSTAL_UPPER} fill={`url(#${id}c)`} />
           <path d={ARROW_CRYSTAL_LOWER} fill={`url(#${id}c)`} />
@@ -98,7 +98,7 @@ export function ReceptorArrow({
         fill={hitColor ?? RECEPTOR_COLORS.fill}
         stroke={hit ? "#ffffff" : RECEPTOR_COLORS.stroke}
         strokeWidth={3}
-        strokeLinejoin="round"
+        strokeLinejoin="miter"
       />
       {!hitColor &&
         [ARROW_INNER_PATH, ARROW_CRYSTAL_UPPER, ARROW_CRYSTAL_LOWER].map((d) => (
@@ -108,7 +108,7 @@ export function ReceptorArrow({
             fill={RECEPTOR_COLORS.innerFill}
             stroke={hit ? "#ffffff" : RECEPTOR_COLORS.innerStroke}
             strokeWidth={1.4}
-            strokeLinejoin="round"
+            strokeLinejoin="miter"
           />
         ))}
     </svg>

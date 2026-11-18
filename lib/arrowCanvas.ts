@@ -43,7 +43,7 @@ export function drawArrow(
   const cl = new Path2D(ARROW_CRYSTAL_LOWER);
   const pal = arrowPalette(color);
   withArrowTransform(ctx, cx, cy, size, rotation, () => {
-    ctx.lineJoin = "round";
+    ctx.lineJoin = "miter";
     // 暗い縁
     ctx.strokeStyle = "#07080d";
     ctx.lineWidth = 5;
@@ -88,7 +88,7 @@ export function drawReceptorArrow(
     (d) => new Path2D(d)
   );
   withArrowTransform(ctx, cx, cy, size, rotation, () => {
-    ctx.lineJoin = "round";
+    ctx.lineJoin = "miter";
     ctx.fillStyle = hitColor ?? RECEPTOR_COLORS.fill;
     ctx.fill(body);
     ctx.strokeStyle = hit ? "#ffffff" : RECEPTOR_COLORS.stroke;
