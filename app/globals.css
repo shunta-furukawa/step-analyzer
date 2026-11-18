@@ -2010,6 +2010,12 @@ input[type="range"]:focus {
   pointer-events: none;
 }
 
+/* 足ステージ自体の操作 (上下ドラッグでカメラの高さ・角度入力) は生かす */
+.viewer-fs .stage3d-gl .scene,
+.viewer-fs .stage-cam {
+  pointer-events: auto;
+}
+
 .viewer-fs .pad-card {
   background: transparent;
   border: none;
