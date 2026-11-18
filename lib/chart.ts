@@ -74,16 +74,17 @@ export function quantOf(idx: number, total: number): number {
   return 64;
 }
 
-// DDRの慣習に合わせた色分け: 4分=赤ピンク, 8分=青, 12分=緑, 16分=黄
+// DDR本家のNOTE配色: 4分=赤, 8分=青, 16分=黄, それ以外 (12分・24分・32分…) =緑
+const QUANT_GREEN = "#1fd655";
 export const QUANT_COLORS: Record<number, string> = {
-  4: "#ff5262",
-  8: "#4f7dff",
-  12: "#3ddc84",
-  16: "#ffd23f",
-  24: "#b44bff",
-  32: "#ff8fd0",
-  48: "#9aa3b5",
-  64: "#9aa3b5",
+  4: "#f5202e",
+  8: "#2238f2",
+  12: QUANT_GREEN,
+  16: "#f2e616",
+  24: QUANT_GREEN,
+  32: QUANT_GREEN,
+  48: QUANT_GREEN,
+  64: QUANT_GREEN,
 };
 
 // パネルの物理座標 (足の移動距離・体の向きの計算用)。0=←, 1=↓, 2=↑, 3=→

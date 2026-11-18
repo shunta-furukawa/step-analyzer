@@ -131,7 +131,7 @@ function makeArrowTexture(rotationDeg: number): THREE.CanvasTexture {
   ctx.translate(64, 64);
   ctx.rotate((rotationDeg * Math.PI) / 180);
   ctx.scale(1.55, 1.55);
-  ctx.translate(-32, -33);
+  ctx.translate(-32, -32);
   ctx.strokeStyle = "#5a6390";
   ctx.lineWidth = 5;
   ctx.lineJoin = "round";

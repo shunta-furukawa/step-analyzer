@@ -2,10 +2,10 @@
 import {
   ARROW_CRYSTAL_LOWER,
   ARROW_CRYSTAL_UPPER,
-  ARROW_HEAD_STRIPE,
+  ARROW_INNER_PATH,
   ARROW_PATH,
-  lighten,
-  darken,
+  RECEPTOR_COLORS,
+  arrowPalette,
 } from "./arrowShape";
 import { FOOT_COLORS, type Foot } from "./chart";
 const INK = "#17181c";
@@ -24,7 +24,7 @@ function withArrowTransform(
   ctx.rotate((rotation * Math.PI) / 180);
   const s = size / 64;
   ctx.scale(s, s);
-  ctx.translate(-32, -33);
+  ctx.translate(-32, -32);
   draw();
   ctx.restore();
 }
@@ -38,30 +38,71 @@ export function drawArrow(
   color: string
 ) {
   const body = new Path2D(ARROW_PATH);
-  const stripe = new Path2D(ARROW_HEAD_STRIPE);
+  const inner = new Path2D(ARROW_INNER_PATH);
   const cu = new Path2D(ARROW_CRYSTAL_UPPER);
   const cl = new Path2D(ARROW_CRYSTAL_LOWER);
+  const pal = arrowPalette(color);
   withArrowTransform(ctx, cx, cy, size, rotation, () => {
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "#f2f5ff";
-    ctx.lineWidth = 8;
-    ctx.stroke(body);
-    const gradient = ctx.createLinearGradient(0, 0, 0, 64);
-    gradient.addColorStop(0, lighten(color, 0.35));
-    gradient.addColorStop(0.55, color);
-    gradient.addColorStop(1, darken(color, 0.35));
-    ctx.fillStyle = gradient;
-    ctx.fill(body);
-    ctx.strokeStyle = lighten(color, 0.7);
+    // 暗い縁
+    ctx.strokeStyle = "#07080d";
     ctx.lineWidth = 5;
-    ctx.lineCap = "round";
-    ctx.stroke(stripe);
-    ctx.fillStyle = lighten(color, 0.65);
+    ctx.stroke(body);
+    // 本体 (ノーツ色。細い同色ストロークで角を丸める)
+    const bodyGrad = ctx.createLinearGradient(0, 0, 0, 64);
+    bodyGrad.addColorStop(0, pal.bodyTop);
+    bodyGrad.addColorStop(1, pal.bodyBottom);
+    ctx.fillStyle = bodyGrad;
+    ctx.strokeStyle = bodyGrad;
+    ctx.lineWidth = 2;
+    ctx.fill(body);
+    ctx.stroke(body);
+    // 矢頭の内側の帯
+    ctx.fillStyle = pal.inner;
+    ctx.strokeStyle = pal.inner;
+    ctx.lineWidth = 1;
+    ctx.fill(inner);
+    ctx.stroke(inner);
+    // 軸クリスタル
+    const cGrad = ctx.createLinearGradient(0, 0, 0, 64);
+    cGrad.addColorStop(0.3, pal.crystalTop);
+    cGrad.addColorStop(1, pal.crystalBottom);
+    ctx.fillStyle = cGrad;
     ctx.fill(cu);
     ctx.fill(cl);
-    ctx.strokeStyle = "#10142a";
-    ctx.lineWidth = 4.5;
+  });
+}
+
+/** 受け皿 (ステップゾーン)。踏んだ瞬間は足の色で塗って白縁にする */
+export function drawReceptorArrow(
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  rotation: number,
+  hitColor: string | null,
+  hit: boolean
+) {
+  const body = new Path2D(ARROW_PATH);
+  const parts = [ARROW_INNER_PATH, ARROW_CRYSTAL_UPPER, ARROW_CRYSTAL_LOWER].map(
+    (d) => new Path2D(d)
+  );
+  withArrowTransform(ctx, cx, cy, size, rotation, () => {
+    ctx.lineJoin = "round";
+    ctx.fillStyle = hitColor ?? RECEPTOR_COLORS.fill;
+    ctx.fill(body);
+    ctx.strokeStyle = hit ? "#ffffff" : RECEPTOR_COLORS.stroke;
+    ctx.lineWidth = 3;
     ctx.stroke(body);
+    if (!hitColor) {
+      ctx.fillStyle = RECEPTOR_COLORS.innerFill;
+      ctx.strokeStyle = hit ? "#ffffff" : RECEPTOR_COLORS.innerStroke;
+      ctx.lineWidth = 1.4;
+      for (const part of parts) {
+        ctx.fill(part);
+        ctx.stroke(part);
+      }
+    }
   });
 }
 

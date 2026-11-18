@@ -6,7 +6,7 @@ import { ImageResponse } from "next/og";
 import {
   ARROW_CRYSTAL_LOWER,
   ARROW_CRYSTAL_UPPER,
-  ARROW_HEAD_STRIPE,
+  ARROW_INNER_PATH,
   ARROW_PATH,
   ARROW_VIEWBOX,
 } from "@/lib/arrowShape";
@@ -52,16 +52,9 @@ export async function GET(request: Request) {
               strokeLinejoin="round"
             />
             <path d={ARROW_PATH} fill="#ff5262" />
-            <path
-              d={ARROW_HEAD_STRIPE}
-              fill="none"
-              stroke="#ffc9cf"
-              strokeWidth="5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-            <path d={ARROW_CRYSTAL_UPPER} fill="#ffc0c7" />
-            <path d={ARROW_CRYSTAL_LOWER} fill="#ffc0c7" />
+            <path d={ARROW_INNER_PATH} fill="#e2a4ac" />
+            <path d={ARROW_CRYSTAL_UPPER} fill="#ffa9b0" />
+            <path d={ARROW_CRYSTAL_LOWER} fill="#ffa9b0" />
             <path
               d={ARROW_PATH}
               fill="none"

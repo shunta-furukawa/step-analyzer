@@ -1877,12 +1877,14 @@ input[type="range"]:focus {
   display: block;
 }
 
+/* レーンは画面下端まで通す。足ステージ (.side-pane) は半透明の幕を
+   挟んで手前に重なり、その裏でも譜面が流れ続ける */
 .viewer-fs .chart-pane {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 58dvh;
+  height: 100dvh;
   z-index: 100;
   background: #0d0f14;
   display: flex;
@@ -1938,11 +1940,20 @@ input[type="range"]:focus {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 100;
-  background: #0d0f14;
+  z-index: 101;
+  /* 上端はグラデーションで溶かす。裏の譜面が透けつつ、足の動きの
+     邪魔にならない濃さの幕 */
+  background: linear-gradient(
+    to bottom,
+    rgba(13, 15, 20, 0) 0%,
+    rgba(13, 15, 20, 0.78) 24%,
+    rgba(13, 15, 20, 0.88) 100%
+  );
   display: flex;
   align-items: center;
   justify-content: center;
+  /* タップは裏のレーン (再生/一時停止) に通す */
+  pointer-events: none;
 }
 
 .viewer-fs .pad-card {

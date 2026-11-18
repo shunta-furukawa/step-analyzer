@@ -16,6 +16,7 @@ import {
   type ParsedChart,
 } from "./chart";
 import { drawArrow, drawFootBadge, drawGhostArrow, drawSiteLogo } from "./chartImage";
+import { drawReceptorArrow } from "./arrowCanvas";
 import { mixStereoClaps, renderClapTrackSamples } from "./clap";
 import { DIFF_COLORS, drawDiffFoot } from "./difficulty";
 import { createFootScene } from "./footScene";
@@ -59,6 +60,7 @@ export interface VideoExportOptions {
   signal?: { cancelled: boolean };
 }
 
+const FIELD_BG = "#0d0f14"; // プレイフィールド (レーン背景) の色
 const LEAD_IN = 1.5; // 録画開始から1ノーツ目までの助走秒数 (譜面内時間)
 const INTRO_SEC = 0.5; // 冒頭のサムネ向けイントロカード表示時間
 const TAIL = 1.2;
@@ -455,7 +457,9 @@ export async function recordChartVideo(
     : (W - LANE_W * 4) / 2;
   const LANE_X_B = LANE_X + LANE_W * 4 + LANE_GAP;
   const RECEPTOR_Y = HEADER_H + (L ? (AB ? 70 : 96) : 82);
-  const LANE_BOTTOM = L ? H - 24 : H - 362;
+  // 縦はレーンを画面下端まで通し、足パッドは半透明の幕を挟んで手前に重ねる
+  // (パッドの裏でも譜面が流れ続ける)
+  const LANE_BOTTOM = L ? H - 24 : H;
   // 右ペーン (横のみ)。足パッドはペーン中央に大きく合成する
   const lanesRight = AB ? LANE_X_B + LANE_W * 4 : LANE_X + LANE_W * 4;
   const paneX = lanesRight + 46;
@@ -750,6 +754,7 @@ export async function recordChartVideo(
     footScene: ReturnType<typeof createFootScene>;
     lastCurIdx: number;
     lastFootIdx: number;
+    curIdx: number; // このフレームで判定線を越えた最後のノーツ
   }
   const makeLane = (
     tag: "A" | "B",
@@ -774,6 +779,7 @@ export async function recordChartVideo(
       pad,
       footScene: scene,
       lastCurIdx: -2,
+      curIdx: -1,
       lastFootIdx: -2,
     };
   };
@@ -1401,15 +1407,23 @@ export async function recordChartVideo(
     // A/B比較のラベル位置 (縦はレーン上端の帯、横はヘッダー行)
     const chipY = L ? 30 : HEADER_H + 22;
 
+    // 縦: プレイフィールドは左右いっぱいの暗幕 (本家の画面構成に合わせる)
+    if (!L) {
+      ctx.fillStyle = FIELD_BG;
+      ctx.fillRect(0, HEADER_H, W, H - HEADER_H);
+    }
+
     // レーン群ごと (単独=A、A/B比較=A→B) に描く
     for (const ln of lanes) {
       const lc = ln.chart;
       const lf = ln.footsteps;
       const lx = ln.x;
 
-      // レーン背景
-      ctx.fillStyle = "#17181c";
-      ctx.fillRect(lx - 10, HEADER_H, LANE_W * 4 + 20, LANE_BOTTOM - HEADER_H);
+      // レーン背景 (横のみ。縦は上の全面暗幕が兼ねる)
+      if (L) {
+        ctx.fillStyle = FIELD_BG;
+        ctx.fillRect(lx - 10, HEADER_H, LANE_W * 4 + 20, LANE_BOTTOM - HEADER_H);
+      }
 
       ctx.save();
       ctx.beginPath();
@@ -1532,8 +1546,26 @@ export async function recordChartVideo(
 
       // A/B比較: レーン群のラベル (A/B + 難易度)
       if (AB) drawAbChip(ln.tag, ln.diff, lx + LANE_W * 2, chipY);
+      ln.curIdx = curIdx;
+    }
 
-      // 足パッド (Three.jsシーンを合成)
+    // 縦: 足パッドの裏に敷く半透明の幕。上端はグラデーションで溶かし、
+    // 裏を流れる譜面が透けつつ足の動きの邪魔をしない濃さにする
+    if (!L) {
+      const top = padPosA.y - 60;
+      const g = ctx.createLinearGradient(0, top, 0, H);
+      g.addColorStop(0, "rgba(13, 15, 20, 0)");
+      g.addColorStop(Math.min(0.9, 130 / (H - top)), "rgba(13, 15, 20, 0.78)");
+      g.addColorStop(1, "rgba(13, 15, 20, 0.88)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, top, W, H - top);
+    }
+
+    // 足パッド (Three.jsシーンを合成)
+    for (const ln of lanes) {
+      const lc = ln.chart;
+      const lf = ln.footsteps;
+      const curIdx = ln.curIdx;
       const scene = ln.footScene;
       if (scene) {
         let footIdx = -1;
@@ -1725,7 +1757,7 @@ export async function recordChartVideo(
   });
 }
 
-// 受け皿の描画 (輪郭のみ、踏んだ瞬間は足色で塗って白枠)
+// 受け皿の描画 (踏んだ瞬間は足色で塗って白枠)
 function drawReceptor(
   ctx: CanvasRenderingContext2D,
   cx: number,
@@ -1735,20 +1767,7 @@ function drawReceptor(
   hit: boolean,
   foot: Foot | null
 ) {
-  const path = new Path2D(ARROW_PATH);
-  ctx.save();
-  ctx.translate(cx, cy);
-  ctx.rotate((ARROW_ROTATIONS[panel] * Math.PI) / 180);
-  const s = size / 64;
-  ctx.scale(s, s);
-  ctx.translate(-32, -33);
-  ctx.lineJoin = "round";
-  ctx.fillStyle = foot ? FOOT_COLORS[foot] : "rgba(255,255,255,0.05)";
-  ctx.fill(path);
-  ctx.strokeStyle = hit ? "#ffffff" : "#5a6390";
-  ctx.lineWidth = 5;
-  ctx.stroke(path);
-  ctx.restore();
+  drawReceptorArrow(ctx, cx, cy, size, ARROW_ROTATIONS[panel], foot ? FOOT_COLORS[foot] : null, hit);
 }
 
 /** プロキシ経由で音源を取得してデコードする */

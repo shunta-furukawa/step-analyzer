@@ -90,7 +90,7 @@ import {
   serializeDiff,
 } from "@/lib/difficulty";
 import { ARROW_PATH, ARROW_VIEWBOX } from "@/lib/arrowShape";
-import Arrow from "./Arrow";
+import Arrow, { ReceptorArrow } from "./Arrow";
 
 const EDIT_RESOLUTIONS = [4, 8, 12, 16, 24, 32];
 // ハイスピは0.05刻みの自由値 (0.25〜6)。URL値も丸めて取り込む
@@ -1738,10 +1738,10 @@ export default function Viewer({
                 <span className="dot" style={{ background: QUANT_COLORS[8] }} /> 8{S.quantSuffix}
               </span>
               <span className="chip">
-                <span className="dot" style={{ background: QUANT_COLORS[12] }} /> 12{S.quantSuffix}
+                <span className="dot" style={{ background: QUANT_COLORS[16] }} /> 16{S.quantSuffix}
               </span>
               <span className="chip">
-                <span className="dot" style={{ background: QUANT_COLORS[16] }} /> 16{S.quantSuffix}
+                <span className="dot" style={{ background: QUANT_COLORS[12] }} /> 12/24{S.quantSuffix}
               </span>
               <span className="chip">
                 <span className="facing-legend">
@@ -2984,20 +2984,12 @@ export default function Viewer({
                       className={`receptor${hit ? " hit" : ""}`}
                       style={{ width: laneW, height: noteSize }}
                     >
-                      <svg
-                        width={noteSize}
-                        height={noteSize}
-                        viewBox={ARROW_VIEWBOX}
-                        style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
-                      >
-                        <path
-                          d={ARROW_PATH}
-                          fill={foot ? FOOT_COLORS[foot] : "rgba(255,255,255,0.05)"}
-                          stroke={hit ? "#ffffff" : "#5a6390"}
-                          strokeWidth={4}
-                          strokeLinejoin="round"
-                        />
-                      </svg>
+                      <ReceptorArrow
+                        size={noteSize}
+                        rotation={ARROW_ROTATIONS[p]}
+                        hitColor={foot ? FOOT_COLORS[foot] : null}
+                        hit={hit}
+                      />
                     </div>
                   );
                 })}
@@ -3013,20 +3005,12 @@ export default function Viewer({
                         className={`receptor${hit ? " hit" : ""}`}
                         style={{ width: laneW, height: noteSize }}
                       >
-                        <svg
-                          width={noteSize}
-                          height={noteSize}
-                          viewBox={ARROW_VIEWBOX}
-                          style={{ transform: `rotate(${ARROW_ROTATIONS[p]}deg)` }}
-                        >
-                          <path
-                            d={ARROW_PATH}
-                            fill={foot ? FOOT_COLORS[foot] : "rgba(255,255,255,0.05)"}
-                            stroke={hit ? "#ffffff" : "#5a6390"}
-                            strokeWidth={4}
-                            strokeLinejoin="round"
-                          />
-                        </svg>
+                        <ReceptorArrow
+                        size={noteSize}
+                        rotation={ARROW_ROTATIONS[p]}
+                        hitColor={foot ? FOOT_COLORS[foot] : null}
+                        hit={hit}
+                      />
                       </div>
                     );
                   })}

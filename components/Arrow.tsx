@@ -2,20 +2,20 @@ import { useId } from "react";
 import {
   ARROW_CRYSTAL_LOWER,
   ARROW_CRYSTAL_UPPER,
-  ARROW_HEAD_STRIPE,
+  ARROW_INNER_PATH,
   ARROW_PATH,
   ARROW_VIEWBOX,
-  darken,
-  lighten,
+  RECEPTOR_COLORS,
+  arrowPalette,
 } from "@/lib/arrowShape";
 
-// DDR X系の矢印: シェブロン矢頭 + 頭部ストライプ + 軸クリスタル。
-// 描画順: 白リム → グラデ塗り → 装飾 → 黒縁 (装飾が縁を侵食しないよう最後に縁)
+// DDR本家寄せの矢印: 帯シェブロンの矢頭 + 軸クリスタル。
+// 描画順: 暗い縁 → 本体 (ノーツ色) → 矢頭の内側の帯 → 軸クリスタル
 export default function Arrow({
   size,
   rotation,
   color,
-  outline = "#10142a",
+  outline = "#07080d",
   detail = true,
 }: {
   size: number;
@@ -24,7 +24,8 @@ export default function Arrow({
   outline?: string;
   detail?: boolean;
 }) {
-  const gradId = useId();
+  const id = useId();
+  const pal = arrowPalette(color);
   return (
     <svg
       width={size}
@@ -33,41 +34,83 @@ export default function Arrow({
       style={{ transform: `rotate(${rotation}deg)`, display: "block" }}
     >
       <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={lighten(color, 0.35)} />
-          <stop offset="55%" stopColor={color} />
-          <stop offset="100%" stopColor={darken(color, 0.35)} />
+        <linearGradient id={`${id}b`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={pal.bodyTop} />
+          <stop offset="100%" stopColor={pal.bodyBottom} />
+        </linearGradient>
+        <linearGradient id={`${id}c`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="30%" stopColor={pal.crystalTop} />
+          <stop offset="100%" stopColor={pal.crystalBottom} />
         </linearGradient>
       </defs>
       <path
         d={ARROW_PATH}
         fill="none"
-        stroke="#f2f5ff"
-        strokeWidth={8}
+        stroke={outline}
+        strokeWidth={5}
         strokeLinejoin="round"
       />
-      <path d={ARROW_PATH} fill={`url(#${gradId})`} />
+      <path
+        d={ARROW_PATH}
+        fill={`url(#${id}b)`}
+        stroke={`url(#${id}b)`}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
       {detail && (
         <>
           <path
-            d={ARROW_HEAD_STRIPE}
-            fill="none"
-            stroke={lighten(color, 0.7)}
-            strokeWidth={5}
-            strokeLinecap="round"
+            d={ARROW_INNER_PATH}
+            fill={pal.inner}
+            stroke={pal.inner}
+            strokeWidth={1}
             strokeLinejoin="round"
           />
-          <path d={ARROW_CRYSTAL_UPPER} fill={lighten(color, 0.65)} />
-          <path d={ARROW_CRYSTAL_LOWER} fill={lighten(color, 0.65)} />
+          <path d={ARROW_CRYSTAL_UPPER} fill={`url(#${id}c)`} />
+          <path d={ARROW_CRYSTAL_LOWER} fill={`url(#${id}c)`} />
         </>
       )}
+    </svg>
+  );
+}
+
+// 受け皿 (ステップゾーン): 暗い面にグレーの輪郭。踏んだ瞬間は足の色+白縁
+export function ReceptorArrow({
+  size,
+  rotation,
+  hitColor,
+  hit,
+}: {
+  size: number;
+  rotation: number;
+  hitColor: string | null;
+  hit: boolean;
+}) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={ARROW_VIEWBOX}
+      style={{ transform: `rotate(${rotation}deg)` }}
+    >
       <path
         d={ARROW_PATH}
-        fill="none"
-        stroke={outline}
-        strokeWidth={4.5}
+        fill={hitColor ?? RECEPTOR_COLORS.fill}
+        stroke={hit ? "#ffffff" : RECEPTOR_COLORS.stroke}
+        strokeWidth={3}
         strokeLinejoin="round"
       />
+      {!hitColor &&
+        [ARROW_INNER_PATH, ARROW_CRYSTAL_UPPER, ARROW_CRYSTAL_LOWER].map((d) => (
+          <path
+            key={d}
+            d={d}
+            fill={RECEPTOR_COLORS.innerFill}
+            stroke={hit ? "#ffffff" : RECEPTOR_COLORS.innerStroke}
+            strokeWidth={1.4}
+            strokeLinejoin="round"
+          />
+        ))}
     </svg>
   );
 }

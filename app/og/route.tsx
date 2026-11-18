@@ -2,9 +2,10 @@ import { ImageResponse } from "next/og";
 import {
   ARROW_CRYSTAL_LOWER,
   ARROW_CRYSTAL_UPPER,
-  ARROW_HEAD_STRIPE,
+  ARROW_INNER_PATH,
   ARROW_PATH,
   ARROW_VIEWBOX,
+  innerTone,
   lighten,
 } from "@/lib/arrowShape";
 import { decompressCompact } from "@/lib/codec-server";
@@ -126,16 +127,9 @@ function OgArrow({
             strokeLinejoin="round"
           />
           <path d={ARROW_PATH} fill={color} />
-          <path
-            d={ARROW_HEAD_STRIPE}
-            fill="none"
-            stroke={lighten(color, 0.7)}
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-          <path d={ARROW_CRYSTAL_UPPER} fill={lighten(color, 0.65)} />
-          <path d={ARROW_CRYSTAL_LOWER} fill={lighten(color, 0.65)} />
+          <path d={ARROW_INNER_PATH} fill={innerTone(color)} />
+          <path d={ARROW_CRYSTAL_UPPER} fill={lighten(color, 0.5)} />
+          <path d={ARROW_CRYSTAL_LOWER} fill={lighten(color, 0.5)} />
           <path
             d={ARROW_PATH}
             fill="none"
