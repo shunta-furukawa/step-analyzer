@@ -11,6 +11,9 @@ export interface FootPlace {
   ly: number;
   rx: number;
   ry: number;
+  // 足ごとの向き (度。0=正面、+90=つま先が右)。未指定なら体の向きに従う
+  lRot?: number;
+  rRot?: number;
 }
 
 // 3x3グリッド上のパネル中心座標
@@ -115,6 +118,24 @@ function twistPoint(
     : toe;
 }
 
+// ===== 横パネルでの踏み替え (スイッチ) =====
+// ←や→に両足を乗せて踏み替えるときは、パネルの上に並んで立つのではなく、
+// つま先を中央へ向け、かかとだけを中央寄りの際に乗せて最小限の動きで取る。
+// 足の本体は中央パネル側へはみ出し、両足は前後 (画面の上下) に並ぶ。
+
+function sideSwitchPlace(panel: 0 | 3): FootPlace {
+  const left = panel === 0;
+  const rot = left ? 90 : -90; // つま先を中央へ
+  // かかとの接地点はパネルの中央寄りの際。足の中心はそこからつま先側へ
+  const heelX = left ? 1 - CORNER_INSET : 2 + CORNER_INSET;
+  const x = heelX + (left ? END_OFFSET : -END_OFFSET);
+  const g = SAME_PANEL_GAP / 2 + 0.04; // 前後に並ぶ足が触れない間隔
+  // 中央を向いて立つので、左パネルなら左足が奥 (画面上側)、右パネルなら逆
+  const ly = 1.5 + (left ? -g : g);
+  const ry = 1.5 + (left ? g : -g);
+  return { lx: x, ly, rx: x, ry, lRot: rot, rRot: rot };
+}
+
 /** 足割り結果の各ステップに足の接地位置 (place) を書き込む。
     ステップ順にたどり、そのステップで動かした足だけを置き直す
     (踏んでいない足は、もう片方の足が動いても滑らせない) */
@@ -155,6 +176,9 @@ export function attachPlacements(steps: FootStep[]): void {
         place.rx = t.x;
         place.ry = t.y;
       }
+    }
+    if (samePanel && !s.liftedFoot && !s.stretch && (s.leftPos === 0 || s.leftPos === 3)) {
+      Object.assign(place, sideSwitchPlace(s.leftPos));
     }
     s.place = place;
     prev = s;

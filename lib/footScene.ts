@@ -76,8 +76,9 @@ interface Pose {
 function poseOf(p: FootSceneProps): Pose {
   const rot = displayFootRot(p.facing);
   let { lx, ly, rx, ry } = p.place ?? footPlacement(p.leftPos, p.rightPos, p.liftedFoot);
-  let lRot = rot;
-  let rRot = rot;
+  // 接地位置が足ごとの向きを持つとき (横パネルの踏み替え) はそちらを優先
+  let lRot = p.place?.lRot ?? rot;
+  let rRot = p.place?.rRot ?? rot;
   if (p.oneFoot) {
     const c1 = STAGE_CENTERS[p.oneFoot.panels[0]];
     const c2 = STAGE_CENTERS[p.oneFoot.panels[1]];
