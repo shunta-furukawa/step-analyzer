@@ -120,33 +120,86 @@ function twistPoint(
 
 // ===== 横パネルでの踏み替え (スイッチ) =====
 // ←や→に両足を乗せて踏み替えるときは、パネルの上に並んで立つのではなく、
-// つま先を中央へ向け、かかとだけを中央寄りの際に乗せて最小限の動きで取る。
-// 足の本体は中央パネル側へはみ出し、両足は前後 (画面の上下) に並ぶ。
+// 足先だけ (かかと or つま先) を中央寄りの際に乗せて最小限の動きで取る。
+// 足の本体は中央パネル側へはみ出す。
+//
+// かかとで取るか、つま先で取るかは「つま先は体の向きに従う」で決まる:
+//  - 踏み替えの前後が交差 (体を90度より大きく捻る) なら、つま先はその
+//    捻りの向きを向く。つま先がパネル側 (外) を向くならつま先で、
+//    中央側を向くならかかとで取ることになる
+//    例) ←で踏み替えたあと左足を↓へ (左へ捻る) → つま先 / ↑へ (右へ捻る) → かかと
+//  - 前後とも交差でない (ほぼ正面のまま) なら、つま先を中央寄りへ開いて
+//    かかとで取る
 
-// つま先の向き。真横 (90度) だと体ごと横を向いた立ち方になるので、
-// 少し前へ開いて正面 (画面) を見たまま踏める角度にする
+// 踏み替え中のつま先の開き。真横 (90度) だと体ごと横を向いた立ち方に
+// なるので、正面のままの踏み替えは少し前へ開いた角度にする
 const SIDE_SWITCH_ROT = 60;
+// 接地点 (かかと/つま先) をパネルの際からどれだけ内側に入れるか。
+// 並んだ両足の接地点がどちらもパネルに乗る深さ
+const SIDE_SWITCH_INSET = 0.2;
+// 表示角 (解析角の半分) がこれを超えたら交差とみなす (解析角で90度超)
+const CROSSED_DISPLAY_ROT = 45;
 
-function sideSwitchPlace(panel: 0 | 3): FootPlace {
+/** 踏み替え中のつま先の向き (度)。前後の「両足が別パネルの状態」の体の向きから決める */
+function sideSwitchRot(panel: 0 | 3, prevFacing: number | null, nextFacing: number | null): number {
+  const towardCenter = panel === 0 ? SIDE_SWITCH_ROT : -SIDE_SWITCH_ROT;
+  // 捻りが大きいほうに合わせる (同程度ならこれから向かう側を優先)
+  const cands = [nextFacing, prevFacing]
+    .filter((f): f is number => f !== null)
+    .map(displayFootRot);
+  let rot = 0;
+  for (const c of cands) if (Math.abs(c) > Math.abs(rot) + 1e-6) rot = c;
+  if (Math.abs(rot) <= CROSSED_DISPLAY_ROT) return towardCenter;
+  return Math.sign(rot) * Math.max(SIDE_SWITCH_ROT, Math.min(90, Math.abs(rot)));
+}
+
+function sideSwitchPlace(panel: 0 | 3, rot: number): FootPlace {
   const left = panel === 0;
-  const rot = left ? SIDE_SWITCH_ROT : -SIDE_SWITCH_ROT; // つま先を中央寄りへ
   const rad = (rot * Math.PI) / 180;
-  // かかとの接地点はパネルの中央寄りの際。足の中心はそこからつま先側へ
-  const heelX = left ? 1 - CORNER_INSET : 2 + CORNER_INSET;
-  const x = heelX + Math.sin(rad) * END_OFFSET;
-  const g = SAME_PANEL_GAP / 2 + 0.04; // 前後に並ぶ足が触れない間隔
-  // 中央寄りを向いて立つので、左パネルなら左足が奥 (画面上側)、右パネルなら逆
-  const ly = 1.5 + (left ? -g : g);
-  const ry = 1.5 + (left ? g : -g);
-  return { lx: x, ly, rx: x, ry, lRot: rot, rRot: rot };
+  const dx = Math.sin(rad); // つま先方向
+  const dy = -Math.cos(rad);
+  const nx = Math.cos(rad); // 足の右手方向 (両足はこの方向に並ぶ)
+  const ny = Math.sin(rad);
+  const cx = left ? 1 - SIDE_SWITCH_INSET : 2 + SIDE_SWITCH_INSET;
+  // つま先がパネル側 (外) を向くならつま先、中央側ならかかとを接地点に置く
+  const toeOut = left ? dx < 0 : dx > 0;
+  const k = toeOut ? -END_OFFSET : END_OFFSET;
+  const bx = cx + dx * k;
+  const by = 1.5 + dy * k;
+  const g = SAME_PANEL_GAP / 2 + 0.04; // 並んだ足が触れない間隔
+  return {
+    lx: bx - nx * g,
+    ly: by - ny * g,
+    rx: bx + nx * g,
+    ry: by + ny * g,
+    lRot: rot,
+    rRot: rot,
+  };
 }
 
 /** 足割り結果の各ステップに足の接地位置 (place) を書き込む。
     ステップ順にたどり、そのステップで動かした足だけを置き直す
     (踏んでいない足は、もう片方の足が動いても滑らせない) */
 export function attachPlacements(steps: FootStep[]): void {
+  // 各ステップの前後で、両足が別パネルにある直近の状態の体の向き
+  // (同じパネルでの踏み替え中の足の向きを決めるのに使う)
+  const open = (st: FootStep) => st.leftPos !== st.rightPos && !st.liftedFoot;
+  const prevOpen: (number | null)[] = [];
+  let last: number | null = null;
+  for (const st of steps) {
+    prevOpen.push(last);
+    if (open(st)) last = st.facing;
+  }
+  const nextOpen: (number | null)[] = new Array(steps.length).fill(null);
+  last = null;
+  for (let i = steps.length - 1; i >= 0; i--) {
+    nextOpen[i] = last;
+    if (open(steps[i])) last = steps[i].facing;
+  }
+
   let prev: FootStep | null = null;
-  for (const s of steps) {
+  for (let i = 0; i < steps.length; i++) {
+    const s = steps[i];
     const base = footPlacement(s.leftPos, s.rightPos, s.liftedFoot);
     const place = { ...base };
     const samePanel = s.leftPos === s.rightPos;
@@ -183,7 +236,8 @@ export function attachPlacements(steps: FootStep[]): void {
       }
     }
     if (samePanel && !s.liftedFoot && !s.stretch && (s.leftPos === 0 || s.leftPos === 3)) {
-      Object.assign(place, sideSwitchPlace(s.leftPos));
+      const rot = sideSwitchRot(s.leftPos, prevOpen[i], nextOpen[i]);
+      Object.assign(place, sideSwitchPlace(s.leftPos, rot));
     }
     s.place = place;
     prev = s;
